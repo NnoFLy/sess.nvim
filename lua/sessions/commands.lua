@@ -14,7 +14,7 @@ end
 
 function M.create_session()
     M.save_session()
-    local prompt = utils.input("Enter Session Name: ")
+    local prompt = utils.input("Enter Session Name")
     if not prompt then
         return
     end
