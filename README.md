@@ -23,7 +23,8 @@ M.dependencies = {
 M.config = function()
     require("sessions").setup({
         path = "path/to/sessions_folder", -- default = "~/sessions"
-        attach_after_enter = true -- if false just change cwd
+        attach_after_enter = true, -- if false just change cwd
+        promt_title = "Your title"
     })
 end
 
@@ -80,10 +81,12 @@ end, {})
 {
     ["n"] = {
         ["dd"] = delete_session,
+        ["rr"] = rename_session,
         ["<CR>"] = attach_session,
     },
     ["i"] = {
         ["<C-d>"] = delete_session,
+        ["<C-r>"] = rename_session,
         ["<CR>"] = attach_session,
     }
 }
