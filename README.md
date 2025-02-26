@@ -2,6 +2,8 @@
 
 A simple plugin for managing sessions in Neovim.
 
+https://github.com/user-attachments/assets/069c4d03-4140-4e02-8678-20eef0cbc923
+
 ## Features
 
 - Create and load sessions
