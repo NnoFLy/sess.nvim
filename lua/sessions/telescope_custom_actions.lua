@@ -40,27 +40,35 @@ function M.delete_session(prompt_bufnr)
 end
 
 function M.rename_session(prompt_bufnr)
+    local utils = require("sessions.utils")
+
     actions.close(prompt_bufnr)
     local selected = action_state.get_selected_entry()[1]
     local selected_copy = selected:sub(1, -1)
     selected = selected:gsub(" ", "_")
+    selected = selected:gsub('"', '\\"')
     local dir = opts.dirs[selected]
     local file = dir:gsub("/", ":"):sub(1, -1) .. ".vim"
 
-    local new_name = vim.fn.input("Enter new name: ")
+    local new_name = utils.input("New name")
+    if not new_name then
+        print("Operation cancelled")
+        return
+    end
+
     vim.cmd(
         "silent !mv "
         .. opts.path
         .. opts.marker
-        .. "\\(" .. selected:gsub('"', '\\"'):sub(1, -1) .. "\\)"
+        .. "\\(" .. selected .. "\\)"
         .. file
         .. " "
         .. opts.path
         .. opts.marker
-        .. "\\(" .. new_name:gsub('"', '\\"'):sub(1, -1) .. "\\)"
+        .. "\\(" .. new_name.result .. "\\)"
         .. file
     )
-    print("Session: " .. selected_copy .. " -> " .. new_name)
+    print("Session: " .. selected_copy .. " -> " .. new_name.user_input)
     vim.cmd("SessionsList")
 end
 

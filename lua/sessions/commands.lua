@@ -2,6 +2,7 @@ local M = {}
 
 local telescope_custom_actions = require("sessions.telescope_custom_actions")
 local opts = require("sessions").get_opts()
+local utils = require("sessions.utils")
 
 function M.attach_session()
     vim.cmd("silent source " .. opts.path .. vim.fn.getcwd():gsub("/", ":") .. ".vim")
@@ -13,22 +14,20 @@ end
 
 function M.create_session()
     M.save_session()
-    local prompt = vim.fn.input("Enter Session Name: ")
-    local prompt_copy = prompt:sub(1, -1)
-    if prompt == "" then
+    local prompt = utils.input("Enter Session Name: ")
+    if not prompt then
         return
     end
-    prompt = prompt:gsub(" ", "_")
-    prompt = prompt:gsub('"', '\\"')
+
     vim.cmd(
         "silent !touch "
         .. opts.path
         .. opts.marker
-        .. "\\(" .. prompt .. "\\)"
+        .. "\\(" .. prompt.result .. "\\)"
         .. vim.fn.getcwd():gsub("/", ":")
         .. ".vim"
     )
-    print("Session created: " .. prompt_copy)
+    print("Session created: " .. prompt.user_input)
 end
 
 function M.open_list()

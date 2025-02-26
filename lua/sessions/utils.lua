@@ -45,4 +45,24 @@ function M.get_options()
     }
 end
 
+---@class Input
+---@field user_input string
+---@field result string
+
+---@param prompt string
+---@return Input | nil
+function M.input(prompt)
+    local input = vim.fn.input(prompt .. ": ")
+    local result = input:sub(1, -1)
+    if result == "" then
+        return nil
+    end
+    local copy = result:sub(1, -1)
+    result = result:gsub(" ", "_"):gsub("'", "\\'")
+    return {
+        user_input = copy,
+        result = result,
+    }
+end
+
 return M
