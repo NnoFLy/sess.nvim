@@ -20,10 +20,12 @@ M.dependencies = {
     "nvim-lua/plenary.nvim"
 }
 
-M.opts = {
-    path = "path/to/sessions_folder", -- default = "~/sessions"
-    attach_after_enter = true -- if false just change cwd
-}
+M.config = function()
+    require("sessions").setup({
+        path = "path/to/sessions_folder", -- default = "~/sessions"
+        attach_after_enter = true -- if false just change cwd
+    })
+end
 
 M.keys = {
     { "<leader>ss", "<cmd>SessionSave<cr>", desc = "Save session" },
