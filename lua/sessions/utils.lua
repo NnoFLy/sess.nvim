@@ -28,7 +28,7 @@ function M.get_options()
 
     return {
         preview = true,
-        prompt_title = "🗃️ All sessions",
+        prompt_title = opts.prompt_title,
         finder = finders.new_table({
             results = sessions,
         }),
