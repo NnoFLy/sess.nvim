@@ -6,6 +6,7 @@ A simple plugin for managing sessions in Neovim.
 
 - Create and load sessions
 - Delete sessions
+- Rename sessions
 - List sessions
 
 ## Installation
