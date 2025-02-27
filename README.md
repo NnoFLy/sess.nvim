@@ -18,24 +18,24 @@ Using [lazy.nvim](https://github.com/folke/lazy.nvim):
 ```lua
 local M = { "i0i-i0i/sessions.nvim" }
 
+--- OPTIONAL (only for SessionsList) ---
 M.dependencies = {
     "nvim-telescope/telescope.nvim",
     "nvim-lua/plenary.nvim"
 }
+--- OPTIONAL (only for SessionsList) ---
 
-M.config = function()
-    require("sessions").setup({
-        path = "path/to/sessions_folder", -- default = "~/sessions"
-        attach_after_enter = true, -- if false just change cwd
-        promt_title = "Your title"
-    })
-end
+M.opts = {
+    path = "path/to/sessions_folder", -- default = "~/sessions"
+    attach_after_enter = true, -- if false just change cwd
+    promt_title = "Your title"
+}
 
 M.keys = {
     { "<leader>ss", "<cmd>SessionSave<cr>", desc = "Save session" },
     { "<leader>sc", "<cmd>SessionCreate<cr>", desc = "Create session" },
     { "<leader>sa", "<cmd>SessionAttach<cr>", desc = "Attach session" },
-    { "<leader>sl", "<cmd>SessionsList<cr>", desc = "List sessions" },
+    { "<leader>sl", "<cmd>SessionsList<cr>", desc = "List sessions" }, -- only if you have telescope.nvim
 }
 
 return M
@@ -59,7 +59,8 @@ vim.api.nvim_create_user_command("SessionsList", function()
 end, {})
 ```
 
-Save current session:
+This creates a session but doesn't give it a name, you can use SessionAttach or SessionCreate to specify a name.
+Session is linked to the current directory:
 
 ```lua
 vim.api.nvim_create_user_command("SessionSave", function()
@@ -76,6 +77,30 @@ vim.api.nvim_create_user_command("SessionAttach", function()
         print("Cann't found session here")
     end
 end, {})
+```
+
+## Add yout own functiononality
+
+Auto save session on exit and auto attach session on enter (you need to delete M.opts and use only M.config):
+
+```lua
+M.config = function()
+    local builtins = require("sessions").setup(opts)
+
+    vim.api.nvim_create_autocmd("VimEnter", {
+        callback = function()
+            vim.schedule(function()
+                builtins.attach_session()
+            end)
+        end
+    })
+
+    vim.api.nvim_create_autocmd("VimLeavePre", {
+        callback = function()
+            builtins.save_session()
+        end
+    })
+end
 ```
 
 ## Telescope maps
