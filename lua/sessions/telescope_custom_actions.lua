@@ -7,6 +7,7 @@ local action_state = require("telescope.actions.state")
 
 local opts = require("sessions").get_opts()
 
+---@param prompt_bufnr number
 function M.enter(prompt_bufnr)
     actions.close(prompt_bufnr)
     local selected = action_state.get_selected_entry()
@@ -19,6 +20,7 @@ function M.enter(prompt_bufnr)
     end
 end
 
+---@param prompt_bufnr number
 function M.delete_session(prompt_bufnr)
     actions.close(prompt_bufnr)
     local selected = action_state.get_selected_entry()[1]
@@ -39,6 +41,8 @@ function M.delete_session(prompt_bufnr)
     vim.cmd("SessionsList")
 end
 
+---@param prompt_bufnr number
+---@return boolean
 function M.rename_session(prompt_bufnr)
     local utils = require("sessions.utils")
 
@@ -53,7 +57,7 @@ function M.rename_session(prompt_bufnr)
     local new_name = utils.input("New name")
     if not new_name then
         print("Operation cancelled")
-        return
+        return false
     end
 
     vim.cmd(
@@ -70,6 +74,7 @@ function M.rename_session(prompt_bufnr)
     )
     print("Session: " .. selected_copy .. " -> " .. new_name.user_input)
     vim.cmd("SessionsList")
+    return true
 end
 
 function M.open_sessions_list()

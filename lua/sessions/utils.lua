@@ -5,6 +5,7 @@ local sorters = require("telescope.sorters")
 local telescope_custom_actions = require("sessions.telescope_custom_actions")
 local opts = require("sessions").get_opts()
 
+---@return Opts
 local function get_dirs()
     opts.dirs = {}
     for k, _ in vim.fn.execute("!ls " .. opts.path):gmatch("[A-Za-z_.:|0-9()\"'\\-]+.vim") do
@@ -19,6 +20,7 @@ local function get_dirs()
     return opts.dirs
 end
 
+---@return table
 function M.get_options()
     local sessions = {}
     for session_name, _ in pairs(get_dirs()) do
