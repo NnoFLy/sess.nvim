@@ -79,7 +79,7 @@ vim.api.nvim_create_user_command("SessionAttach", function()
 end, {})
 ```
 
-## Add yout own functiononality
+## Add your own functionality
 
 Auto save session on exit and auto attach session on enter (you need to delete M.opts and use only M.config):
 
