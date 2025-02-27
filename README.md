@@ -121,3 +121,11 @@ end
     }
 }
 ```
+
+## TODOs
+
+1. [ ] Passe to SessionAttach and sessions.attach_session() name of session
+2. [ ] sessions.get_current()
+3. [ ] <C-^> for sessions
+4. [ ] Support harpoon.nvim (maybe)
+5. [ ] Add hooks (maybe)
