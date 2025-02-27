@@ -30,10 +30,6 @@ function M.setup(user_opts)
         commands.open_list()
     end, {})
 
-    vim.api.nvim_create_user_command("SessionsRename", function()
-        commands.rename_session()
-    end, {})
-
     vim.api.nvim_create_user_command("SessionSave", function()
         commands.save_session()
     end, {})
