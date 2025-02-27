@@ -4,12 +4,25 @@ local telescope_custom_actions = require("sessions.telescope_custom_actions")
 local opts = require("sessions").get_opts()
 local utils = require("sessions.utils")
 
+---@return boolean
 function M.attach_session()
-    vim.cmd("silent source " .. opts.path .. vim.fn.getcwd():gsub("/", ":") .. ".vim")
+    ---@type string
+    local str = "silent source " .. opts.path .. vim.fn.getcwd():gsub("/", ":") .. ".vim"
+    local ok, _ = pcall(function() vim.cmd(str) end)
+    if not ok then
+        return false
+    end
+    return true
 end
 
+---@return boolean
 function M.save_session()
-    vim.cmd("mksession! " .. opts.path .. vim.fn.getcwd():gsub("/", ":") .. ".vim")
+    local str = "mksession! " .. opts.path .. vim.fn.getcwd():gsub("/", ":") .. ".vim"
+    local ok, _ = pcall(function() vim.cmd(str) end)
+    if not ok then
+        return false
+    end
+    return true
 end
 
 function M.create_session()
@@ -31,6 +44,10 @@ function M.create_session()
 end
 
 function M.open_list()
+    if not pcall(require, "telescope") then
+        print("You need to install telescope.nvim for this command")
+        return
+    end
     telescope_custom_actions.open_sessions_list()
 end
 

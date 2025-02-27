@@ -48,6 +48,13 @@ function M.setup(user_opts)
             print("Cann't found session here")
         end
     end, {})
+
+    M.open_list = commands.open_list
+    M.save_session = commands.save_session
+    M.create_session = commands.create_session
+    M.attach_session = commands.attach_session
+
+    return M
 end
 
 function M.get_opts()
