@@ -9,7 +9,7 @@ https://github.com/user-attachments/assets/069c4d03-4140-4e02-8678-20eef0cbc923
 - Create and load sessions
 - Delete sessions
 - Rename sessions
-- List sessions
+- List sessions (with telescope.nvim)
 
 ## Installation
 
