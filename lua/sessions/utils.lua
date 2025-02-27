@@ -53,15 +53,22 @@ end
 ---@field result string
 
 ---@param prompt string
+---@param default_value string
 ---@return Input | nil
-function M.input(prompt)
-    local input = vim.fn.input(prompt .. ": ")
-    local result = input:sub(1, -1)
-    if result == "" then
+function M.input(prompt, default_value)
+    local default = default_value and default_value:gsub("_", " ") or ""
+    local copy, result
+    vim.ui.input({ prompt = prompt .. ": ", default = default}, function(input)
+        if not input then
+            return nil
+        end
+        result = input:sub(1, -1)
+        copy = result:sub(1, -1)
+        result = result:gsub(" ", "_"):gsub("'", "\\'")
+    end)
+    if not result then
         return nil
     end
-    local copy = result:sub(1, -1)
-    result = result:gsub(" ", "_"):gsub("'", "\\'")
     return {
         user_input = copy,
         result = result,

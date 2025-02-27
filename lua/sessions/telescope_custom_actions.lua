@@ -59,7 +59,7 @@ function M.rename_session(prompt_bufnr)
     local dir = opts.dirs[selected]
     local file = dir:gsub("/", ":"):sub(1, -1) .. ".vim"
 
-    local new_name = utils.input("New name")
+    local new_name = utils.input("New name", selected_copy)
     if not new_name then
         print("Operation cancelled")
         return false

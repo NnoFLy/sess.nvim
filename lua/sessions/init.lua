@@ -21,7 +21,7 @@ function M.setup(user_opts)
     end
 
     opts.path = user_opts.path or "~/sessions/"
-    opts.attach_after_enter = user_opts.attach_after_enter
+    opts.attach_after_enter = not (user_opts.attach_after_enter or false)
     opts.prompt_title = user_opts.prompt_title or "🗃️ All sessions"
 
     vim.cmd("silent !mkdir -p " .. opts.path)
