@@ -26,7 +26,7 @@ end
 
 function M.create_session()
     M.save_session()
-    local prompt = utils.input("Enter Session Name")
+    local prompt = utils.input("Enter Session Name", utils.get_last_folder(vim.fn.getcwd()))
     if not prompt then
         return
     end

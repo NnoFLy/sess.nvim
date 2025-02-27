@@ -75,4 +75,12 @@ function M.input(prompt, default_value)
     }
 end
 
+function M.get_last_folder(path)
+    if path:sub(-1) == '/' then
+        path = path:sub(1, -2)
+    end
+    local last = path:match(".*/(.*)")
+    return last or path
+end
+
 return M
