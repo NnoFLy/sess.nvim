@@ -84,6 +84,8 @@ end, {})
 Auto save session on exit and auto attach session on enter (you need to delete M.opts and use only M.config):
 
 ```lua
+M.lazy = false -- REQUIRED
+
 M.config = function()
     local builtins = require("sessions").setup(opts)
 

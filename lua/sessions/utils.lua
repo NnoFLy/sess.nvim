@@ -75,6 +75,8 @@ function M.input(prompt, default_value)
     }
 end
 
+---@param path string
+---@return string
 function M.get_last_folder(path)
     if path:sub(-1) == '/' then
         path = path:sub(1, -2)
