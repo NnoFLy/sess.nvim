@@ -1,6 +1,5 @@
 local M = {}
 
-local telescope_custom_actions = require("sessions.telescope_custom_actions")
 local opts = require("sessions").get_opts()
 local utils = require("sessions.utils")
 
@@ -48,7 +47,7 @@ function M.open_list()
         print("You need to install telescope.nvim for this command")
         return
     end
-    telescope_custom_actions.open_sessions_list()
+    require("sessions.telescope_custom_actions").open_sessions_list()
 end
 
 return M

@@ -1,3 +1,8 @@
+local ok, _ = pcall(require, "telescope")
+if not ok then
+    return
+end
+
 local M = {}
 
 local pickers = require("telescope.pickers")
