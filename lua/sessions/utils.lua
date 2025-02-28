@@ -85,4 +85,28 @@ function M.get_last_folder(path)
     return last or path
 end
 
+---@param name string
+---@return string
+function M.add_marker(name)
+    return opts.marker .. "(" .. name .. ")"
+end
+
+---@param path string
+---@return string
+function M.antiparse(path)
+    local result = path:gsub("/", ":")
+    result = result:gsub(" ", "_")
+    result = result:gsub('"', '\\"')
+    return result
+end
+
+---@param path string
+---@return string
+function M.parse(path)
+    local result = path:gsub(":", "/")
+    result = result:gsub("_", " ")
+    result = result:gsub('\\"', '"')
+    return result
+end
+
 return M
