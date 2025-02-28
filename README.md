@@ -105,6 +105,43 @@ M.config = function()
 end
 ```
 
+Or you can move between sessions previous session with <leader><C-^>:
+
+```lua
+M.config = function()
+    ---@class Session
+    ---@field name string
+    ---@field path string
+
+    ---@type Session
+    local prev = { name = "", path = "" }
+
+    local builtins = require("sessions").setup()
+
+    ---@param new_session Session
+    local goto_prev = function(new_session)
+        prev = builtins.get_current()
+        if new_session.path ~= "" and prev.path ~= new_session.path then
+            builtins.attach({ path = new_session.path })
+        end
+    end
+
+    vim.keymap.set("n", "<leader><C-^>", function()
+        goto_prev(prev)
+    end)
+
+    vim.api.nvim_create_user_command("CustomSessionAttach", function(input)
+        prev = builtins.get_current()
+        vim.cmd("SessionAttach " .. input.args)
+    end, { nargs  = "?"})
+end
+
+M.keys {
+    -- ...
+    { "<leader>sa", "<cmd>CustomSessionAttach<cr>", desc = "Attach session" }
+}
+```
+
 ## Telescope maps
 
 ```lua
