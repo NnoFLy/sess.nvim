@@ -92,14 +92,14 @@ M.config = function()
     vim.api.nvim_create_autocmd("VimEnter", {
         callback = function()
             vim.schedule(function()
-                builtins.attach_session()
+                builtins.attach()
             end)
         end
     })
 
     vim.api.nvim_create_autocmd("VimLeavePre", {
         callback = function()
-            builtins.save_session()
+            builtins.save()
         end
     })
 end
@@ -127,5 +127,3 @@ end
 1. [ ] Passe to SessionAttach and sessions.attach_session() name of session
 2. [ ] sessions.get_current()
 3. [ ] <C-^> for sessions
-4. [ ] Support harpoon.nvim (maybe)
-5. [ ] Add hooks (maybe)
