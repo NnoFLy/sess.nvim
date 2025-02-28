@@ -93,6 +93,16 @@ end
 
 ---@param path string
 ---@return string
+function M.remove_marker(path)
+    local colon_pos = path:find(":")
+    if colon_pos then
+        return ":" .. path:sub(colon_pos + 1)
+    end
+    return nil
+end
+
+---@param path string
+---@return string
 function M.antiparse(path)
     local result = path:gsub("/", ":")
     result = result:gsub(" ", "_")
