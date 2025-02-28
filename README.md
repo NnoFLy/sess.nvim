@@ -105,7 +105,7 @@ M.config = function()
 end
 ```
 
-Or you can move between sessions previous session with <leader><C-^>:
+Or you can move between previous session with <leader><C-^>:
 
 ```lua
 M.config = function()
