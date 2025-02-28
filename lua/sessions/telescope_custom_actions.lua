@@ -34,9 +34,9 @@ function M.delete_session(prompt_bufnr)
     local dir = opts.dirs[selected]
     local file = dir:gsub("/", ":"):sub(1, -1) .. ".vim"
 
-    vim.cmd("silent !rm -rf " .. opts.path .. file)
+    vim.cmd("silent !rm " .. opts.path .. file)
     vim.cmd(
-        "silent !rm -rf "
+        "silent !rm  "
         .. opts.path
         .. opts.marker
         .. "\\(" .. selected:gsub('"', '\\"'):sub(1, -1) .. "\\)"

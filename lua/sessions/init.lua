@@ -1,3 +1,7 @@
+---@class Hooks
+---@field pre_hook function
+---@field post_hook function
+
 ---@class Opts
 ---@field path string | nil
 ---@field attach_after_enter boolean | nil
@@ -38,12 +42,20 @@ function M.setup(user_opts)
         commands.create_session()
     end, {})
 
-    vim.api.nvim_create_user_command("SessionAttach", function()
-        local ok, _ = pcall(commands.attach_session)
-        if not ok then
-            print("Cann't found session here")
+    vim.api.nvim_create_user_command("SessionAttach", function(input)
+        if input.args and #input.args > 0 then
+            local args = input.args
+            local ok, _ = pcall(commands.attach_session, { name = args })
+            if not ok then
+                print("Cann't found session")
+            end
+        else
+            local ok, _ = pcall(commands.attach_session)
+            if not ok then
+                print("Cann't found session here")
+            end
         end
-    end, {})
+    end, { nargs = '?' })
 
     M.list = commands.open_list
     M.save = commands.save_session
