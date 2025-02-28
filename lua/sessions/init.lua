@@ -49,7 +49,7 @@ function M.setup(user_opts)
     M.save = commands.save_session
     M.create = commands.create_session
     M.attach = commands.attach_session
-    M.get_current = commands.attach_session
+    M.get_current = commands.get_current
 
     return M
 end

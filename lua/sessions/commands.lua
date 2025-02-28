@@ -28,12 +28,27 @@ function M.attach_session(session)
         end
         return false
     end
-    local str = "silent source " .. opts.path .. vim.fn.getcwd():gsub("/", ":") .. ".vim"
+    local str = "silent source " .. opts.path .. utils.antiparse(vim.fn.getcwd()) .. ".vim"
     local ok, _ = pcall(function() vim.cmd(str) end)
     if not ok then
         return false
     end
     return true
+end
+
+---@return Session
+M.get_current = function()
+    local session = {}
+    session.path = vim.fn.getcwd()
+    local result = vim.fn.system("find " .. opts.path .. " -type f -name '*)" .. utils.antiparse(session.path) .. ".vim'")
+    local start_pos = result:find("FOR_MARKER%(")
+    local end_pos = result:find("%):", start_pos)
+    if start_pos == nil or end_pos == nil then
+        return session
+    end
+    local name = result:sub(start_pos + 11, end_pos - 1)
+    session.name = utils.parse(name)
+    return session
 end
 
 ---@return boolean
