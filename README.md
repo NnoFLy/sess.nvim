@@ -135,6 +135,7 @@ M.config = function()
     end
 
     vim.keymap.set("n", "<leader><C-^>", function()
+        builtins.save()
         goto_prev(prev)
     end)
 
