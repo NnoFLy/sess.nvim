@@ -45,12 +45,12 @@ function M.setup(user_opts)
     vim.api.nvim_create_user_command("SessionAttach", function(input)
         if input.args and #input.args > 0 then
             local args = input.args
-            local ok, _ = pcall(commands.attach_session, { name = args })
+            local ok = commands.attach_session({ name = args })
             if not ok then
-                print("Cann't found session")
+                print("Session doesn't exist: " .. args)
             end
         else
-            local ok, _ = pcall(commands.attach_session)
+            local ok = commands.attach_session()
             if not ok then
                 print("Cann't found session here")
             end

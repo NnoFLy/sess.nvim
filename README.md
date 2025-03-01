@@ -71,12 +71,20 @@ end, {})
 Find session (in opts.path) for current path and attach, if not found print error:
 
 ```lua
-vim.api.nvim_create_user_command("SessionAttach", function()
-    local _, err = pcall(sessions.attach_session)
-    if err then
-        print("Cann't found session here")
+vim.api.nvim_create_user_command("SessionAttach", function(input)
+    if input.args and #input.args > 0 then
+        local args = input.args
+        local ok = commands.attach_session({ name = args })
+        if not ok then
+            print("Session doesn't exist: " .. args)
+        end
+    else
+        local ok = commands.attach_session()
+        if not ok then
+            print("Cann't found session here")
+        end
     end
-end, {})
+end, { nargs = '?' })
 ```
 
 ## Add your own functionality
@@ -161,6 +169,4 @@ M.keys {
 
 ## TODOs
 
-1. [ ] Passe to SessionAttach and sessions.attach_session() name of session
-2. [ ] sessions.get_current()
-3. [ ] <C-^> for sessions
+1. Make this better
