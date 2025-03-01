@@ -15,23 +15,23 @@ function M.attach_session(session)
             local command = "find " .. opts.path .. " -type f -name '" .. utils.add_marker(utils.antiparse(session.name)) .. "*'"
             local result = vim.fn.system(command)
             if result == "" then
-                return false
+                return nil
             end
             vim.cmd("silent source " .. opts.path .. utils.remove_marker(result))
             return true
         elseif session.path then
             vim.cmd.cd(session.path)
             if M.attach_session() then
-                return false
+                return nil
             end
             return true
         end
-        return false
+        return nil
     end
     local str = "silent source " .. opts.path .. utils.antiparse(vim.fn.getcwd()) .. ".vim"
     local ok, _ = pcall(function() vim.cmd(str) end)
     if not ok then
-        return false
+        return nil
     end
     return true
 end
