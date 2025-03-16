@@ -4,36 +4,34 @@ local opts = require("sessions").get_opts()
 local utils = require("sessions.utils")
 
 ---@class Session
----@field name string
----@field path string
+---@field name string | nil
+---@field path string | nil
 
----@param session Session
----@return boolean
+---@param session Session | nil
+---@return boolean | nil
 function M.attach_session(session)
-    if session ~= nil then
-        if session.name then
-            local command = "find " .. opts.path .. " -type f -name '" .. utils.add_marker(utils.antiparse(session.name)) .. "*'"
-            local result = vim.fn.system(command)
-            if result == "" then
-                return nil
-            end
+    if session == nil then
+        local str = "silent source " .. opts.path .. utils.antiparse(vim.fn.getcwd()) .. ".vim"
+        local ok, _ = pcall(function() vim.cmd(str) end)
+        if not ok then
+            return nil
+        end
+        return true
+    end
+
+    if session.name then
+        local command = "find " .. opts.path .. " -type f -name '" .. utils.add_marker(utils.antiparse(session.name)) .. "*'"
+        local result = vim.fn.system(command)
+        if result ~= "" then
             vim.cmd("silent source " .. opts.path .. utils.remove_marker(result))
             return true
-        elseif session.path then
-            vim.cmd.cd(session.path)
-            if M.attach_session() then
-                return nil
-            end
-            return true
         end
-        return nil
+    elseif session.path then
+        vim.cmd.cd(session.path)
+        return M.attach_session()
     end
-    local str = "silent source " .. opts.path .. utils.antiparse(vim.fn.getcwd()) .. ".vim"
-    local ok, _ = pcall(function() vim.cmd(str) end)
-    if not ok then
-        return nil
-    end
-    return true
+
+    return nil
 end
 
 ---@return Session
