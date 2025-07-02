@@ -84,7 +84,10 @@ end
 
 function M.open_sessions_list()
     local utils = require("sessions.utils")
-    pickers.new(dropdown, utils.get_options()):find()
+    pickers.new(
+        dropdown,
+        utils.get_options(opts.path, opts.marker, opts.prompt_title)
+    ):find()
 end
 
 return M

@@ -2,11 +2,13 @@
 ---@field pre_hook function
 ---@field post_hook function
 
+---@alias SessionsList string[] List of sessions
+
 ---@class Opts
 ---@field path string | nil
 ---@field attach_after_enter boolean | nil
 ---@field prompt_title string | nil
----@field dirs string[] | nil
+---@field dirs SessionsList | nil
 ---@field marker string | nil
 
 local M = {}
@@ -16,6 +18,8 @@ local opts = {}
 
 opts.marker = "FOR_MARKER"
 opts.dirs = {}
+
+local utils = require("sessions.utils")
 
 function M.setup(user_opts)
     local commands = require("sessions.commands")
@@ -42,6 +46,10 @@ function M.setup(user_opts)
         commands.create_session()
     end, {})
 
+    vim.api.nvim_create_user_command("SessionPin", function()
+        commands.create_session()
+    end, {})
+
     vim.api.nvim_create_user_command("SessionAttach", function(input)
         if input.args and #input.args > 0 then
             local args = input.args
@@ -55,10 +63,21 @@ function M.setup(user_opts)
                 print("Cann't found session here")
             end
         end
-    end, { nargs = '?' })
+    end, {
+        nargs = "?",
+        complete = function()
+            local sessions = utils.get_sessions("~/sessions/", "FOR_MARKER")
+            local sessions_names = {}
+            for name, _ in pairs(sessions) do
+                table.insert(sessions_names, name)
+            end
+            return sessions_names
+        end
+    })
 
     M.list = commands.open_list
     M.save = commands.save_session
+    M.pin = commands.create_session
     M.create = commands.create_session
     M.attach = commands.attach_session
     M.get_current = commands.get_current
