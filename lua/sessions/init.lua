@@ -19,8 +19,6 @@ local opts = {}
 opts.marker = "FOR_MARKER"
 opts.dirs = {}
 
-local utils = require("sessions.utils")
-
 function M.setup(user_opts)
     local commands = require("sessions.commands")
 
@@ -43,11 +41,11 @@ function M.setup(user_opts)
     end, {})
 
     vim.api.nvim_create_user_command("SessionCreate", function()
-        commands.create_session()
+        commands.pin_session()
     end, {})
 
     vim.api.nvim_create_user_command("SessionPin", function()
-        commands.create_session()
+        commands.pin_session()
     end, {})
 
     vim.api.nvim_create_user_command("SessionAttach", function(input)
@@ -66,7 +64,8 @@ function M.setup(user_opts)
     end, {
         nargs = "?",
         complete = function()
-            local sessions = utils.get_sessions("~/sessions/", "FOR_MARKER")
+            local sessions = require("sessions.utils")
+                .get_sessions("~/sessions/", "FOR_MARKER")
             local sessions_names = {}
             for name, _ in pairs(sessions) do
                 table.insert(sessions_names, name)
@@ -77,8 +76,8 @@ function M.setup(user_opts)
 
     M.list = commands.open_list
     M.save = commands.save_session
-    M.pin = commands.create_session
-    M.create = commands.create_session
+    M.pin = commands.pin_session
+    M.create = commands.pin_session
     M.attach = commands.attach_session
     M.get_current = commands.get_current
 

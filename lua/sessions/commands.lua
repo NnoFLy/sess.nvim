@@ -59,7 +59,7 @@ function M.save_session()
     return true
 end
 
-function M.create_session()
+function M.pin_session()
     local prompt = utils.input("Enter Session Name", utils.get_last_folder_in_path(vim.fn.getcwd()))
     if not prompt then
         return
@@ -74,7 +74,7 @@ function M.create_session()
         .. vim.fn.getcwd():gsub("/", ":")
         .. ".vim"
     )
-    print("Session created: " .. prompt.user_input)
+    print("Session pinned: " .. prompt.user_input)
 end
 
 function M.open_list()
@@ -82,7 +82,7 @@ function M.open_list()
         print("You need to install telescope.nvim for this command")
         return
     end
-    require("sessions.telescope_custom_actions").open_sessions_list()
+    require("sessions.telescope.custom_actions").open_sessions_list()
 end
 
 return M

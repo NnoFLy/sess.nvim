@@ -16,9 +16,10 @@ local opts = require("sessions").get_opts()
 function M.enter(prompt_bufnr)
     actions.close(prompt_bufnr)
     local selected = action_state.get_selected_entry()
-    local dir = selected[1]:gsub(" ", "_")
+    local session_name = selected[1]:gsub(" ", "_")
+    local utils = require("sessions.utils")
 
-    vim.cmd("cd " .. opts.dirs[dir])
+    vim.cmd("cd " .. utils.get_session_path(opts.path, opts.marker, session_name))
 
     if opts.attach_after_enter then
         require("sessions.commands").attach_session()
@@ -69,7 +70,7 @@ function M.rename_session(prompt_bufnr)
         "silent !mv "
         .. opts.path
         .. opts.marker
-        .. "\\(" .. selected .. "\\)"
+            .. "\\(" .. selected .. "\\)"
         .. file
         .. " "
         .. opts.path
@@ -83,10 +84,10 @@ function M.rename_session(prompt_bufnr)
 end
 
 function M.open_sessions_list()
-    local utils = require("sessions.utils")
+    local telescope_utils = require("sessions.telescope.utils")
     pickers.new(
         dropdown,
-        utils.get_options(opts.path, opts.marker, opts.prompt_title)
+        telescope_utils.get_options(opts.path, opts.marker, opts.prompt_title)
     ):find()
 end
 
