@@ -20,7 +20,7 @@ function M.attach_session(session)
     end
 
     if session.name then
-        local command = "find " .. opts.path .. " -type f -name '" .. utils.add_marker(opts.marker, utils.antiparse(session.name)) .. "*'"
+        local command = "find " .. opts.path .. " -type f -name '" .. utils.add_marker(opts._marker, utils.antiparse(session.name)) .. "*'"
         local result = vim.fn.system(command)
         if result ~= "" then
             vim.cmd("silent source " .. opts.path .. utils.remove_marker(result))
@@ -69,7 +69,7 @@ function M.pin_session()
     vim.cmd(
         "silent !touch "
         .. opts.path
-        .. opts.marker
+        .. opts._marker
         .. "\\(" .. prompt.result .. "\\)"
         .. vim.fn.getcwd():gsub("/", ":")
         .. ".vim"

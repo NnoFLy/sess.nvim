@@ -8,16 +8,16 @@
 ---@field path string | nil
 ---@field attach_after_enter boolean | nil
 ---@field prompt_title string | nil
----@field dirs SessionsList | nil
----@field marker string | nil
+---@field _dirs SessionsList | nil
+---@field _marker string | nil
 
 local M = {}
 
 ---@type Opts
 local opts = {}
 
-opts.marker = "FOR_MARKER"
-opts.dirs = {}
+opts._marker = "FOR_MARKER"
+opts._dirs = {}
 
 function M.setup(user_opts)
     local commands = require("sessions.commands")
@@ -48,7 +48,7 @@ function M.setup(user_opts)
         commands.pin_session()
     end, {})
 
-    local completion = require("sessions.utils").generate_completion(opts.path, opts.marker)
+    local completion = require("sessions.utils").generate_completion(opts.path, opts._marker)
     vim.api.nvim_create_user_command("SessionAttach", function(input)
         if input.args and #input.args > 0 then
             local args = input.args

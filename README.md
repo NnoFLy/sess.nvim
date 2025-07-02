@@ -75,7 +75,7 @@ to find a session for current path and than attach, if no session is found,
 an error will be displayed:
 
 ```lua
-local completion = require("sessions.utils").generate_completion(opts.path, opts.marker)
+local completion = require("sessions.utils").generate_completion(opts.path, opts._marker)
 vim.api.nvim_create_user_command("SessionAttach", function(input)
     if input.args and #input.args > 0 then
         local args = input.args
@@ -103,7 +103,7 @@ Auto save session on exit and auto attach session on enter (you need to delete M
 M.lazy = false -- REQUIRED
 
 M.config = function()
-    local builtins = require("sessions").setup(opts)
+    local builtins = require("sessions.nvim").setup(opts)
 
     vim.api.nvim_create_autocmd("VimEnter", {
         callback = function()
@@ -132,7 +132,7 @@ M.config = function()
     ---@type Session
     local prev = { name = "", path = "" }
 
-    local builtins = require("sessions").setup()
+    local builtins = require("sessions.nvim").setup()
 
     ---@param new_session Session
     local goto_prev = function(new_session)
@@ -144,6 +144,8 @@ M.config = function()
 
     vim.keymap.set("n", "<leader><C-^>", function()
         builtins.save()
+        vim.cmd("wa")
+        vim.cmd("silent! bufdo bd")
         goto_prev(prev)
     end)
 
