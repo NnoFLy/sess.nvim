@@ -2,20 +2,22 @@
 ---@field pre_hook function
 ---@field post_hook function
 
+---@alias SessionsList string[] List of sessions
+
 ---@class Opts
 ---@field path string | nil
 ---@field attach_after_enter boolean | nil
 ---@field prompt_title string | nil
----@field dirs string[] | nil
----@field marker string | nil
+---@field _dirs SessionsList | nil
+---@field _marker string | nil
 
 local M = {}
 
 ---@type Opts
 local opts = {}
 
-opts.marker = "FOR_MARKER"
-opts.dirs = {}
+opts._marker = "FOR_MARKER"
+opts._dirs = {}
 
 function M.setup(user_opts)
     local commands = require("sessions.commands")
@@ -39,9 +41,14 @@ function M.setup(user_opts)
     end, {})
 
     vim.api.nvim_create_user_command("SessionCreate", function()
-        commands.create_session()
+        commands.pin_session()
     end, {})
 
+    vim.api.nvim_create_user_command("SessionPin", function()
+        commands.pin_session()
+    end, {})
+
+    local completion = require("sessions.utils").generate_completion(opts.path, opts._marker)
     vim.api.nvim_create_user_command("SessionAttach", function(input)
         if input.args and #input.args > 0 then
             local args = input.args
@@ -55,13 +62,18 @@ function M.setup(user_opts)
                 print("Cann't found session here")
             end
         end
-    end, { nargs = '?' })
+    end, {
+        nargs = "?",
+        complete = completion
+    })
 
     M.list = commands.open_list
     M.save = commands.save_session
-    M.create = commands.create_session
+    M.pin = commands.pin_session
+    M.create = commands.pin_session
     M.attach = commands.attach_session
     M.get_current = commands.get_current
+    M.completion = completion
 
     return M
 end

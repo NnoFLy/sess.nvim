@@ -16,9 +16,10 @@ local opts = require("sessions").get_opts()
 function M.enter(prompt_bufnr)
     actions.close(prompt_bufnr)
     local selected = action_state.get_selected_entry()
-    local dir = selected[1]:gsub(" ", "_")
+    local session_name = selected[1]:gsub(" ", "_")
+    local utils = require("sessions.utils")
 
-    vim.cmd("cd " .. opts.dirs[dir])
+    vim.cmd("cd " .. utils.get_session_path(opts.path, opts._marker, session_name))
 
     if opts.attach_after_enter then
         require("sessions.commands").attach_session()
@@ -31,14 +32,14 @@ function M.delete_session(prompt_bufnr)
     local selected = action_state.get_selected_entry()[1]
     local selected_copy = selected:sub(1, -1)
     selected = selected:gsub(" ", "_")
-    local dir = opts.dirs[selected]
+    local dir = opts._dirs[selected]
     local file = dir:gsub("/", ":"):sub(1, -1) .. ".vim"
 
     vim.cmd("silent !rm " .. opts.path .. file)
     vim.cmd(
         "silent !rm  "
         .. opts.path
-        .. opts.marker
+        .. opts._marker
         .. "\\(" .. selected:gsub('"', '\\"'):sub(1, -1) .. "\\)"
         .. file
     )
@@ -56,7 +57,7 @@ function M.rename_session(prompt_bufnr)
     local selected_copy = selected:sub(1, -1)
     selected = selected:gsub(" ", "_")
     selected = selected:gsub('"', '\\"')
-    local dir = opts.dirs[selected]
+    local dir = opts._dirs[selected]
     local file = dir:gsub("/", ":"):sub(1, -1) .. ".vim"
 
     local new_name = utils.input("New name", selected_copy)
@@ -68,12 +69,12 @@ function M.rename_session(prompt_bufnr)
     vim.cmd(
         "silent !mv "
         .. opts.path
-        .. opts.marker
-        .. "\\(" .. selected .. "\\)"
+        .. opts._marker
+            .. "\\(" .. selected .. "\\)"
         .. file
         .. " "
         .. opts.path
-        .. opts.marker
+        .. opts._marker
         .. "\\(" .. new_name.result .. "\\)"
         .. file
     )
@@ -83,8 +84,11 @@ function M.rename_session(prompt_bufnr)
 end
 
 function M.open_sessions_list()
-    local utils = require("sessions.utils")
-    pickers.new(dropdown, utils.get_options()):find()
+    local telescope_utils = require("sessions.telescope.utils")
+    pickers.new(
+        dropdown,
+        telescope_utils.get_options(opts.path, opts._marker, opts.prompt_title)
+    ):find()
 end
 
 return M

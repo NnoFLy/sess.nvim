@@ -6,7 +6,8 @@ https://github.com/user-attachments/assets/069c4d03-4140-4e02-8678-20eef0cbc923
 
 ## Features
 
-- Create and load sessions
+- Save and load sessions
+- Pin sessions
 - Delete sessions
 - Rename sessions
 - List sessions (with telescope.nvim)
@@ -33,7 +34,7 @@ M.opts = {
 
 M.keys = {
     { "<leader>ss", "<cmd>SessionSave<cr>", desc = "Save session" },
-    { "<leader>sc", "<cmd>SessionCreate<cr>", desc = "Create session" },
+    { "<leader>sc", "<cmd>SessionPin<cr>", desc = "Pin session" },
     { "<leader>sa", "<cmd>SessionAttach<cr>", desc = "Attach session" },
     { "<leader>sl", "<cmd>SessionsList<cr>", desc = "List sessions" }, -- only if you have telescope.nvim
 }
@@ -43,11 +44,12 @@ return M
 
 ## Default commands
 
-Create new session for current path:
+You can pin a new session, that means you give it a name, and it will appear in
+completion menu (SessionAttach) or in SessionsList:
 
 ```lua
-vim.api.nvim_create_user_command("SessionCreate", function()
-    sessions.create_session()
+vim.api.nvim_create_user_command("SessionPin", function()
+    sessions.pin_session()
 end, {})
 ```
 
@@ -59,8 +61,8 @@ vim.api.nvim_create_user_command("SessionsList", function()
 end, {})
 ```
 
-This creates a session but doesn't give it a name, you can use SessionAttach or SessionCreate to specify a name.
-Session is linked to the current directory:
+This creates a session but doesn't assign a name to it, you can use SessionPin
+to specify a name. Session is associated with current directory:
 
 ```lua
 vim.api.nvim_create_user_command("SessionSave", function()
@@ -68,9 +70,12 @@ vim.api.nvim_create_user_command("SessionSave", function()
 end, {})
 ```
 
-Find session (in opts.path) for current path and attach, if not found print error:
+Specify the session name and attach to it, if no name is specified this will try
+to find a session for current path and than attach, if no session is found,
+an error will be displayed:
 
 ```lua
+local completion = require("sessions.utils").generate_completion(opts.path, opts._marker)
 vim.api.nvim_create_user_command("SessionAttach", function(input)
     if input.args and #input.args > 0 then
         local args = input.args
@@ -84,7 +89,10 @@ vim.api.nvim_create_user_command("SessionAttach", function(input)
             print("Cann't found session here")
         end
     end
-end, { nargs = '?' })
+end, {
+    nargs = "?",
+    complete = completion
+})
 ```
 
 ## Add your own functionality
@@ -95,7 +103,7 @@ Auto save session on exit and auto attach session on enter (you need to delete M
 M.lazy = false -- REQUIRED
 
 M.config = function()
-    local builtins = require("sessions").setup(opts)
+    local builtins = require("sessions.nvim").setup(opts)
 
     vim.api.nvim_create_autocmd("VimEnter", {
         callback = function()
@@ -124,7 +132,7 @@ M.config = function()
     ---@type Session
     local prev = { name = "", path = "" }
 
-    local builtins = require("sessions").setup()
+    local builtins = require("sessions.nvim").setup()
 
     ---@param new_session Session
     local goto_prev = function(new_session)
@@ -136,13 +144,18 @@ M.config = function()
 
     vim.keymap.set("n", "<leader><C-^>", function()
         builtins.save()
+        vim.cmd("wa")
+        vim.cmd("silent! bufdo bd")
         goto_prev(prev)
     end)
 
     vim.api.nvim_create_user_command("CustomSessionAttach", function(input)
         prev = builtins.get_current()
         vim.cmd("SessionAttach " .. input.args)
-    end, { nargs  = "?"})
+    end, {
+        nargs = "?",
+        complete = builtins.completion
+    })
 end
 
 M.keys {

@@ -20,7 +20,7 @@ function M.attach_session(session)
     end
 
     if session.name then
-        local command = "find " .. opts.path .. " -type f -name '" .. utils.add_marker(utils.antiparse(session.name)) .. "*'"
+        local command = "find " .. opts.path .. " -type f -name '" .. utils.add_marker(opts._marker, utils.antiparse(session.name)) .. "*'"
         local result = vim.fn.system(command)
         if result ~= "" then
             vim.cmd("silent source " .. opts.path .. utils.remove_marker(result))
@@ -59,22 +59,22 @@ function M.save_session()
     return true
 end
 
-function M.create_session()
-    M.save_session()
-    local prompt = utils.input("Enter Session Name", utils.get_last_folder(vim.fn.getcwd()))
+function M.pin_session()
+    local prompt = utils.input("Enter Session Name", utils.get_last_folder_in_path(vim.fn.getcwd()))
     if not prompt then
         return
     end
+    M.save_session()
 
     vim.cmd(
         "silent !touch "
         .. opts.path
-        .. opts.marker
+        .. opts._marker
         .. "\\(" .. prompt.result .. "\\)"
         .. vim.fn.getcwd():gsub("/", ":")
         .. ".vim"
     )
-    print("Session created: " .. prompt.user_input)
+    print("Session pinned: " .. prompt.user_input)
 end
 
 function M.open_list()
@@ -82,7 +82,7 @@ function M.open_list()
         print("You need to install telescope.nvim for this command")
         return
     end
-    require("sessions.telescope_custom_actions").open_sessions_list()
+    require("sessions.telescope.custom_actions").open_sessions_list()
 end
 
 return M
