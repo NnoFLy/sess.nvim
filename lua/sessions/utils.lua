@@ -98,9 +98,8 @@ end
 
 ---@param path string
 ---@param marker string
----@return function
+---@return fun(): string[]
 function M.generate_completion(path, marker)
-    ---@return string[]
     return function()
         local sessions = M.get_sessions(path, marker)
         local sessions_names = {}

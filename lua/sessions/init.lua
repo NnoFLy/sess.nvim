@@ -67,7 +67,7 @@ function M.setup(user_opts)
         complete = completion
     })
 
-    M.list = commands.open_list
+    M.open_list = commands.open_list
     M.save = commands.save_session
     M.pin = commands.pin_session
     M.create = commands.pin_session

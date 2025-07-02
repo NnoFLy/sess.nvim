@@ -10,6 +10,7 @@ https://github.com/user-attachments/assets/069c4d03-4140-4e02-8678-20eef0cbc923
 - Pin sessions
 - Delete sessions
 - Rename sessions
+- Auto-completion sessions (AttachSession)
 - List sessions (with telescope.nvim)
 
 ## Installation
@@ -105,7 +106,15 @@ Auto save session on exit and auto attach session on enter (you need to delete M
 M.lazy = false -- REQUIRED
 
 M.config = function()
-    local builtins = require("sessions.nvim").setup(opts)
+    ---@class Builtins
+    ---@field attach fun(session: Session | nil): boolean
+    ---@field completion fun(): string[]
+    ---@field get_current fun(): Session
+    ---@field open_list fun()
+    ---@field pin fun()
+    ---@field save fun(): boolean
+    ---@field setup fun(user_opts: table): Builtins
+    local builtins = require("sessions.nvim").setup()
 
     vim.api.nvim_create_autocmd("VimEnter", {
         callback = function()
@@ -128,12 +137,20 @@ Or you can move between previous session with <leader><C-^>:
 ```lua
 M.config = function()
     ---@class Session
-    ---@field name string
-    ---@field path string
+    ---@field name string | nil
+    ---@field path string | nil
 
     ---@type Session
     local prev = { name = "", path = "" }
 
+    ---@class Builtins
+    ---@field attach fun(session: Session | nil): boolean
+    ---@field completion fun(): string[]
+    ---@field get_current fun(): Session
+    ---@field open_list fun()
+    ---@field pin fun()
+    ---@field save fun(): boolean
+    ---@field setup fun()
     local builtins = require("sessions.nvim").setup()
 
     ---@param new_session Session
