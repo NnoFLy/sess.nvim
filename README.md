@@ -42,7 +42,9 @@ M.keys = {
 return M
 ```
 
-## Default commands
+## Default commands (You don't need to add this anywhere)
+
+These are built-in functions, so this is how they work.
 
 You can pin a new session, that means you give it a name, and it will appear in
 completion menu (SessionAttach) or in SessionsList:
@@ -183,4 +185,4 @@ M.keys {
 
 ## TODOs
 
-1. Make this better
+1. Make it better
