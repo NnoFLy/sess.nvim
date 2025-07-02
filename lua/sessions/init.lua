@@ -48,6 +48,7 @@ function M.setup(user_opts)
         commands.pin_session()
     end, {})
 
+    local completion = require("sessions.utils").generate_completion(opts.path, opts.marker)
     vim.api.nvim_create_user_command("SessionAttach", function(input)
         if input.args and #input.args > 0 then
             local args = input.args
@@ -63,15 +64,7 @@ function M.setup(user_opts)
         end
     end, {
         nargs = "?",
-        complete = function()
-            local sessions = require("sessions.utils")
-                .get_sessions("~/sessions/", "FOR_MARKER")
-            local sessions_names = {}
-            for name, _ in pairs(sessions) do
-                table.insert(sessions_names, name)
-            end
-            return sessions_names
-        end
+        complete = completion
     })
 
     M.list = commands.open_list
@@ -80,6 +73,7 @@ function M.setup(user_opts)
     M.create = commands.pin_session
     M.attach = commands.attach_session
     M.get_current = commands.get_current
+    M.completion = completion
 
     return M
 end

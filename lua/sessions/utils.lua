@@ -96,4 +96,19 @@ function M.parse(path)
     return result
 end
 
+---@param path string
+---@param marker string
+---@return function
+function M.generate_completion(path, marker)
+    ---@return string[]
+    return function()
+        local sessions = M.get_sessions(path, marker)
+        local sessions_names = {}
+        for name, _ in pairs(sessions) do
+            table.insert(sessions_names, name)
+        end
+        return sessions_names
+    end
+end
+
 return M
