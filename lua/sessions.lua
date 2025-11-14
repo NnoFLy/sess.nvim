@@ -1,3 +1,12 @@
+---@class Builtins
+---@field attach fun(session: Session | nil): boolean
+---@field completion fun(): string[]
+---@field get_current fun(): Session
+---@field open_list fun()
+---@field pin fun()
+---@field save fun(): boolean
+---@field setup fun()
+
 ---@class Hooks
 ---@field pre_hook function
 ---@field post_hook function
@@ -28,6 +37,7 @@ function M.setup(user_opts)
     M.create = commands.pin_session
     M.attach = commands.attach_session
     M.get_current = commands.get_current
+    M.open_last = commands.open_last
 
     return M
 end

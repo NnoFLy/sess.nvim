@@ -18,6 +18,12 @@ local subcommands = {
                 vim.notify("Cann't found session here", vim.log.levels.ERROR)
             end
         end
+    end,
+    last = function()
+        commands.save_session()
+        vim.cmd("wa")
+        vim.cmd("silent! bufdo bd")
+        commands.open_last()
     end
 }
 
