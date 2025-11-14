@@ -43,8 +43,8 @@ function M.delete_session(prompt_bufnr)
         .. "\\(" .. selected:gsub('"', '\\"'):sub(1, -1) .. "\\)"
         .. file
     )
-    print("Session deleted: " .. selected_copy)
-    vim.cmd("SessionsList")
+    vim.notify("Session deleted: " .. selected_copy, vim.log.levels.INFO)
+    vim.cmd("Sessions list")
 end
 
 ---@param prompt_bufnr number
@@ -62,7 +62,7 @@ function M.rename_session(prompt_bufnr)
 
     local new_name = utils.input("New name", selected_copy)
     if not new_name then
-        print("Operation cancelled")
+        vim.notify("Operation cancelled", vim.log.levels.INFO)
         return false
     end
 
@@ -70,7 +70,7 @@ function M.rename_session(prompt_bufnr)
         "silent !mv "
         .. opts.path
         .. opts._marker
-            .. "\\(" .. selected .. "\\)"
+        .. "\\(" .. selected .. "\\)"
         .. file
         .. " "
         .. opts.path
@@ -78,8 +78,8 @@ function M.rename_session(prompt_bufnr)
         .. "\\(" .. new_name.result .. "\\)"
         .. file
     )
-    print("Session: " .. selected_copy .. " -> " .. new_name.user_input)
-    vim.cmd("SessionsList")
+    vim.notify("Session: " .. selected_copy .. " -> " .. new_name.user_input, vim.log.levels.INFO)
+    vim.cmd("Sessions list")
     return true
 end
 
