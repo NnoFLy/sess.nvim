@@ -15,7 +15,7 @@ https://github.com/user-attachments/assets/069c4d03-4140-4e02-8678-20eef0cbc923
 ## Installation
 
 <details>
-<summary>[lazy.nvim](https://github.com/folke/lazy.nvim)</summary>
+<summary>lazy.nvim (https://github.com/folke/lazy.nvim)</summary>
 
 ```lua
 local M = { "i0i-i0i/sessions.nvim" }
