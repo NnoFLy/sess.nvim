@@ -34,15 +34,13 @@ end
 ---@return Input | nil
 function M.input(prompt, default_value)
     local default = default_value and default_value:gsub("_", " ") or ""
-    local copy, result
-    vim.ui.input({ prompt = prompt .. ": ", default = default}, function(input)
-        if not input then
-            return
-        end
-        result = input:sub(1, -1)
-        copy = result:sub(1, -1)
-        result = result:gsub(" ", "_"):gsub("'", "\\'")
-    end)
+    local input = vim.fn.input(prompt .. ": ", default)
+    if not input then
+        return
+    end
+    local result = input:sub(1, -1)
+    local copy = result:sub(1, -1)
+    result = result:gsub(" ", "_"):gsub("'", "\\'")
     if not result then
         return nil
     end
