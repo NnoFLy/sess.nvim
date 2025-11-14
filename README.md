@@ -10,22 +10,22 @@ https://github.com/user-attachments/assets/069c4d03-4140-4e02-8678-20eef0cbc923
 - Pin sessions
 - Delete sessions
 - Rename sessions
-- Auto-completion sessions (AttachSession)
 - List sessions (with telescope.nvim)
 
 ## Installation
 
-Using [lazy.nvim](https://github.com/folke/lazy.nvim):
+<details>
+<summary>[lazy.nvim](https://github.com/folke/lazy.nvim)</summary>
 
 ```lua
 local M = { "i0i-i0i/sessions.nvim" }
 
---- OPTIONAL (only for SessionsList) ---
+--- OPTIONAL (only for 'Sessions list') ---
 M.dependencies = {
     "nvim-telescope/telescope.nvim",
     "nvim-lua/plenary.nvim"
 }
---- OPTIONAL (only for SessionsList) ---
+--- OPTIONAL (only for 'Sessions list') ---
 
 M.opts = {
     path = "path/to/sessions_folder", -- default = "~/sessions"
@@ -34,69 +34,40 @@ M.opts = {
 }
 
 M.keys = {
-    { "<leader>ss", "<cmd>SessionSave<cr>", desc = "Save session" },
-    { "<leader>sc", "<cmd>SessionPin<cr>", desc = "Pin session" },
-    { "<leader>sa", "<cmd>SessionAttach<cr>", desc = "Attach session" },
-    { "<leader>sl", "<cmd>SessionsList<cr>", desc = "List sessions" }, -- only if you have telescope.nvim
+    { "<leader>ss", "<cmd>Sessions save<cr>", desc = "Save session" },
+    { "<leader>sc", "<cmd>Sessions pin<cr>", desc = "Pin session" },
+    { "<leader>sa", "<cmd>Sessions attach<cr>", desc = "Attach session" },
+    { "<leader>sl", "<cmd>Sessions list<cr>", desc = "List sessions" }, -- only if you have telescope.nvim
 }
 
 return M
 ```
 
-## Default commands (You don't need to add this anywhere)
+</details>
 
-These are built-in functions, so this is how they work.
-
-You can pin a new session, that means you give it a name, and it will appear in
-completion menu (SessionAttach) or in SessionsList:
+<details>
+<summary>Native (with vim.pack)</summary>
 
 ```lua
-vim.api.nvim_create_user_command("SessionPin", function()
-    sessions.pin_session()
-end, {})
-```
+--- OPTIONAL (only for 'Sessions list') ---
+vim.pack.add({ "https://github.com/nvim-telescope/telescope.nvim" })
+vim.pack.add({ "https://github.com/nvim-lua/plenary.nvim" })
+--- OPTIONAL (only for 'Sessions list') ---
 
-Show sessions list in telescope:
-
-```lua
-vim.api.nvim_create_user_command("SessionsList", function()
-    sessions.open_list()
-end, {})
-```
-
-This creates a session but doesn't assign a name to it, you can use SessionPin
-to specify a name. Session is associated with current directory:
-
-```lua
-vim.api.nvim_create_user_command("SessionSave", function()
-    sessions.save_session()
-end, {})
-```
-
-Specify the session name and attach to it, if no name is specified this will try
-to find a session for current path and than attach, if no session is found,
-an error will be displayed:
-
-```lua
-local completion = require("sessions.utils").generate_completion(opts.path, opts._marker)
-vim.api.nvim_create_user_command("SessionAttach", function(input)
-    if input.args and #input.args > 0 then
-        local args = input.args
-        local ok = commands.attach_session({ name = args })
-        if not ok then
-            print("Session doesn't exist: " .. args)
-        end
-    else
-        local ok = commands.attach_session()
-        if not ok then
-            print("Cann't found session here")
-        end
-    end
-end, {
-    nargs = "?",
-    complete = completion
+vim.pack.add({ "https://github.com/i0i-i0i/sessions.nvim" })
+require("sessions").setup({
+    path = "path/to/sessions_folder", -- default = "~/sessions"
+    attach_after_enter = true, -- if false just change cwd
+    promt_title = "Your title"
 })
+
+vim.keymap.set("n", "<leader>ss", "<cmd>Sessions save<cr>", { desc = "Save session" })
+vim.keymap.set("n", "<leader>sc", "<cmd>Sessions pin<cr>", { desc = "Pin session" })
+vim.keymap.set("n", "<leader>sa", "<cmd>Sessions attach<cr>", { desc = "Attach session" })
+vim.keymap.set("n", "<leader>sl", "<cmd>Sessions list<cr>", { desc = "List sessions" }) -- only if you have telescope.nvim
 ```
+
+</details>
 
 ## Add your own functionality
 
@@ -170,7 +141,7 @@ M.config = function()
 
     vim.api.nvim_create_user_command("CustomSessionAttach", function(input)
         prev = builtins.get_current()
-        vim.cmd("SessionAttach " .. input.args)
+        vim.cmd("Sessions attach " .. input.args)
     end, {
         nargs = "?",
         complete = builtins.completion

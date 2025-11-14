@@ -11,7 +11,7 @@ function M.get_options(path, marker, prompt_title)
     local utils = require("sessions.utils")
 
     local sessions = {}
-    local sessions_paths = utils.get_sessions(path, marker)
+    local sessions_paths = utils.getsessions(path, marker)
     for session_name, _ in pairs(sessions_paths) do
         table.insert(sessions, session_name:gsub("_", " "):sub(1, -1))
     end

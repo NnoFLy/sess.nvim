@@ -7,7 +7,7 @@ local M = {}
 ---@param path string
 ---@param marker string
 ---@return SessionsList
-function M.get_sessions(path, marker)
+function M.getsessions(path, marker)
     local sessions = {}
     for k, _ in vim.fn.execute("!ls " .. path):gmatch("[A-Za-z_.:|0-9()\"'\\-]+.vim") do
         local session = k:gsub(":", "/"):sub(1, -5)
@@ -25,7 +25,7 @@ end
 ---@param name string
 ---@return string
 function M.get_session_path(path, marker, name)
-    local sessions = M.get_sessions(path, marker)
+    local sessions = M.getsessions(path, marker)
     return sessions[name]
 end
 
@@ -34,15 +34,13 @@ end
 ---@return Input | nil
 function M.input(prompt, default_value)
     local default = default_value and default_value:gsub("_", " ") or ""
-    local copy, result
-    vim.ui.input({ prompt = prompt .. ": ", default = default}, function(input)
-        if not input then
-            return
-        end
-        result = input:sub(1, -1)
-        copy = result:sub(1, -1)
-        result = result:gsub(" ", "_"):gsub("'", "\\'")
-    end)
+    local input = vim.fn.input(prompt .. ": ", default)
+    if not input then
+        return
+    end
+    local result = input:sub(1, -1)
+    local copy = result:sub(1, -1)
+    result = result:gsub(" ", "_"):gsub("'", "\\'")
     if not result then
         return nil
     end
@@ -98,15 +96,23 @@ end
 
 ---@param path string
 ---@param marker string
----@return fun(): string[]
-function M.generate_completion(path, marker)
-    return function()
-        local sessions = M.get_sessions(path, marker)
-        local sessions_names = {}
-        for name, _ in pairs(sessions) do
-            table.insert(sessions_names, name)
+---@return fun(arglead: string, cmdline: string, cursorpos: number): string[]
+function M.generate_completion(subcommands, path, marker)
+    return function(arglead, cmdline, _)
+        if string.find(cmdline, "Sessions attach") then
+            local sessions = M.getsessions(path, marker)
+            local sessions_names = {}
+            for name, _ in pairs(sessions) do
+                table.insert(sessions_names, name)
+            end
+            return vim.tbl_filter(function(name)
+                return vim.startswith(name, arglead)
+            end, sessions_names)
         end
-        return sessions_names
+
+        return vim.tbl_filter(function(name)
+            return vim.startswith(name, arglead)
+        end, subcommands)
     end
 end
 
