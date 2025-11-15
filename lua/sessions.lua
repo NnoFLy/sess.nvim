@@ -4,11 +4,17 @@
 
 local M = {}
 
+local is_loaded = false
+
 ---@type Opts
 local opts = require("sessions.default_opts")
 
 ---@param user_opts Opts
 function M.setup(user_opts)
+    if is_loaded then
+        return
+    end
+
     local commands = require("sessions.commands")
     local consts = require("sessions.consts")
 
@@ -16,11 +22,11 @@ function M.setup(user_opts)
         opts = vim.tbl_deep_extend("force", opts, user_opts)
     end
 
-    vim.cmd("silent !mkdir -p " .. consts.path)
+    os.execute("mkdir -p " .. consts.path)
 
     M.builtins = commands
 
-    return M
+    is_loaded = true
 end
 
 function M.get_opts()
