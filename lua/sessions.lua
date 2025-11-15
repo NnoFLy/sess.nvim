@@ -1,8 +1,15 @@
+---@class Builtins
+---@field attach fun(session: Session | nil): boolean
+---@field completion fun(): string[]
+---@field get_current fun(): Session
+---@field open_list fun()
+---@field pin fun()
+---@field save fun(): boolean
+---@field setup fun()
+
 ---@class Hooks
 ---@field pre_hook function
 ---@field post_hook function
-
----@alias SessionsList string[]
 
 local M = {}
 
@@ -22,12 +29,7 @@ function M.setup(user_opts)
 
     vim.cmd("silent !mkdir -p " .. opts.path)
 
-    M.open_list = commands.open_list
-    M.save = commands.save_session
-    M.pin = commands.pin_session
-    M.create = commands.pin_session
-    M.attach = commands.attach_session
-    M.get_current = commands.get_current
+    M.builtins = commands
 
     return M
 end
