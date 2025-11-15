@@ -7,5 +7,5 @@ return {
     path = "~/sessions/",
     attach_after_enter = false,
     prompt_title = "🗃️ All sessions",
-    _marker = "FOR_MARKER",
+    _marker = "MARKER",
 }

@@ -9,8 +9,8 @@ local M = {}
 ---@return Session[]
 function M.get_sessions(path, marker)
     local sessions = {}
-    for k, _ in vim.fn.execute("!ls " .. path):gmatch("[A-Za-z_.:|0-9()\"'\\-]+.vim") do
-        local session = M.from_path(k):sub(1, -5)
+    for k, _ in vim.fn.execute("!ls " .. path):gmatch("[A-Za-z_.%%:|0-9()\"'\\-]+%.vim") do
+        local session = M.to_path(k)
         if session:match(marker) then
             local session_name = session:match("[(](.+)[)]")
             session = session:match(marker .. "[(].+[)](.*)")
@@ -68,7 +68,7 @@ end
 ---@param name string
 ---@return string
 function M.add_marker(marker, name)
-    return marker .. "(" .. name .. ")"
+    return marker .. "%p" .. name .. "%P"
 end
 
 ---@param path string
@@ -80,23 +80,31 @@ function M.remove_marker(path)
     end
 end
 
+local convert_chars = {
+    ["/"] = ':',
+    ["%("] = "%%p",
+    ["%)"] = "%%P",
+    [" "] = "_",
+    ['"'] = '%%q',
+}
+
 ---@param path string
 ---@return string
 function M.from_path(path)
-    local result = path:gsub("/", ":")
-    result = result:gsub("(", "\\(")
-    result = result:gsub(")", "\\)")
-    result = result:gsub(" ", "_")
-    result = result:gsub('"', '\\"')
+    local result = path
+    for k, v in pairs(convert_chars) do
+        result = result:gsub(k, v)
+    end
     return result
 end
 
 ---@param path string
 ---@return string
 function M.to_path(path)
-    local result = path:gsub(":", "/")
-    result = result:gsub("_", " ")
-    result = result:gsub('\\"', '"')
+    local result = path
+    for k, v in pairs(convert_chars) do
+        result = result:gsub(v, k)
+    end
     return result
 end
 
@@ -110,7 +118,7 @@ M.make_file_name = function(file, session)
     end
     return opts.path
         .. opts._marker
-        .. "\\(" .. M.from_path(session.name) .. "\\)"
+        .. M.from_path("(" .. session.name .. ")")
         .. file
 end
 

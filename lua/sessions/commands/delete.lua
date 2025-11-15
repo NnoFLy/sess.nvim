@@ -18,12 +18,10 @@ function M.delete_session(session_name)
 
     local file = utils.from_path(vim.fn.getcwd()) .. ".vim"
     local ok, err_msg = os.remove(make_file_name(file))
-    print("File to delete:", make_file_name(file))
     if not ok then
         vim.notify(err_msg or "Can't delete file", vim.log.levels.ERROR)
     end
     ok, err_msg = os.remove(make_file_name(file, session))
-    print("File to delete:", make_file_name(file, session))
     if not ok then
         vim.notify(err_msg or "Can't delete file", vim.log.levels.ERROR)
         return
