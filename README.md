@@ -38,6 +38,7 @@ M.keys = {
     { "<leader>sc", "<cmd>Sessions pin<cr>", desc = "Pin session" },
     { "<leader>sa", "<cmd>Sessions attach<cr>", desc = "Attach session" },
     { "<leader>sl", "<cmd>Sessions list<cr>", desc = "List sessions" }, -- only if you have telescope.nvim
+    { "<leader><C-^>", "<cmd>Sessions last<cr>", desc = "Attach to previous session" },
 }
 
 return M
@@ -88,12 +89,12 @@ require("sessions").attach()  -- or :Sessions attach [<arg>]
 require("sessions").list()  -- or :Sessions list
 
 -- Delete session
----@param session_name string
+---@param session_name string | nil
 ---@return nil
 require("sessions").delete()  -- or :Sessions delete [<arg>]
 
 -- Rename session
----@param session_name string
+---@param session_name string | nil
 ---@return nil
 require("sessions").rename()  -- or :Sessions rename [<arg>]
 
@@ -118,7 +119,7 @@ M.config = function()
     ---@field pin fun()
     ---@field save fun(): boolean
     ---@field setup fun(user_opts: table): Builtins
-    local builtins = require("sessions.nvim").setup()
+    local builtins = require("sessions").setup()
 
     vim.api.nvim_create_autocmd("VimEnter", {
         callback = function()
