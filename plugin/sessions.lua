@@ -1,5 +1,4 @@
 local commands = require("sessions.commands")
-local utils = require("sessions.utils")
 
 local subcommands = {
     list = commands.list,
@@ -26,7 +25,7 @@ end
 local function generate_completion(path, marker)
     return function(arglead, cmdline, _)
         if command_exists(cmdline) then
-            local sessions = utils.get_sessions(path, marker)
+            local sessions = commands.get_sessions(path, marker)
             local sessions_names = {}
             for _, session in pairs(sessions) do
                 table.insert(sessions_names, session.name)

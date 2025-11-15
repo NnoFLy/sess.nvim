@@ -4,7 +4,7 @@
 
 local M = {}
 
-M.get_current = require("sessions.commands.get_current").get_current
+M.get = require("sessions.commands.get")
 M.list = require("sessions.commands.list").open_list
 M.save = require("sessions.commands.save").save_session
 M.pin = require("sessions.commands.pin").pin_session

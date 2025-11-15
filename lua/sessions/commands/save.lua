@@ -2,9 +2,9 @@ local M = {}
 
 ---@return boolean
 function M.save_session()
-    local utils = require("sessions.utils")
-    local cwd = utils.from_path(vim.fn.getcwd())
-    local file = utils.make_file_name(cwd .. ".vim")
+    local convert = require("sessions.convert")
+    local cwd = convert.from_path(vim.fn.getcwd())
+    local file = convert.make_file_name(cwd .. ".vim")
 
     local cmd = "mksession! " .. file
     local ok, _ = pcall(function() vim.cmd(cmd) end)

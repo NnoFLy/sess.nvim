@@ -15,20 +15,20 @@ local consts = require("sessions.consts")
 ---@param prompt_bufnr number
 ---@return nil
 function M.enter(prompt_bufnr)
-    local utils = require("sessions.utils")
+    local convert = require("sessions.convert")
     actions.close(prompt_bufnr)
     local selected = action_state.get_selected_entry()
-    local session_name = utils.from_path(selected[1])
+    local session_name = convert.from_path(selected[1])
     require("sessions.commands").attach(session_name)
 end
 
 ---@param prompt_bufnr number
 ---@return nil
 function M.delete_session(prompt_bufnr)
-    local utils = require("sessions.utils")
+    local convert = require("sessions.convert")
     actions.close(prompt_bufnr)
     local selected = action_state.get_selected_entry()
-    local session_name = utils.from_path(selected[1])
+    local session_name = convert.from_path(selected[1])
     require("sessions.commands").delete(session_name)
     require("sessions.commands").list()
 end
@@ -36,10 +36,10 @@ end
 ---@param prompt_bufnr number
 ---@return nil
 function M.rename_session(prompt_bufnr)
-    local utils = require("sessions.utils")
+    local convert = require("sessions.convert")
     actions.close(prompt_bufnr)
     local selected = action_state.get_selected_entry()
-    local session_name = utils.from_path(selected[1])
+    local session_name = convert.from_path(selected[1])
     require("sessions.commands").rename(session_name)
 end
 

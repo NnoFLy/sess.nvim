@@ -5,21 +5,23 @@ local M = {}
 ---@return nil
 function M.rename_session(session_name, new_session_name)
     if not session_name then
-        session_name = require("sessions.commands.get_current").get_session_name(vim.fn.getcwd())
+        session_name = require("sessions.commands.get").current().name
         if not session_name then
             vim.notify("Session name is empty", vim.log.levels.ERROR)
             return
         end
     end
 
+    local convert = require("sessions.convert")
     local utils = require("sessions.utils")
+    local commands = require("sessions.commands")
 
-    local session = utils.get_session_by_name(session_name)
+    local session = commands.get.by_name(session_name)
     if not session then
         vim.notify("Session doesn't exist: " .. session_name, vim.log.levels.ERROR)
         return
     end
-    local file = utils.from_path(session.path)
+    local file = convert.from_path(session.path)
 
     if not new_session_name then
         local new_name = utils.input("Rename session (" .. session.name .. ")", session.name)
@@ -33,11 +35,8 @@ function M.rename_session(session_name, new_session_name)
         new_session_name = new_name.result
     end
 
-
-    local make_file_name = require("sessions.utils").make_file_name
-
-    local from = make_file_name(file, { name = session.name })
-    local to = make_file_name(file, { name = new_session_name })
+    local from = convert.make_file_name(file, { name = session.name })
+    local to = convert.make_file_name(file, { name = new_session_name })
 
     local ok, err_msg = os.rename(from, to)
     if not ok then

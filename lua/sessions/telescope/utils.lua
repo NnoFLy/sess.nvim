@@ -5,15 +5,16 @@ local M = {}
 ---@param prompt_title string
 ---@return table
 function M.get_options(path, marker, prompt_title)
+    local commands = require("sessions.commands")
     local finders = require("telescope.finders")
     local sorters = require("telescope.sorters")
     local telescope_custom_actions = require("sessions.telescope.custom_actions")
-    local utils = require("sessions.utils")
+    local convert = require("sessions.convert")
 
     local sessions = {}
-    local _sessions = utils.get_sessions(path, marker)
+    local _sessions = commands.get.all(path, marker)
     for _, session in ipairs(_sessions) do
-        table.insert(sessions, utils.to_path(session.name))
+        table.insert(sessions, convert.to_path(session.name))
     end
     table.sort(sessions)
 
