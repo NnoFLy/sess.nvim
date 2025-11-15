@@ -29,7 +29,6 @@ M.dependencies = {
 --- OPTIONAL (only for 'Sessions list') ---
 
 M.opts = {
-    path = "path/to/sessions_folder", -- default = "~/sessions"
     promt_title = "Your title"
 }
 
@@ -57,7 +56,6 @@ vim.pack.add({ "https://github.com/nvim-lua/plenary.nvim" })
 
 vim.pack.add({ "https://github.com/i0i-i0i/sessions.nvim" })
 require("sessions").setup({
-    path = "path/to/sessions_folder", -- default = "~/sessions"
     promt_title = "Your title"
 })
 
@@ -73,33 +71,41 @@ vim.keymap.set("n", "<leader><C-^>", "<cmd>Sessions last<cr>", { desc = "Attach 
 ## Usage
 
 ```lua
+local commands = require("sessions.commands")
+
 -- Save session
 ---@return boolean
-require("sessions").save()  -- or :Sessions save
+commands.save()  -- or :Sessions save
 
--- Pin session
-require("sessions").pin()  -- or :Sessions pin
+-- Pin session current session
+---@param session_name string | nil
+---@return nil
+commands.pin("session_name")  -- or :Sessions pin
 
--- Attach session
+-- Attach to session (if 'session_name' is not provided, attach to session bases on cwd)
 ---@param session_name string | nil
 ---@return boolean
-require("sessions").attach()  -- or :Sessions attach [<arg>]
+commands.attach("session_name")  -- or :Sessions attach [<arg>]
 
--- List sessions
-require("sessions").list()  -- or :Sessions list
+-- Telescope list sessions
+---@param prompt_title string | nil
+---@return nil
+commands.list("All sessions")  -- or :Sessions list
 
--- Delete session
+-- Delete session (if 'session_name' is not provided, delete current session)
 ---@param session_name string | nil
 ---@return nil
-require("sessions").delete()  -- or :Sessions delete [<arg>]
+commands.delete("session_name")  -- or :Sessions delete [<arg>]
 
--- Rename session
+-- Rename session (if 'session_name' is not provided, rename current session)
 ---@param session_name string | nil
+---@param new_session_name string | nil
 ---@return nil
-require("sessions").rename()  -- or :Sessions rename [<arg>]
+commands.rename("session_name", "new_name")  -- or :Sessions rename [<arg>]
 
 -- Attach to previous session
-require("sessions").last()  -- or :Sessions last
+---@return nil
+commands.last()  -- or :Sessions last
 ```
 
 
@@ -111,19 +117,21 @@ Auto save session on exit and auto attach session on enter (you need to delete M
 M.lazy = false -- REQUIRED
 
 M.config = function()
-    local builtins = require("sessions").setup()
+    require("sessions").setup({})
+
+    local commands = require("sessions.commands")
 
     vim.api.nvim_create_autocmd("VimEnter", {
         callback = function()
             vim.schedule(function()
-                builtins.attach()
+                commands.attach()
             end)
         end
     })
 
     vim.api.nvim_create_autocmd("VimLeavePre", {
         callback = function()
-            builtins.save()
+            commands.save()
         end
     })
 end

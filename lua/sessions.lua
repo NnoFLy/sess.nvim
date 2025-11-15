@@ -1,24 +1,16 @@
----@class Builtins
----@field attach fun(session: Session | nil): boolean
----@field completion fun(): string[]
----@field get_current fun(): Session
----@field open_list fun()
----@field pin fun()
----@field save fun(): boolean
----@field setup fun()
-
 ---@class Hooks
 ---@field pre_hook function
 ---@field post_hook function
 
 local M = {}
 
----@class Opts
+---@type Opts
 local opts = {}
 
 ---@param user_opts Opts
 function M.setup(user_opts)
     local commands = require("sessions.commands")
+    local consts = require("sessions.consts")
 
     local default_opts = require("sessions.default_opts")
     if user_opts ~= nil then
@@ -27,7 +19,7 @@ function M.setup(user_opts)
         opts = default_opts
     end
 
-    vim.cmd("silent !mkdir -p " .. opts.path)
+    vim.cmd("silent !mkdir -p " .. consts.path)
 
     M.builtins = commands
 

@@ -53,8 +53,8 @@ vim.api.nvim_create_user_command("Sessions", function(args)
     {
         nargs = "*",
         complete = function(arglead, cmdline, cursorpos)
-            local opts = require("sessions").get_opts()
-            local completion_fn = generate_completion(opts.path, opts._marker)
+            local consts = require("sessions.consts")
+            local completion_fn = generate_completion(consts.path, consts.marker)
             return completion_fn(arglead, cmdline, cursorpos)
         end
     }

@@ -23,8 +23,8 @@ end
 ---@param name string
 ---@return Session | nil
 function M.get_session_by_name(name)
-    local opts = require("sessions").get_opts()
-    local sessions = M.get_sessions(opts.path, opts._marker)
+    local consts = require("sessions.consts")
+    local sessions = M.get_sessions(consts.path, consts.marker)
     for _, session in ipairs(sessions) do
         if session.name == name then
             return session
@@ -113,16 +113,16 @@ end
 ---@return string
 M.make_file_name = function(file, session)
     local home = os.getenv("HOME") or "~"
-    local opts = require("sessions").get_opts()
+    local consts = require("sessions.consts")
 
     if session == nil then
-        local file_name = opts.path .. file
+        local file_name = consts.path .. file
         file_name = file_name:gsub("^~", home)
         return file_name
     end
 
-    local file_name = opts.path
-        .. opts._marker
+    local file_name = consts.path
+        .. consts.marker
         .. M.from_path("(" .. session.name .. ")")
         .. file
     file_name = file_name:gsub("^~", home)

@@ -1,14 +1,14 @@
 local M = {}
 
 ---@param session Session | nil
----@param opts Opts
+---@param consts Consts
 ---@return boolean
-function M.try_to_attach(opts, session)
+function M.try_to_attach(consts, session)
     local utils = require("sessions.utils")
 
     ---@return boolean
     local function attach_by_cwd()
-        local str = "silent source " .. opts.path .. utils.from_path(vim.fn.getcwd()) .. ".vim"
+        local str = "silent source " .. consts.path .. utils.from_path(vim.fn.getcwd()) .. ".vim"
         local ok, _ = pcall(function() vim.cmd(str) end)
         if not ok then
             return false
@@ -22,10 +22,10 @@ function M.try_to_attach(opts, session)
 
     if session.name then
         local command = "find " ..
-            opts.path .. " -type f -name '" .. utils.add_marker(opts._marker, utils.from_path(session.name)) .. "*'"
+            consts.path .. " -type f -name '" .. utils.add_marker(consts.marker, utils.from_path(session.name)) .. "*'"
         local result = vim.fn.system(command)
         if result ~= "" then
-            vim.cmd("silent source " .. opts.path .. utils.remove_marker(result))
+            vim.cmd("silent source " .. consts.path .. utils.remove_marker(result))
             return true
         end
     elseif session.path then
@@ -39,12 +39,12 @@ end
 ---@param session Session | nil
 ---@return boolean
 function M._attach_session(session)
-    local opts = require("sessions").get_opts()
+    local consts = require("sessions.consts")
     local get_current = require("sessions.commands").get_current
     local set_prev_session = require("sessions.commands.last").set_prev_session
 
     local tmp_prev_session = get_current()
-    local res = M.try_to_attach(opts, session)
+    local res = M.try_to_attach(consts, session)
 
     if not res then
         return false

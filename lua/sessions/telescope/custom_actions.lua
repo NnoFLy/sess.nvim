@@ -10,7 +10,7 @@ local dropdown = require("telescope.themes").get_dropdown()
 local actions = require("telescope.actions")
 local action_state = require("telescope.actions.state")
 
-local opts = require("sessions").get_opts()
+local consts = require("sessions.consts")
 
 ---@param prompt_bufnr number
 ---@return nil
@@ -43,11 +43,13 @@ function M.rename_session(prompt_bufnr)
     require("sessions.commands").rename(session_name)
 end
 
-function M.open_sessions_list()
+---@param prompt_title string
+---@return nil
+function M.open_sessions_list(prompt_title)
     local telescope_utils = require("sessions.telescope.utils")
     pickers.new(
         dropdown,
-        telescope_utils.get_options(opts.path, opts._marker, opts.prompt_title)
+        telescope_utils.get_options(consts.path, consts.marker, prompt_title)
     ):find()
 end
 

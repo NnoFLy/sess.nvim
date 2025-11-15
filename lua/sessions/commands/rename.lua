@@ -1,8 +1,9 @@
 local M = {}
 
 ---@param session_name string | nil
+---@param new_session_name string | nil
 ---@return nil
-function M.rename_session(session_name)
+function M.rename_session(session_name, new_session_name)
     if not session_name then
         session_name = require("sessions.commands.get_current").get_session_name(vim.fn.getcwd())
         if not session_name then
@@ -20,20 +21,23 @@ function M.rename_session(session_name)
     end
     local file = utils.from_path(session.path)
 
-    local new_name = utils.input("Rename session (" .. session.name .. ")", session.name)
-    if not new_name then
-        vim.notify("Operation cancelled", vim.log.levels.INFO)
-        return false
+    if not new_session_name then
+        local new_name = utils.input("Rename session (" .. session.name .. ")", session.name)
+        if not new_name then
+            vim.notify("Operation cancelled", vim.log.levels.INFO)
+            return false
+        end
+        if new_name.result == "" then
+            return
+        end
+        new_session_name = new_name.result
     end
 
-    if new_name.result == "" then
-        return
-    end
 
     local make_file_name = require("sessions.utils").make_file_name
 
     local from = make_file_name(file, { name = session.name })
-    local to = make_file_name(file, { name = new_name.result })
+    local to = make_file_name(file, { name = new_session_name })
 
     local ok, err_msg = os.rename(from, to)
     if not ok then
@@ -41,7 +45,7 @@ function M.rename_session(session_name)
         return
     end
 
-    vim.notify("Session: " .. session.name .. " -> " .. new_name.user_input, vim.log.levels.INFO)
+    vim.notify("Session: " .. session.name .. " -> " .. new_session_name, vim.log.levels.INFO)
 end
 
 return M
