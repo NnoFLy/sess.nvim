@@ -52,4 +52,15 @@ function M.remove_marker(path)
     end
 end
 
+---@param value string
+---@param arr string[]
+---@return string | nil
+function M.contains(value, arr)
+    for _, v in ipairs(arr) do
+        if v == value then
+            return v
+        end
+    end
+end
+
 return M
