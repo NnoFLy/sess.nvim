@@ -2,6 +2,6 @@
 ---@field path string
 ---@field marker string
 return {
-    path = "~/sessions/",
+    path = vim.fn.stdpath("data") .. "/sessions/",
     marker = "MARKER",
 }
