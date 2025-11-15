@@ -2,13 +2,13 @@ local commands = require("sessions.commands")
 local utils = require("sessions.utils")
 
 local subcommands = {
-    list = commands.open_list,
-    save = commands.save_session,
-    pin = commands.pin_session,
-    attach = commands.attach_session,
-    last = commands.open_last,
-    rename = commands.rename_session,
-    delete = commands.delete_session
+    list = commands.list,
+    save = commands.save,
+    pin = commands.pin,
+    attach = commands.attach,
+    last = commands.last,
+    rename = commands.rename,
+    delete = commands.delete
 }
 
 local function command_exists(cmd)

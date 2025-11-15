@@ -4,13 +4,13 @@ local M = {}
 function M.pin_session()
     local session = require("sessions.commands").get_current()
     if session and session.name then
-        require("sessions.commands").rename_session(session.name)
-        require("sessions.commands").save_session()
+        require("sessions.commands").rename(session.name)
+        require("sessions.commands").save()
         return
     end
 
     local utils = require("sessions.utils")
-    local save_session = require("sessions.commands").save_session
+    local save_session = require("sessions.commands").save
 
     local prompt = utils.input("Enter Session Name", utils.get_last_folder_in_path(vim.fn.getcwd()))
     if not prompt then

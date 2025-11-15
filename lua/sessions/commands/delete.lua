@@ -1,11 +1,19 @@
 local M = {}
 
----@param session_name string
+---@param session_name string | nil
 ---@return nil
 function M.delete_session(session_name)
-    if not session_name then
-        vim.notify("Session name is empty", vim.log.levels.ERROR)
+    local user_input = vim.fn.input("Are you sure you want to delete session " .. session_name .. "? (y/N): ")
+    if user_input ~= "y" then
         return
+    end
+
+    if not session_name then
+        session_name = require("sessions.commands.get_current").get_session_name(vim.fn.getcwd())
+        if not session_name then
+            vim.notify("Session name is empty", vim.log.levels.ERROR)
+            return
+        end
     end
 
     local make_file_name = require("sessions.utils").make_file_name

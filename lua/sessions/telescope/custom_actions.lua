@@ -19,7 +19,7 @@ function M.enter(prompt_bufnr)
     actions.close(prompt_bufnr)
     local selected = action_state.get_selected_entry()
     local session_name = utils.from_path(selected[1])
-    require("sessions.commands").attach_session(session_name)
+    require("sessions.commands").attach(session_name)
 end
 
 ---@param prompt_bufnr number
@@ -29,8 +29,8 @@ function M.delete_session(prompt_bufnr)
     actions.close(prompt_bufnr)
     local selected = action_state.get_selected_entry()
     local session_name = utils.from_path(selected[1])
-    require("sessions.commands").delete_session(session_name)
-    require("sessions.commands").open_list()
+    require("sessions.commands").delete(session_name)
+    require("sessions.commands").list()
 end
 
 ---@param prompt_bufnr number
@@ -40,7 +40,7 @@ function M.rename_session(prompt_bufnr)
     actions.close(prompt_bufnr)
     local selected = action_state.get_selected_entry()
     local session_name = utils.from_path(selected[1])
-    require("sessions.commands").rename_session(session_name)
+    require("sessions.commands").rename(session_name)
 end
 
 function M.open_sessions_list()
