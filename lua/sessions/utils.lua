@@ -112,14 +112,21 @@ end
 ---@param session Session | nil
 ---@return string
 M.make_file_name = function(file, session)
+    local home = os.getenv("HOME") or "~"
     local opts = require("sessions").get_opts()
+
     if session == nil then
-        return opts.path .. file
+        local file_name = opts.path .. file
+        file_name = file_name:gsub("^~", home)
+        return file_name
     end
-    return opts.path
+
+    local file_name = opts.path
         .. opts._marker
         .. M.from_path("(" .. session.name .. ")")
         .. file
+    file_name = file_name:gsub("^~", home)
+    return file_name
 end
 
 return M

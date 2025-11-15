@@ -10,7 +10,7 @@ function M.rename_session(session_name)
         vim.notify("Session doesn't exist: " .. session_name, vim.log.levels.ERROR)
         return
     end
-    local file = utils.from_path(session.path) .. ".vim"
+    local file = utils.from_path(session.path)
 
     local new_name = utils.input("Rename session (" .. session.name .. ")", session.name)
     if not new_name then
@@ -23,6 +23,7 @@ function M.rename_session(session_name)
     end
 
     local make_file_name = require("sessions.utils").make_file_name
+
     local from = make_file_name(file, { name = session.name })
     local to = make_file_name(file, { name = new_name.result })
 

@@ -16,16 +16,18 @@ function M.delete_session(session_name)
         return
     end
 
-    local file = utils.from_path(vim.fn.getcwd()) .. ".vim"
-    local ok, err_msg = os.remove(make_file_name(file))
-    if not ok then
-        vim.notify(err_msg or "Can't delete file", vim.log.levels.ERROR)
+    local parsed_session_path = utils.from_path(session.path)
+
+    local function del(path, s)
+        local file = make_file_name(path, s)
+        local ok, err_msg = os.remove(file)
+        if not ok then
+            vim.notify(err_msg or "Can't delete file", vim.log.levels.ERROR)
+        end
     end
-    ok, err_msg = os.remove(make_file_name(file, session))
-    if not ok then
-        vim.notify(err_msg or "Can't delete file", vim.log.levels.ERROR)
-        return
-    end
+
+    del(parsed_session_path)
+    del(parsed_session_path, session)
 
     vim.notify("Session deleted: " .. session.name, vim.log.levels.INFO)
 end

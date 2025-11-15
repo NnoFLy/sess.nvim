@@ -5,6 +5,7 @@ function M.pin_session()
     local session = require("sessions.commands").get_current()
     if session and session.name then
         require("sessions.commands").rename_session(session.name)
+        require("sessions.commands").save_session()
         return
     end
 

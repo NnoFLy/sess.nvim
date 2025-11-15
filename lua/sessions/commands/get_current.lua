@@ -10,7 +10,6 @@ M.get_session_name = function(session_path)
         opts.path .. " -type f -name '" .. opts._marker .. "*" .. utils.from_path(session_path) .. ".vim'"
     local res = vim.fn.system(command)
     if not res or res == "" then
-        vim.notify("Can't find session name", vim.log.levels.ERROR)
         return nil
     end
     local result = utils.to_path(res)
