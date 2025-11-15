@@ -11,7 +11,7 @@ https://github.com/user-attachments/assets/069c4d03-4140-4e02-8678-20eef0cbc923
 - Delete sessions
 - Rename sessions
 - List sessions (with telescope.nvim)
-- Switch between last session
+- Switch to last session
 
 ## Installation
 
@@ -111,14 +111,6 @@ Auto save session on exit and auto attach session on enter (you need to delete M
 M.lazy = false -- REQUIRED
 
 M.config = function()
-    ---@class Builtins
-    ---@field attach fun(session: Session | nil): boolean
-    ---@field completion fun(): string[]
-    ---@field get_current fun(): Session
-    ---@field open_list fun()
-    ---@field pin fun()
-    ---@field save fun(): boolean
-    ---@field setup fun(user_opts: table): Builtins
     local builtins = require("sessions").setup()
 
     vim.api.nvim_create_autocmd("VimEnter", {
