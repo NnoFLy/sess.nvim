@@ -3,12 +3,12 @@ local M = {}
 ---@param session Session | nil
 ---@param consts Consts
 ---@return boolean
-function M.try_to_attach(consts, session)
+function M.try_to_load(consts, session)
     local utils = require("sessions.utils")
     local convert = require("sessions.convert")
 
     ---@return boolean
-    local function attach_by_cwd()
+    local function load_by_cwd()
         local str = "silent source " .. consts.path .. convert.from_path(vim.fn.getcwd()) .. ".vim"
         local ok, _ = pcall(function() vim.cmd(str) end)
         if not ok then
@@ -18,7 +18,7 @@ function M.try_to_attach(consts, session)
     end
 
     if session == nil then
-        return attach_by_cwd()
+        return load_by_cwd()
     end
 
     if session.name then
@@ -31,7 +31,7 @@ function M.try_to_attach(consts, session)
         end
     elseif session.path then
         vim.cmd.cd(session.path)
-        return attach_by_cwd()
+        return load_by_cwd()
     end
 
     return false
@@ -39,13 +39,13 @@ end
 
 ---@param session Session | nil
 ---@return boolean
-function M._attach_session(session)
+function M._load_session(session)
     local consts = require("sessions.consts")
     local get = require("sessions.commands").get
     local set_prev_session = require("sessions.commands.last").set_prev_session
 
     local tmp_prev_session = get.current()
-    local res = M.try_to_attach(consts, session)
+    local res = M.try_to_load(consts, session)
 
     if not res then
         return false
@@ -61,9 +61,9 @@ end
 
 ---@param session_name string | nil
 ---@return boolean
-function M.attach_session(session_name)
+function M.load_session(session_name)
     if not session_name then
-        return M._attach_session()
+        return M._load_session()
     end
 
     local commands = require("sessions.commands")
@@ -73,9 +73,9 @@ function M.attach_session(session_name)
         return false
     end
 
-    local ok = M._attach_session(session)
+    local ok = M._load_session(session)
     if not ok then
-        vim.notify("Can't attach: " .. session.name, vim.log.levels.ERROR)
+        vim.notify("Can't load session: " .. session.name, vim.log.levels.ERROR)
     end
     return ok
 end

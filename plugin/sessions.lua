@@ -4,14 +4,14 @@ local subcommands = {
     list = commands.list,
     save = commands.save,
     pin = commands.pin,
-    attach = commands.attach,
+    load = commands.load,
     last = commands.last,
     rename = commands.rename,
     delete = commands.delete
 }
 
 local function command_exists(cmd)
-    for _, value in pairs({ "attach", "rename", "delete" }) do
+    for _, value in pairs({ "load", "rename", "delete" }) do
         if string.find(cmd, "Sessions%s+" .. value) then
             return true
         end

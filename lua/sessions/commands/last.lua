@@ -16,8 +16,8 @@ end
 
 ---@return nil
 function M._open_last()
-    local attach_session = require("sessions.commands").attach
-    if not attach_session(prev_session.name) then
+    local commands = require("sessions.commands")
+    if not commands.load(prev_session.name) then
         return
     end
 end

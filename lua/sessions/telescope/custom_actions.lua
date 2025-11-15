@@ -19,7 +19,7 @@ function M.enter(prompt_bufnr)
     actions.close(prompt_bufnr)
     local selected = action_state.get_selected_entry()
     local session_name = convert.from_path(selected[1])
-    require("sessions.commands").attach(session_name)
+    require("sessions.commands").load(session_name)
 end
 
 ---@param prompt_bufnr number
