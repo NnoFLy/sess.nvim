@@ -73,11 +73,12 @@ vim.keymap.set("n", "<leader><C-^>", "<cmd>Sessions last<cr>", { desc = "Attach 
 ```lua
 local commands = require("sessions.commands")
 
--- Save session
+-- Save current session
 ---@return boolean
 commands.save()  -- or :Sessions save
 
--- Pin session current session
+-- Pin current session and give it a name
+-- If 'session_name' is not provided, you will be prompted to enter a name
 ---@param session_name string | nil
 ---@return nil
 commands.pin("session_name")  -- or :Sessions pin
@@ -98,6 +99,7 @@ commands.list("All sessions")  -- or :Sessions list
 commands.delete("session_name")  -- or :Sessions delete [<arg>]
 
 -- Rename session (if 'session_name' is not provided, rename current session)
+-- If 'new_session_name' is not provided, you will be prompted to enter a new name
 ---@param session_name string | nil
 ---@param new_session_name string | nil
 ---@return nil
@@ -106,8 +108,20 @@ commands.rename("session_name", "new_name")  -- or :Sessions rename [<arg>]
 -- Attach to previous session
 ---@return nil
 commands.last()  -- or :Sessions last
-```
 
+-- Get current session
+---@return Session
+commands.get.current()
+
+-- Get all sessions
+---@return Session[]
+commands.get.all()
+
+-- Get session by name
+---@param name string
+---@return Session | nil
+commands.get.by_name(name)
+```
 
 ## Auto session
 
