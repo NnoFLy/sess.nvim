@@ -29,7 +29,7 @@ M.dependencies = {
 --- OPTIONAL (only for 'Sessions list') ---
 
 M.opts = {
-    promt_title = "Your title"
+    prompt_title = "Your title"
 }
 
 M.keys = {
@@ -56,7 +56,7 @@ vim.pack.add({ "https://github.com/nvim-lua/plenary.nvim" })
 
 vim.pack.add({ "https://github.com/i0i-i0i/sessions.nvim" })
 require("sessions").setup({
-    promt_title = "Your title"
+    prompt_title = "Your title"
 })
 
 vim.keymap.set("n", "<leader>ss", "<cmd>Sessions save<cr>", { desc = "Save session" })
