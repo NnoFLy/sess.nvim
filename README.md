@@ -35,9 +35,9 @@ M.opts = {
 M.keys = {
     { "<leader>ss", "<cmd>Sessions save<cr>", desc = "Save session" },
     { "<leader>sc", "<cmd>Sessions pin<cr>", desc = "Pin session" },
-    { "<leader>sa", "<cmd>Sessions attach<cr>", desc = "Attach session" },
+    { "<leader>sa", "<cmd>Sessions load<cr>", desc = "Load session" },
     { "<leader>sl", "<cmd>Sessions list<cr>", desc = "List sessions" }, -- only if you have telescope.nvim
-    { "<leader><C-^>", "<cmd>Sessions last<cr>", desc = "Attach to previous session" },
+    { "<leader><C-^>", "<cmd>Sessions last<cr>", desc = "Load the previous session" },
 }
 
 return M
@@ -61,9 +61,9 @@ require("sessions").setup({
 
 vim.keymap.set("n", "<leader>ss", "<cmd>Sessions save<cr>", { desc = "Save session" })
 vim.keymap.set("n", "<leader>sc", "<cmd>Sessions pin<cr>", { desc = "Pin session" })
-vim.keymap.set("n", "<leader>sa", "<cmd>Sessions attach<cr>", { desc = "Attach session" })
+vim.keymap.set("n", "<leader>sa", "<cmd>Sessions load<cr>", { desc = "Load session" })
 vim.keymap.set("n", "<leader>sl", "<cmd>Sessions list<cr>", { desc = "List sessions" }) -- only if you have telescope.nvim
-vim.keymap.set("n", "<leader><C-^>", "<cmd>Sessions last<cr>", { desc = "Attach to previous session" })
+vim.keymap.set("n", "<leader><C-^>", "<cmd>Sessions last<cr>", { desc = "Load the previous session" })
 ```
 
 </details>
@@ -83,10 +83,10 @@ commands.save()  -- or :Sessions save
 ---@return nil
 commands.pin("session_name")  -- or :Sessions pin
 
--- Attach to session (if 'session_name' is not provided, attach to session bases on cwd)
+-- Load the session (if 'session_name' is not provided, load the session bases on cwd)
 ---@param session_name string | nil
 ---@return boolean
-commands.attach("session_name")  -- or :Sessions attach [<arg>]
+commands.load("session_name")  -- or :Sessions load [<arg>]
 
 -- Telescope list sessions
 ---@param prompt_title string | nil
@@ -105,7 +105,7 @@ commands.delete("session_name")  -- or :Sessions delete [<arg>]
 ---@return nil
 commands.rename("session_name", "new_name")  -- or :Sessions rename [<arg>]
 
--- Attach to previous session
+-- Load the previous session
 ---@return nil
 commands.last()  -- or :Sessions last
 
@@ -125,7 +125,8 @@ commands.get.by_name(name)
 
 ## Auto session
 
-Auto save session on exit and auto attach session on enter (you need to delete M.opts and use only M.config):
+Auto save session on exit and auto load session on enter (you need to delete M.opts and use only M.config):
+If you open a file, then session won't be loaded, but if you run neovim like 'nvim', then it will be loaded.
 
 ```lua
 M.lazy = false -- REQUIRED
@@ -138,13 +139,20 @@ M.config = function()
     vim.api.nvim_create_autocmd("VimEnter", {
         callback = function()
             vim.schedule(function()
-                commands.attach()
+                if vim.fn.argc() == 0 then
+                    commands.load()
+                end
             end)
-        end
+        end,
     })
 
     vim.api.nvim_create_autocmd("VimLeavePre", {
         callback = function()
+            local utils = require("sessions.utils")
+            if utils.contains(vim.bo.filetype,
+                    { "gitcommit", "Fyler" }) then
+                return
+            end
             commands.save()
         end
     })
@@ -158,12 +166,12 @@ end
     ["n"] = {
         ["dd"] = delete_session,
         ["rr"] = rename_session,
-        ["<CR>"] = attach_session,
+        ["<CR>"] = load_session,
     },
     ["i"] = {
         ["<C-d>"] = delete_session,
         ["<C-r>"] = rename_session,
-        ["<CR>"] = attach_session,
+        ["<CR>"] = load_session,
     }
 }
 ```
