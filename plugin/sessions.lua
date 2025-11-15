@@ -43,10 +43,11 @@ end
 
 vim.api.nvim_create_user_command("Sessions", function(args)
         local cmd = args.fargs[1]
+        local utils = require("sessions.utils")
         if subcommands[cmd] then
             subcommands[cmd](args.fargs[2])
         else
-            vim.notify("Unknown subcommand: " .. tostring(cmd), vim.log.levels.ERROR)
+            utils.notify("Unknown subcommand: " .. tostring(cmd), vim.log.levels.ERROR)
         end
     end,
     {

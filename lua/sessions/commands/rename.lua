@@ -4,21 +4,22 @@ local M = {}
 ---@param new_session_name string | nil
 ---@return nil
 function M.rename_session(session_name, new_session_name)
+    local utils = require("sessions.utils")
+
     if not session_name then
         session_name = require("sessions.commands.get").current().name
         if not session_name then
-            vim.notify("Session name is empty", vim.log.levels.ERROR)
+            utils.notify("Session name is empty", vim.log.levels.ERROR)
             return
         end
     end
 
     local convert = require("sessions.convert")
-    local utils = require("sessions.utils")
     local commands = require("sessions.commands")
 
     local session = commands.get.by_name(session_name)
     if not session then
-        vim.notify("Session doesn't exist: " .. session_name, vim.log.levels.ERROR)
+        utils.notify("Session doesn't exist: " .. session_name, vim.log.levels.ERROR)
         return
     end
     local file = convert.from_path(session.path)
@@ -26,7 +27,7 @@ function M.rename_session(session_name, new_session_name)
     if not new_session_name then
         local new_name = utils.input("Rename session (" .. session.name .. ")", session.name)
         if not new_name then
-            vim.notify("Operation cancelled", vim.log.levels.INFO)
+            utils.notify("Operation cancelled", vim.log.levels.INFO)
             return false
         end
         if new_name.result == "" then
@@ -40,11 +41,11 @@ function M.rename_session(session_name, new_session_name)
 
     local ok, err_msg = os.rename(from, to)
     if not ok then
-        vim.notify(err_msg or "Can't rename file", vim.log.levels.ERROR)
+        utils.notify(err_msg or "Can't rename file", vim.log.levels.ERROR)
         return
     end
 
-    vim.notify("Session: " .. session.name .. " -> " .. new_session_name, vim.log.levels.INFO)
+    utils.notify("Session: " .. session.name .. " -> " .. new_session_name, vim.log.levels.INFO)
 end
 
 return M

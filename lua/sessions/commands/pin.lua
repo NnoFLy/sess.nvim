@@ -28,7 +28,7 @@ function M.pin_session(session_name)
     local file_name = convert.make_file_name(file_path, { name = session_name })
 
     os.execute("touch " .. file_name)
-    vim.notify("Session pinned: " .. session_name, vim.log.levels.INFO)
+    utils.notify("Session pinned: " .. session_name, vim.log.levels.INFO)
 end
 
 return M

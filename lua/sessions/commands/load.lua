@@ -1,7 +1,7 @@
 local M = {}
 
----@param session Session | nil
 ---@param consts Consts
+---@param session Session | nil
 ---@return boolean
 function M.try_to_load(consts, session)
     local utils = require("sessions.utils")
@@ -60,8 +60,28 @@ function M._load_session(session)
 end
 
 ---@param session_name string | nil
+---@param auto_save_files boolean | nil
 ---@return boolean
-function M.load_session(session_name)
+function M.load_session(session_name, auto_save_files)
+    local opts = require("sessions").get_opts()
+    local utils = require("sessions.utils")
+
+    local modified = utils.get_modified_buffers()
+    if #modified > 0 then
+        utils.notify(
+            "You have unsaved changes in the following buffers(" .. #modified .. "):\n"
+            .. table.concat(modified, ", ") .. "\n",
+            vim.log.levels.WARN
+        )
+        utils.notify(
+            "Please save or close them before loading a session.",
+            vim.log.levels.WARN
+        )
+        return false
+    end
+
+    auto_save_files = auto_save_files or opts.auto_save_files
+
     if not session_name then
         return M._load_session()
     end
@@ -69,13 +89,22 @@ function M.load_session(session_name)
     local commands = require("sessions.commands")
     local session = commands.get.by_name(session_name)
     if not session then
-        vim.notify("Session doesn't exist: " .. session_name, vim.log.levels.ERROR)
+        utils.notify("Session doesn't exist: " .. session_name, vim.log.levels.ERROR)
         return false
+    end
+
+    if auto_save_files then
+        local ok, err = pcall(function() vim.cmd("wall") end)
+        if not ok then
+            utils.notify("Sessions was not saved.\n" .. err,
+                vim.log.levels.WARN)
+            return false
+        end
     end
 
     local ok = M._load_session(session)
     if not ok then
-        vim.notify("Can't load session: " .. session.name, vim.log.levels.ERROR)
+        utils.notify("Can't load session: " .. session.name, vim.log.levels.ERROR)
     end
     return ok
 end
