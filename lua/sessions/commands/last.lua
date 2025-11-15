@@ -17,6 +17,13 @@ end
 ---@return nil
 function M._open_last()
     local commands = require("sessions.commands")
+
+    local current_session = commands.get.current()
+    if current_session.name == prev_session.name then
+        vim.notify("Session is the same as previous session", vim.log.levels.WARN)
+        return
+    end
+
     if not commands.load(prev_session.name) then
         return
     end
@@ -29,10 +36,7 @@ function M.open_last()
         return
     end
 
-    local save_session = require("sessions.commands").save
-    save_session()
-    vim.cmd("wa")
-    vim.cmd("silent! bufdo bd")
+    require("sessions.commands").save()
     M._open_last()
 end
 
