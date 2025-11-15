@@ -29,6 +29,7 @@ M.dependencies = {
 --- OPTIONAL (only for 'Sessions list') ---
 
 M.opts = {
+    auto_save_files = true,
     prompt_title = "Your title"
 }
 
@@ -56,6 +57,7 @@ vim.pack.add({ "https://github.com/nvim-lua/plenary.nvim" })
 
 vim.pack.add({ "https://github.com/i0i-i0i/sessions.nvim" })
 require("sessions").setup({
+    auto_save_files = true,
     prompt_title = "Your title"
 })
 
@@ -85,8 +87,9 @@ commands.pin("session_name")  -- or :Sessions pin
 
 -- Load the session (if 'session_name' is not provided, load the session bases on cwd)
 ---@param session_name string | nil
+---@param auto_save_files boolean | nil
 ---@return boolean
-commands.load("session_name")  -- or :Sessions load [<arg>]
+commands.load("session_name", true)  -- or :Sessions load [<arg>]
 
 -- Telescope list sessions
 ---@param prompt_title string | nil
@@ -106,8 +109,9 @@ commands.delete("session_name")  -- or :Sessions delete [<arg>]
 commands.rename("session_name", "new_name")  -- or :Sessions rename [<arg>]
 
 -- Load the previous session
+---@param auto_save_files boolean | nil
 ---@return nil
-commands.last()  -- or :Sessions last
+commands.last(true)  -- or :Sessions last
 
 -- Get current session
 ---@return Session
