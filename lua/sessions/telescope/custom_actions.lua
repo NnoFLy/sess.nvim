@@ -16,12 +16,11 @@ local consts = require("sessions.consts")
 ---@return nil
 function M.enter(prompt_bufnr)
     local convert = require("sessions.convert")
-    local opts = require("sessions").get_opts()
 
     actions.close(prompt_bufnr)
     local selected = action_state.get_selected_entry()
     local session_name = convert.from_path(selected[1])
-    require("sessions.commands").load(session_name, opts.auto_save_files)
+    require("sessions.commands").load(session_name)
 end
 
 ---@param prompt_bufnr number

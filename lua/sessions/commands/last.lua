@@ -14,9 +14,9 @@ function M.get_prev_session()
     return prev_session
 end
 
----@param auto_save_files boolean
+---@param load_opts BeforeLoadOpts | nil
 ---@return nil
-function M._open_last(auto_save_files)
+function M._open_last(load_opts)
     local commands = require("sessions.commands")
     local utils = require("sessions.utils")
 
@@ -26,18 +26,15 @@ function M._open_last(auto_save_files)
         return
     end
 
-    if not commands.load(prev_session.name, auto_save_files) then
+    if not commands.load(prev_session.name, load_opts) then
         return
     end
 end
 
----@param auto_save_files boolean | nil
+---@param load_opts BeforeLoadOpts | nil
 ---@return nil
-function M.open_last(auto_save_files)
+function M.open_last(load_opts)
     local utils = require("sessions.utils")
-    local opts = require("sessions").get_opts()
-
-    auto_save_files = auto_save_files or opts.auto_save_files
 
     if not prev_session or not prev_session.name then
         utils.notify("No previous session", vim.log.levels.ERROR)
@@ -45,7 +42,7 @@ function M.open_last(auto_save_files)
     end
 
     require("sessions.commands").save()
-    M._open_last(auto_save_files)
+    M._open_last(load_opts)
 end
 
 return M
