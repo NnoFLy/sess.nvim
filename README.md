@@ -207,7 +207,7 @@ M.config = function()
         callback = function()
             local utils = require("sessions.utils")
             if utils.contains(vim.bo.filetype,
-                    { "gitcommit", "Fyler" }) then
+                    { "gitcommit" }) then
                 return
             end
             commands.save()
