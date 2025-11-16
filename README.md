@@ -31,7 +31,7 @@ M.dependencies = {
 M.opts = {
     prompt_title = "🗃️ All sessions",
     before_load = {
-        auto_save_files = true,
+        auto_save_files = false,
         auto_remove_buffers = false,
         custom = function() end,
     },
@@ -232,6 +232,28 @@ end
     }
 }
 ```
+
+## Troubleshooting
+
+<details>
+<summary>If you set 'auto_save_files = true' and you use conform.nvim</summary>
+
+```lua
+require("conform").setup({
+    formatters_by_ft = { ... },
+
+    -- Remove format_after_save
+    format_after_save = { lsp_format = "fallback", timeout_ms = 500, async = true },
+
+    -- use format_on_save instead
+    fromat_on_save = { lsp_format = "fallback", timeout_ms = 500 },
+})
+
+```
+
+Or just set `auto_save_files = false`
+
+</details>
 
 ## TODOs
 
