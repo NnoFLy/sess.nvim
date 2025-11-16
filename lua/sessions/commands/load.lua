@@ -67,7 +67,7 @@ function M.load_session(session_name, auto_save_files)
     local utils = require("sessions.utils")
 
     local modified = utils.get_modified_buffers()
-    if #modified > 0 then
+    if not auto_save_files and #modified > 0 then
         utils.notify(
             "You have unsaved changes in the following buffers(" .. #modified .. "):\n"
             .. table.concat(modified, ", ") .. "\n",
