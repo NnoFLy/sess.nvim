@@ -29,8 +29,15 @@ M.dependencies = {
 --- OPTIONAL (only for 'Sessions list') ---
 
 M.opts = {
-    auto_save_files = true,
-    prompt_title = "Your title"
+    prompt_title = "🗃️ All sessions",
+    before_load = {
+        auto_save_files = true,
+        auto_remove_buffers = false,
+        custom = function() end,
+    },
+    after_load = {
+        custom = function() end,
+    }
 }
 
 M.keys = {
@@ -57,8 +64,15 @@ vim.pack.add({ "https://github.com/nvim-lua/plenary.nvim" })
 
 vim.pack.add({ "https://github.com/i0i-i0i/sessions.nvim" })
 require("sessions").setup({
-    auto_save_files = true,
-    prompt_title = "Your title"
+    prompt_title = "🗃️ All sessions",
+    before_load = {
+        auto_save_files = false,
+        auto_remove_buffers = false,
+        custom = function() end,
+    },
+    after_load = {
+        custom = function() end,
+    }
 })
 
 vim.keymap.set("n", "<leader>ss", "<cmd>Sessions save<cr>", { desc = "Save session" })
@@ -74,54 +88,93 @@ vim.keymap.set("n", "<leader><C-^>", "<cmd>Sessions last<cr>", { desc = "Load th
 
 ```lua
 local commands = require("sessions.commands")
+```
 
--- Save current session
+- Save current session
+
+```lua
 ---@return boolean
 commands.save()  -- or :Sessions save
+```
 
--- Pin current session and give it a name
--- If 'session_name' is not provided, you will be prompted to enter a name
+- Pin current session and give it a name.
+If 'session_name' is not provided, you will be prompted to enter a name
+
+```lua
 ---@param session_name string | nil
 ---@return nil
 commands.pin("session_name")  -- or :Sessions pin
+```
 
--- Load the session (if 'session_name' is not provided, load the session bases on cwd)
+- Load the session (if 'session_name' is not provided, load the session bases on cwd)
+
+```lua
+---@class BeforeLoadOpts
+---@field auto_save_files boolean | nil
+---@field auto_remove_buffers boolean | nil
+---@field custom function | nil
+
+---@class AfterLoadOpts
+---@field custom function | nil
+
 ---@param session_name string | nil
----@param auto_save_files boolean | nil
+---@param before_load_opts BeforeLoadOpts | nil
+---@param after_load_opts AfterLoadOpts | nil
 ---@return boolean
-commands.load("session_name", true)  -- or :Sessions load [<arg>]
+commands.load("session_name", {}, {})  -- or :Sessions load [<session_name>]
+```
 
--- Telescope list sessions
+- Telescope list sessions
+
+```lua
 ---@param prompt_title string | nil
 ---@return nil
 commands.list("All sessions")  -- or :Sessions list
+```
 
--- Delete session (if 'session_name' is not provided, delete current session)
+- Delete session (if 'session_name' is not provided, delete current session)
+
+```lua
 ---@param session_name string | nil
 ---@return nil
-commands.delete("session_name")  -- or :Sessions delete [<arg>]
+commands.delete("session_name")  -- or :Sessions delete [<session_name>]
+```
 
--- Rename session (if 'session_name' is not provided, rename current session)
--- If 'new_session_name' is not provided, you will be prompted to enter a new name
+- Rename session (if 'session_name' is not provided, rename current session)
+If 'new_session_name' is not provided, you will be prompted to enter a new name
+
+```lua
 ---@param session_name string | nil
 ---@param new_session_name string | nil
 ---@return nil
-commands.rename("session_name", "new_name")  -- or :Sessions rename [<arg>]
+commands.rename("session_name", "new_name")  -- or :Sessions rename [<session_name>]
+```
 
--- Load the previous session
+- Load the previous session
+
+```lua
 ---@param auto_save_files boolean | nil
 ---@return nil
 commands.last(true)  -- or :Sessions last
+```
 
--- Get current session
+- Get current session
+
+```lua
 ---@return Session
 commands.get.current()
+```
 
--- Get all sessions
+- Get all sessions
+
+```lua
 ---@return Session[]
 commands.get.all()
+```
 
--- Get session by name
+- Get session by name
+
+```lua
 ---@param name string
 ---@return Session | nil
 commands.get.by_name(name)
