@@ -60,27 +60,33 @@ function M._load_session(session)
 end
 
 ---@param session_name string | nil
----@param auto_save_files boolean | nil
+---@param before_load_opts BeforeLoadOpts | nil
+---@param after_load_opts AfterLoadOpts | nil
 ---@return boolean
-function M.load_session(session_name, auto_save_files)
+function M.load_session(session_name, before_load_opts, after_load_opts)
     local opts = require("sessions").get_opts()
+
+    before_load_opts = vim.tbl_deep_extend("force", opts.before_load, before_load_opts or {})
+    after_load_opts = vim.tbl_deep_extend("force", opts.after_load, after_load_opts or {})
+
     local utils = require("sessions.utils")
 
     local modified = utils.get_modified_buffers()
-    if not auto_save_files and #modified > 0 then
-        utils.notify(
-            "You have unsaved changes in the following buffers(" .. #modified .. "):\n"
-            .. table.concat(modified, ", ") .. "\n",
-            vim.log.levels.WARN
-        )
-        utils.notify(
-            "Please save or close them before loading a session.",
-            vim.log.levels.WARN
-        )
-        return false
+    if #modified > 0 then
+        if not before_load_opts.auto_save_files then
+            utils.notify(
+                "You have unsaved changes in the following buffers(" .. #modified .. "):\n"
+                .. table.concat(modified, ", ") .. "\n",
+                vim.log.levels.WARN
+            )
+            utils.notify(
+                "Please save or close them before loading a session.",
+                vim.log.levels.WARN
+            )
+            return false
+        end
+        vim.cmd("wall")
     end
-
-    auto_save_files = auto_save_files or opts.auto_save_files
 
     if not session_name then
         return M._load_session()
@@ -93,7 +99,7 @@ function M.load_session(session_name, auto_save_files)
         return false
     end
 
-    if auto_save_files then
+    if before_load_opts.auto_save_files then
         local ok, err = pcall(function() vim.cmd("wall") end)
         if not ok then
             utils.notify("Sessions was not saved.\n" .. err,
@@ -102,10 +108,23 @@ function M.load_session(session_name, auto_save_files)
         end
     end
 
+    if before_load_opts.auto_remove_buffers then
+        utils.purge_hidden_buffers()
+    end
+
+    if before_load_opts.custom then
+        before_load_opts.custom()
+    end
+
     local ok = M._load_session(session)
     if not ok then
         utils.notify("Can't load session: " .. session.name, vim.log.levels.ERROR)
     end
+
+    if after_load_opts.custom then
+        after_load_opts.custom()
+    end
+
     return ok
 end
 
