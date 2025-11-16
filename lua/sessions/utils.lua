@@ -36,22 +36,6 @@ function M.get_last_folder_in_path(path)
     return last or path
 end
 
----@param marker string
----@param name string
----@return string
-function M.add_marker(marker, name)
-    return marker .. "%p" .. name .. "%P"
-end
-
----@param path string
----@return string | nil
-function M.remove_marker(path)
-    local colon_pos = path:find(":")
-    if colon_pos then
-        return ":" .. path:sub(colon_pos + 1)
-    end
-end
-
 ---@return string[]
 function M.get_modified_buffers()
     local modified = {}
@@ -83,6 +67,21 @@ function M.contains(value, arr)
             return v
         end
     end
+end
+
+---@param str string
+---@returns string[]
+function M.split(str, sep)
+    local t = {}
+    local start = 1
+    local sep_start, sep_end = str:find(sep, start)
+    while sep_start do
+        table.insert(t, str:sub(start, sep_start - 1))
+        start = sep_end + 1
+        sep_start, sep_end = str:find(sep, start)
+    end
+    table.insert(t, str:sub(start))
+    return t
 end
 
 ---@class PurgeOpts

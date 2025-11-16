@@ -2,13 +2,13 @@ local M = {}
 
 ---@return boolean
 function M.save_session()
-    local convert = require("sessions.convert")
-    local cwd = convert.from_path(vim.fn.getcwd())
-    local file = convert.make_file_name(cwd .. ".vim")
+    local session = require("sessions.session")
+    local utils = require("sessions.utils")
 
-    local cmd = "mksession! " .. file
-    local ok, _ = pcall(function() vim.cmd(cmd) end)
+    local s = session.new()
+    local ok = session.save(s)
     if not ok then
+        utils.notify("Failed to save session", vim.log.levels.ERROR)
         return false
     end
     return true

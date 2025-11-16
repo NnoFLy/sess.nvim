@@ -15,34 +15,30 @@ function M.get_prev_session()
 end
 
 ---@param load_opts BeforeLoadOpts | nil
----@return nil
-function M._open_last(load_opts)
+---@return boolean
+function M.open_last(load_opts)
+    local session = require("sessions.session")
     local commands = require("sessions.commands")
     local utils = require("sessions.utils")
+    local ps = M.get_prev_session()
 
-    local current_session = commands.get.current()
-    if current_session.name == prev_session.name then
-        utils.notify("Session is the same as previous session", vim.log.levels.WARN)
-        return
-    end
-
-    if not commands.load(prev_session.name, load_opts) then
-        return
-    end
-end
-
----@param load_opts BeforeLoadOpts | nil
----@return nil
-function M.open_last(load_opts)
-    local utils = require("sessions.utils")
-
-    if not prev_session or not prev_session.name then
+    if not prev_session or not ps.name then
         utils.notify("No previous session", vim.log.levels.ERROR)
-        return
+        return false
     end
 
-    require("sessions.commands").save()
-    M._open_last(load_opts)
+    commands.save()
+    local current_session = session.get.current()
+    if current_session and current_session.name == ps.name then
+        utils.notify("Session is the same as previous session", vim.log.levels.WARN)
+        return false
+    end
+
+    if not commands.load(ps.name, load_opts) then
+        return false
+    end
+
+    return true
 end
 
 return M

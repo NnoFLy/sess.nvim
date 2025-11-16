@@ -6,7 +6,6 @@ local subcommands = {
     pin = commands.pin,
     load = commands.load,
     last = commands.last,
-    rename = commands.rename,
     delete = commands.delete
 }
 

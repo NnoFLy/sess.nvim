@@ -1,34 +1,47 @@
 local M = {}
 
----@param session_name string | nil
+---@param old_name string | nil
+---@param new_name string | nil
 ---@return nil
-function M.pin_session(session_name)
-    local session = require("sessions.commands").get.current()
-    if session and session.name then
-        require("sessions.commands").rename(session.name)
-        require("sessions.commands").save()
+function M.pin_session(old_name, new_name)
+    local session = require("sessions.session")
+    local commands = require("sessions.commands")
+    local utils = require("sessions.utils")
+
+    local ok = commands.save()
+    if not ok then
+        utils.notify("Failed to save session", vim.log.levels.ERROR)
         return
     end
 
-    local utils = require("sessions.utils")
-    local save_session = require("sessions.commands").save
-    local convert = require("sessions.convert")
-
-    if not session_name then
-        local prompt = utils.input("Enter Session Name", utils.get_last_folder_in_path(vim.fn.getcwd()))
-        if not prompt then
+    local old_session
+    if not old_name then
+        old_session = session.get.current()
+        if old_session and old_session.name then
+            old_name = old_session.name
+        else
+            utils.notify("No session found", vim.log.levels.ERROR)
             return
         end
-        session_name = prompt.result
     end
 
-    save_session()
+    if not new_name then
+        new_name = vim.fn.input("Enter Session Name: ", utils.get_last_folder_in_path(vim.fn.getcwd()))
+        if not new_name then
+            return
+        end
+    end
 
-    local file_path = convert.from_path(vim.fn.getcwd()) .. ".vim"
-    local file_name = convert.make_file_name(file_path, { name = session_name })
+    local new_session = session.new(new_name)
+    old_session = old_session or session.get.by_name(old_name)
+    if not old_session then
+        utils.notify("Session not found", vim.log.levels.ERROR)
+        return
+    end
 
-    os.execute("touch " .. file_name)
-    utils.notify("Session pinned: " .. session_name, vim.log.levels.INFO)
+    session.rename(old_session, new_session)
+
+    utils.notify("Session pinned: " .. new_name, vim.log.levels.INFO)
 end
 
 return M

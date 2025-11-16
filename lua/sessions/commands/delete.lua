@@ -8,37 +8,24 @@ function M.delete_session(session_name)
         return
     end
 
+    local session = require("sessions.session")
     local utils = require("sessions.utils")
+
+    local ses
     if not session_name then
-        session_name = require("sessions.commands.get").current().name
-        if not session_name then
-            utils.notify("Session name is empty", vim.log.levels.ERROR)
-            return
-        end
+        ses = session.get.current()
+    else
+        ses = session.get.by_name(session_name)
     end
 
-    local commands = require("sessions.commands")
-    local session = commands.get.by_name(session_name)
-    if not session then
-        utils.notify("Session doesn't exist: " .. session_name, vim.log.levels.ERROR)
+    if not ses then
+        utils.notify("Session not found", vim.log.levels.ERROR)
         return
     end
 
-    local convert = require("sessions.convert")
-    local parsed_session_path = convert.from_path(session.path)
+    require("sessions.session").delete(ses)
 
-    local function del(path, s)
-        local file = convert.make_file_name(path, s)
-        local ok, err_msg = os.remove(file)
-        if not ok then
-            utils.notify(err_msg or "Can't delete file", vim.log.levels.ERROR)
-        end
-    end
-
-    del(parsed_session_path)
-    del(parsed_session_path, session)
-
-    utils.notify("Session deleted: " .. session.name, vim.log.levels.INFO)
+    utils.notify("Session deleted: " .. ses.name, vim.log.levels.INFO)
 end
 
 return M

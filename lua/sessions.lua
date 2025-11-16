@@ -1,7 +1,3 @@
----@class Hooks
----@field pre_hook function
----@field post_hook function
-
 local M = {}
 
 local is_loaded = false
@@ -17,12 +13,13 @@ function M.setup(user_opts)
 
     local commands = require("sessions.commands")
     local consts = require("sessions.consts")
+    local file = require("sessions.file")
 
     if user_opts ~= nil then
         opts = vim.tbl_deep_extend("force", opts, user_opts)
     end
 
-    os.execute("mkdir -p " .. consts.path)
+    file.create_dir(consts.path)
 
     M.builtins = commands
 

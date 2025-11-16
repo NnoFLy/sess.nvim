@@ -1,62 +1,50 @@
 local M = {}
 
----@param consts Consts
----@param session Session | nil
----@return boolean
-function M.try_to_load(consts, session)
-    local utils = require("sessions.utils")
-    local convert = require("sessions.convert")
-
-    ---@return boolean
-    local function load_by_cwd()
-        local str = "silent source " .. consts.path .. convert.from_path(vim.fn.getcwd()) .. ".vim"
-        local ok, _ = pcall(function() vim.cmd(str) end)
-        if not ok then
-            return false
-        end
-        return true
+---@return Session | nil
+local function load_cwd_session()
+    local session = require("sessions.session")
+    local ses = session.get.current()
+    if not ses then
+        return nil
     end
-
-    if session == nil then
-        return load_by_cwd()
-    end
-
-    if session.name then
-        local command = "find " ..
-            consts.path .. " -type f -name '" .. utils.add_marker(consts.marker, convert.from_path(session.name)) .. "*'"
-        local result = vim.fn.system(command)
-        if result ~= "" then
-            vim.cmd("silent source " .. consts.path .. utils.remove_marker(result))
-            return true
-        end
-    elseif session.path then
-        vim.cmd.cd(session.path)
-        return load_by_cwd()
-    end
-
-    return false
+    return session.load(ses)
 end
 
----@param session Session | nil
+---@param s Session
+---@return Session | nil
+local function load_by_name(s)
+    local session = require("sessions.session")
+    local ses = session.get.by_name(s.name)
+    if not ses then
+        return nil
+    end
+    return session.load(ses)
+end
+
+---@param s Session | nil
 ---@return boolean
-function M._load_session(session)
-    local consts = require("sessions.consts")
-    local get = require("sessions.commands").get
+local function load_session(s)
     local set_prev_session = require("sessions.commands.last").set_prev_session
+    local session = require("sessions.session")
+    local current_session = session.get.current()
 
-    local tmp_prev_session = get.current()
-    local res = M.try_to_load(consts, session)
+    ---@type Session | nil
+    local ses
+    if s then
+        ses = load_by_name(s)
+    else
+        ses = load_cwd_session()
+    end
 
-    if not res then
+    if not ses then
         return false
     end
 
-    local current_session = get.current()
-    if session and session.name == current_session.name then
-        set_prev_session(tmp_prev_session)
+    if current_session and (ses.name ~= current_session.name) then
+        set_prev_session(current_session)
     end
 
-    return res
+    return true
 end
 
 ---@param session_name string | nil
@@ -89,12 +77,12 @@ function M.load_session(session_name, before_load_opts, after_load_opts)
     end
 
     if not session_name then
-        return M._load_session()
+        return load_session()
     end
 
-    local commands = require("sessions.commands")
-    local session = commands.get.by_name(session_name)
-    if not session then
+    local session = require("sessions.session")
+    local ses = session.get.by_name(session_name)
+    if not ses then
         utils.notify("Session doesn't exist: " .. session_name, vim.log.levels.ERROR)
         return false
     end
@@ -116,7 +104,7 @@ function M.load_session(session_name, before_load_opts, after_load_opts)
         before_load_opts.custom()
     end
 
-    local ok = M._load_session(session)
+    local ok = load_session(session)
     if not ok then
         utils.notify("Can't load session: " .. session.name, vim.log.levels.ERROR)
     end
