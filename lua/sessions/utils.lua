@@ -141,4 +141,20 @@ function M.purge_term_buffers()
     end
 end
 
+---@param path string
+---@return string[]
+function M.get_dirs(path)
+    local home = os.getenv("HOME") or "~"
+    local dirs = {}
+    local command = "ls -d " .. path:gsub("~", home) .. "*"
+    local handle = io.popen(command)
+    if handle then
+        for dir in handle:lines() do
+            table.insert(dirs, dir)
+        end
+        handle:close()
+    end
+    return dirs
+end
+
 return M

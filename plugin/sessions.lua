@@ -10,7 +10,7 @@ local subcommands = {
 }
 
 local function command_exists(cmd)
-    for _, value in pairs({ "load", "rename", "delete" }) do
+    for _, value in pairs({ "load", "delete" }) do
         if string.find(cmd, "Sessions%s+" .. value) then
             return true
         end

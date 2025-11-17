@@ -19,16 +19,19 @@ function M.enter(prompt_bufnr)
     actions.close(prompt_bufnr)
 
     local session = require("sessions.session")
+    local commands = require("sessions.commands")
+    local opts = require("sessions").get_opts()
 
     local selected = action_state.get_selected_entry()
     local session_name = selected[1]
 
     local ses = session.get.by_name(session_name)
     if not ses then
+        commands.create(session_name)
         return
     end
 
-    session.load(ses)
+    commands.load(ses.name, opts.before_load, opts.after_load)
 end
 
 ---@param prompt_bufnr number
@@ -37,6 +40,7 @@ function M.delete_session(prompt_bufnr)
     actions.close(prompt_bufnr)
 
     local session = require("sessions.session")
+    local commands = require("sessions.commands")
 
     local selected = action_state.get_selected_entry()
     local session_name = selected[1]
@@ -47,8 +51,7 @@ function M.delete_session(prompt_bufnr)
     end
 
     session.delete(ses)
-
-    require("sessions.commands").list()
+    commands.list()
 end
 
 ---@param prompt_bufnr number
@@ -56,34 +59,22 @@ end
 function M.rename_session(prompt_bufnr)
     actions.close(prompt_bufnr)
 
-    local session = require("sessions.session")
+    local commands = require("sessions.commands")
 
     local selected = action_state.get_selected_entry()
     local session_name = selected[1]
 
-    local ses = session.get.by_name(session_name)
-    if not ses then
-        return
-    end
-
-    require("sessions.commands").pin()
+    commands.pin(session_name)
 end
 
 ---@param prompt_title string
 ---@return nil
 function M.open_sessions_list(prompt_title)
     local telescope_utils = require("sessions.telescope.utils")
-    local session = require("sessions.session")
-    local all_sessions = session.get.all()
-
-    local sessions_names = {}
-    for _, ses in ipairs(all_sessions) do
-        table.insert(sessions_names, ses.name)
-    end
 
     pickers.new(
         dropdown,
-        telescope_utils.get_options(sessions_names, prompt_title)
+        telescope_utils.get_options(telescope_utils.get_items(), prompt_title)
     ):find()
 end
 

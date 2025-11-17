@@ -68,9 +68,10 @@ function M.load(session)
 end
 
 ---@param name string | nil
+---@param cwd string | nil
 ---@return Session
-function M.new(name)
-    local cwd = vim.fn.getcwd()
+function M.new(name, cwd)
+    cwd = cwd or vim.fn.getcwd()
 
     ---@type Session
     local session = {
@@ -85,7 +86,12 @@ end
 ---@return boolean
 function M.save(session)
     local exists_session = M.get.by_path(session.path)
-    local file_path = to_file_name(exists_session or session)
+    if exists_session then
+        local file_path = to_file_name(exists_session)
+        file.delete(consts.path .. file_path)
+        session.name = exists_session.name
+    end
+    local file_path = to_file_name(session)
     local ok = file.mksession(consts.path .. file_path)
     if not ok then
         return false

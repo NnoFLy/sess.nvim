@@ -24,8 +24,9 @@ end
 ---@param s Session | nil
 ---@return boolean
 local function load_session(s)
-    local set_prev_session = require("sessions.commands.last").set_prev_session
     local session = require("sessions.session")
+    local set_prev_session = require("sessions.commands.last").set_prev_session
+
     local current_session = session.get.current()
 
     ---@type Session | nil
@@ -87,15 +88,6 @@ function M.load_session(session_name, before_load_opts, after_load_opts)
         return false
     end
 
-    if before_load_opts.auto_save_files then
-        local ok, err = pcall(function() vim.cmd("wall") end)
-        if not ok then
-            utils.notify("Sessions was not saved.\n" .. err,
-                vim.log.levels.WARN)
-            return false
-        end
-    end
-
     if before_load_opts.auto_remove_buffers then
         utils.purge_hidden_buffers()
     end
@@ -104,9 +96,9 @@ function M.load_session(session_name, before_load_opts, after_load_opts)
         before_load_opts.custom()
     end
 
-    local ok = load_session(session)
+    local ok = load_session(ses)
     if not ok then
-        utils.notify("Can't load session: " .. session.name, vim.log.levels.ERROR)
+        utils.notify("Can't load session: " .. ses.name, vim.log.levels.ERROR)
     end
 
     if after_load_opts.custom then

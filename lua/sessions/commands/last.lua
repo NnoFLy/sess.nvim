@@ -1,17 +1,17 @@
 local M = {}
 
 ---@type Session
-local prev_session = nil
+M.prev_session = nil
 
 ---@param session Session
 ---@return nil
 function M.set_prev_session(session)
-    prev_session = session
+    M.prev_session = session
 end
 
 ---@return Session
 function M.get_prev_session()
-    return prev_session
+    return M.prev_session
 end
 
 ---@param load_opts BeforeLoadOpts | nil
@@ -22,7 +22,7 @@ function M.open_last(load_opts)
     local utils = require("sessions.utils")
     local ps = M.get_prev_session()
 
-    if not prev_session or not ps.name then
+    if not M.prev_session or not ps.name then
         utils.notify("No previous session", vim.log.levels.ERROR)
         return false
     end
