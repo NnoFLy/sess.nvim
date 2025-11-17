@@ -38,24 +38,29 @@ function M.get_items()
     local items = {}
     local count = {}
     for _, ses in ipairs(all_sessions) do
-        table.insert(items, ses.name)
+        table.insert(items, ses)
         if ses.name ~= ses.path then
-            table.insert(items, ses.path)
             count[ses.path] = (count[ses.path] or 0) + 1
         end
     end
     for _, path in pairs(opts.paths) do
         for _, dir in ipairs(utils.get_dirs(path)) do
-            table.insert(items, dir)
+            table.insert(items, { name = dir, path = dir })
             count[dir] = (count[dir] or 0) + 1
         end
     end
 
     local result = {}
+    local seen = {}
     for _, value in ipairs(items) do
-        if count[value] == nil or count[value] == 1 then
-            table.insert(result, value)
+        if seen[value.path] then
+            goto continue
         end
+        if count[value] == nil or count[value] == 1 then
+            table.insert(result, value.name)
+            seen[value.path] = true
+        end
+        ::continue::
     end
 
     return result
