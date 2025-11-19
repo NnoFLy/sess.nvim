@@ -63,12 +63,16 @@ end
 
 function M.setup_auto_load()
     local commands = require("sessions.commands")
+    local session = require("sessions.session")
 
     vim.api.nvim_create_autocmd("VimEnter", {
         callback = function()
             vim.schedule(function()
                 if vim.fn.argc() == 0 then
-                    commands.load()
+                    local s = session.get.current()
+                    if s then
+                        commands.load(s)
+                    end
                 end
             end)
         end,

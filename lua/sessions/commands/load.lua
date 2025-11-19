@@ -1,11 +1,14 @@
 local M = {}
 
+local logger = require("sessions.logger")
+local utils = require("sessions.utils")
+local commands_utils = require("sessions.commands._utils")
+local state = require("sessions.state")
+local session = require("sessions.session")
+
 ---@param s Session | nil
 ---@return boolean
 local function load_session(s)
-    local session = require("sessions.session")
-    local state = require("sessions.state")
-
     local current_session = session.get.current()
 
     ---@type Session | nil
@@ -31,28 +34,21 @@ local function load_session(s)
     return true
 end
 
----@param s Session | nil
+---@param s Session
 ---@param before_load_opts BeforeLoadOpts | nil
 ---@param after_load_opts AfterLoadOpts | nil
 ---@return boolean
 function M.load_session(s, before_load_opts, after_load_opts)
+    if not s then
+        logger.error("No session found")
+        return false
+    end
+
+    local commands = require("sessions.commands")
     local opts = require("sessions").get_opts()
 
     before_load_opts = vim.tbl_deep_extend("force", opts.before_load, before_load_opts or {})
     after_load_opts = vim.tbl_deep_extend("force", opts.after_load, after_load_opts or {})
-
-    local utils = require("sessions.utils")
-    local logger = require("sessions.logger")
-    local session = require("sessions.session")
-    local commands_utils = require("sessions.commands._utils")
-    local commands = require("sessions.commands")
-    local state = require("sessions.state")
-
-    local current_session = session.get.current()
-    if s and current_session and current_session.name == s.name then
-        logger.info("This session is already loaded")
-        return true
-    end
 
     local modified = commands_utils.get_modified_buffers()
     if #modified > 0 then
@@ -70,12 +66,7 @@ function M.load_session(s, before_load_opts, after_load_opts)
     if state.is_session_loaded() then
         commands.save()
     end
-
     state.set_session_is_loaded(true)
-
-    if not s or not s.name then
-        return load_session()
-    end
 
     if before_load_opts.auto_remove_buffers then
         utils.purge_hidden_buffers()

@@ -1,15 +1,12 @@
 local M = {}
 
----@param s Session | nil
+local logger = require("sessions.logger")
+
+---@param s Session
 ---@return nil
 function M.delete_session(s)
-    local session = require("sessions.session")
-    local logger = require("sessions.logger")
-
-    s = s or session.get.current()
-
     if not s then
-        logger.error("Session not found")
+        logger.error("No session found")
         return
     end
 

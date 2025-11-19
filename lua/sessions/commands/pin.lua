@@ -1,14 +1,13 @@
 local M = {}
 
----@param s Session | nil
+local session = require("sessions.session")
+local logger = require("sessions.logger")
+local commands_utils = require("sessions.commands._utils")
+
+---@param s Session
 ---@param new_name string | nil
 ---@return nil
 function M.pin_session(s, new_name)
-    local session = require("sessions.session")
-    local logger = require("sessions.logger")
-    local commands_utils = require("sessions.commands._utils")
-
-    s = s or session.get.current()
     if not s then
         logger.error("No session found")
         return
