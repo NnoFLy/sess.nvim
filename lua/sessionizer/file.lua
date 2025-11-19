@@ -1,6 +1,6 @@
 local M = {}
 
-local logger = require("sessions.logger")
+local logger = require("sessionizer.logger")
 
 ---@class Files
 ---@field path string

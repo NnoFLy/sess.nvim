@@ -1,8 +1,8 @@
 local M = {}
 
-local session = require("sessions.session")
-local logger = require("sessions.logger")
-local commands_utils = require("sessions.commands._utils")
+local session = require("sessionizer.session")
+local logger = require("sessionizer.logger")
+local commands_utils = require("sessionizer.commands._utils")
 
 ---@param s Session
 ---@param new_name string | nil

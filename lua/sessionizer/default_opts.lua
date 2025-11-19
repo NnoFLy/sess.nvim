@@ -7,7 +7,6 @@
 ---@field custom function
 
 ---@class Opts
----@field prompt_title string
 ---@field paths string[]
 ---@field smart_auto_load boolean
 ---@field auto_save boolean
@@ -16,7 +15,6 @@
 ---@field before_load BeforeLoadOpts
 ---@field after_load AfterLoadOpts
 return {
-    prompt_title = "🗃️ All sessions",
     paths = {},
     smart_auto_load = true,
     auto_save = true,

@@ -1,6 +1,6 @@
 local M = {}
 
-local base_msg = "[Sessions.nvim] "
+local base_msg = "[sessionizer.nvim] "
 
 ---@param msg string
 ---@return nil

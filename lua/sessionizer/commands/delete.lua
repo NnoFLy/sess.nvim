@@ -1,6 +1,6 @@
 local M = {}
 
-local logger = require("sessions.logger")
+local logger = require("sessionizer.logger")
 
 ---@param s Session
 ---@return nil
@@ -15,7 +15,7 @@ function M.delete_session(s)
         return
     end
 
-    require("sessions.session").delete(s)
+    require("sessionizer.session").delete(s)
 
     logger.info("Session deleted: " .. s.name)
 end
