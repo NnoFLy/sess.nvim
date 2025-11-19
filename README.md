@@ -140,7 +140,7 @@ commands.save()  -- or :Sess save
     - If 'new_name' is not provided, you will be prompted to enter a new name.
 
 ```lua
----@param s Session | nil
+---@param s Session
 ---@param new_name string | nil
 ---@return nil
 commands.pin(<session>)  -- or :Sess pin [<session_name>]
@@ -158,26 +158,18 @@ commands.pin(<session>)  -- or :Sess pin [<session_name>]
 ---@class AfterLoadOpts
 ---@field custom function | nil
 
----@param s Session | nil
+---@param s Session
 ---@param before_load_opts BeforeLoadOpts | nil
 ---@param after_load_opts AfterLoadOpts | nil
 ---@return boolean
 commands.load(<session>, <before_load_opts>, <after_load_opts>)  -- or :Sess load [<session_name>]
 ```
 
-- Telescope list sessions
-
-```lua
----@param opts table | nil
----@return nil
-commands.list({ prompt_title = "Title", ... })  -- or :Sess list
-```
-
-- Delete session (if 'session_name' is not provided, delete current session)
+- Delete session.
     - If 's' is not provided, delete current session.
 
 ```lua
----@param s Session | nil
+---@param s Session
 ---@return nil
 commands.delete(<session>)  -- or :Sess delete [<session_name>]
 ```
@@ -197,6 +189,14 @@ commands.delete(<session>)  -- or :Sess delete [<session_name>]
 ---@param after_load_opts AfterLoadOpts | nil
 ---@return boolean
 commands.last(<before_load_opts>, <after_load_opts>)  -- or :Sess last
+```
+
+- Telescope list sessions
+
+```lua
+---@param opts table | nil
+---@return nil
+commands.list({ prompt_title = "Title", ... })  -- or :Sess list
 ```
 
 ### Get
