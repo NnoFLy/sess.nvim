@@ -1,26 +1,5 @@
 local M = {}
 
----@return Session | nil
-local function load_cwd_session()
-    local session = require("sessions.session")
-    local ses = session.get.current()
-    if not ses then
-        return nil
-    end
-    return session.load(ses)
-end
-
----@param s Session
----@return Session | nil
-local function load_by_name(s)
-    local session = require("sessions.session")
-    local ses = session.get.by_name(s.name)
-    if not ses then
-        return nil
-    end
-    return session.load(ses)
-end
-
 ---@param s Session | nil
 ---@return boolean
 local function load_session(s)
@@ -32,12 +11,16 @@ local function load_session(s)
     ---@type Session | nil
     local ses
     if s then
-        ses = load_by_name(s)
+        ses = session.get.by_name(s.name)
     else
-        ses = load_cwd_session()
+        ses = current_session
     end
 
     if not ses then
+        return false
+    end
+
+    if not session.load(ses) then
         return false
     end
 
@@ -59,17 +42,15 @@ function M.load_session(session_name, before_load_opts, after_load_opts)
     after_load_opts = vim.tbl_deep_extend("force", opts.after_load, after_load_opts or {})
 
     local utils = require("sessions.utils")
+    local session = require("sessions.session")
 
     local modified = utils.get_modified_buffers()
     if #modified > 0 then
         if not before_load_opts.auto_save_files then
             utils.notify(
                 "You have unsaved changes in the following buffers(" .. #modified .. "):\n"
-                .. table.concat(modified, ", ") .. "\n",
-                vim.log.levels.WARN
-            )
-            utils.notify(
-                "Please save or close them before loading a session.",
+                .. table.concat(modified, ", ") .. "\n\n"
+                .. "Please save or close them before loading a session." ,
                 vim.log.levels.WARN
             )
             return false
@@ -81,7 +62,6 @@ function M.load_session(session_name, before_load_opts, after_load_opts)
         return load_session()
     end
 
-    local session = require("sessions.session")
     local ses = session.get.by_name(session_name)
     if not ses then
         utils.notify("Session doesn't exist: " .. session_name, vim.log.levels.ERROR)
@@ -96,16 +76,16 @@ function M.load_session(session_name, before_load_opts, after_load_opts)
         before_load_opts.custom()
     end
 
-    local ok = load_session(ses)
-    if not ok then
+    if not load_session(ses) then
         utils.notify("Can't load session: " .. ses.name, vim.log.levels.ERROR)
+        return false
     end
 
     if after_load_opts.custom then
         after_load_opts.custom()
     end
 
-    return ok
+    return true
 end
 
 return M
