@@ -1,8 +1,6 @@
-# sessions.nvim
+# sessionizer.nvim
 
 Plugin for managing sessions in Neovim, like tmux-sessionizer.
-
-https://github.com/user-attachments/assets/069c4d03-4140-4e02-8678-20eef0cbc923
 
 ## Features
 
@@ -20,15 +18,15 @@ https://github.com/user-attachments/assets/069c4d03-4140-4e02-8678-20eef0cbc923
 
 ```lua
 return {
-    "i0i-i0i/sessions.nvim",
+    "i0i-i0i/sessionizer.nvim",
     lazy = false,
 
---- OPTIONAL (only for 'Sessions list') ---
+--- OPTIONAL (only for 'Sess list') ---
     dependencies = {
         "nvim-telescope/telescope.nvim",
         "nvim-lua/plenary.nvim"
     },
---- OPTIONAL (only for 'Sessions list') ---
+--- OPTIONAL (only for 'Sess list') ---
 }
 ```
 
@@ -38,12 +36,12 @@ return {
 <summary>Native (with vim.pack)</summary>
 
 ```lua
---- OPTIONAL (only for 'Sessions list') ---
+--- OPTIONAL (only for 'Sess list') ---
 vim.pack.add({ "https://github.com/nvim-telescope/telescope.nvim" })
 vim.pack.add({ "https://github.com/nvim-lua/plenary.nvim" })
---- OPTIONAL (only for 'Sessions list') ---
+--- OPTIONAL (only for 'Sess list') ---
 
-vim.pack.add({ "https://github.com/i0i-i0i/sessions.nvim" })
+vim.pack.add({ "https://github.com/i0i-i0i/sessionizer.nvim" })
 ```
 
 </details>
@@ -53,7 +51,7 @@ vim.pack.add({ "https://github.com/i0i-i0i/sessions.nvim" })
 Default config:
 
 ```lua
-require("sessions").setup({
+require("sessionizer").setup({
     paths = {
         "path/to/your/projects/*",  -- will add all folders in this path to the sessions list
         "path/to/your/project",  -- will add this folder to the sessions list
@@ -80,18 +78,22 @@ require("sessions").setup({
 Example keybindings:
 
 ```lua
-vim.keymap.set("n", "<leader>ss", "<cmd>Sessions save<cr>", { desc = "Save session" })
-vim.keymap.set("n", "<leader>sc", "<cmd>Sessions pin<cr>", { desc = "Pin session" })
-vim.keymap.set("n", "<leader>sa", "<cmd>Sessions load<cr>", { desc = "Load session" })
-vim.keymap.set("n", "<leader>sl", "<cmd>Sessions list<cr>", { desc = "List sessions" }) -- only if you have telescope.nvim
-vim.keymap.set("n", "<leader><C-^>", "<cmd>Sessions last<cr>", { desc = "Load the previous session" })
+vim.keymap.set("n", "<leader>ss", "<cmd>Sess save<cr>", { desc = "Save session" })
+vim.keymap.set("n", "<leader>sc", "<cmd>Sess pin<cr>", { desc = "Pin session" })
+vim.keymap.set("n", "<leader>sa", "<cmd>Sess load<cr>", { desc = "Load session" })
+vim.keymap.set("n", "<leader>sl", "<cmd>Sess list<cr>", { desc = "List sessions" }) -- only if you have telescope.nvim
+vim.keymap.set("n", "<leader><C-^>", "<cmd>Sess last<cr>", { desc = "Load the previous session" })
 ```
 
 ## Telescope
 
 ```lua
 require("telescope").load_extension("sessionizer")
+```
 
+### Default config
+
+```lua
 local sessionizer_actions = require("telescope._extensions.sessionizer.actions")
 
 require("telescope").setup({
@@ -120,8 +122,8 @@ require("telescope").setup({
 ## API
 
 ```lua
-local commands = require("sessions.api").commands
-local get = require("sessions.api").get
+local commands = require("sessionizer.api").commands
+local get = require("sessionizer.api").get
 ```
 
 ### Commands
@@ -130,7 +132,7 @@ local get = require("sessions.api").get
 
 ```lua
 ---@return boolean
-commands.save()  -- or :Sessions save
+commands.save()  -- or :Sess save
 ```
 
 - Pin and give session a name.
@@ -141,7 +143,7 @@ commands.save()  -- or :Sessions save
 ---@param s Session | nil
 ---@param new_name string | nil
 ---@return nil
-commands.pin(<session>)  -- or :Sessions pin
+commands.pin(<session>)  -- or :Sess pin [<session_name>]
 ```
 
 - Load the session.
@@ -160,7 +162,7 @@ commands.pin(<session>)  -- or :Sessions pin
 ---@param before_load_opts BeforeLoadOpts | nil
 ---@param after_load_opts AfterLoadOpts | nil
 ---@return boolean
-commands.load(<session>, <before_load_opts>, <after_load_opts>)  -- or :Sessions load [<session_name>]
+commands.load(<session>, <before_load_opts>, <after_load_opts>)  -- or :Sess load [<session_name>]
 ```
 
 - Telescope list sessions
@@ -168,7 +170,7 @@ commands.load(<session>, <before_load_opts>, <after_load_opts>)  -- or :Sessions
 ```lua
 ---@param opts table | nil
 ---@return nil
-commands.list({ prompt_title = "Title", ... })  -- or :Sessions list
+commands.list({ prompt_title = "Title", ... })  -- or :Sess list
 ```
 
 - Delete session (if 'session_name' is not provided, delete current session)
@@ -177,7 +179,7 @@ commands.list({ prompt_title = "Title", ... })  -- or :Sessions list
 ```lua
 ---@param s Session | nil
 ---@return nil
-commands.delete(<session>)  -- or :Sessions delete [<session_name>]
+commands.delete(<session>)  -- or :Sess delete [<session_name>]
 ```
 
 - Load the previous session
@@ -194,7 +196,7 @@ commands.delete(<session>)  -- or :Sessions delete [<session_name>]
 ---@param load_opts BeforeLoadOpts | nil
 ---@param after_load_opts AfterLoadOpts | nil
 ---@return boolean
-commands.last(<before_load_opts>, <after_load_opts>)  -- or :Sessions last
+commands.last(<before_load_opts>, <after_load_opts>)  -- or :Sess last
 ```
 
 ### Get
@@ -232,7 +234,7 @@ get.by_path(<path>)
 ## Troubleshooting
 
 <details>
-<summary>If you set 'auto_save_files = true' and you use conform.nvim</summary>
+<summary>If you set 'before_load.auto_save_files = true' and you use conform.nvim</summary>
 
 ```lua
 require("conform").setup({
@@ -246,12 +248,12 @@ require("conform").setup({
 })
 ```
 
-Or just set `auto_save_files = false`
+Or just set `before_load.auto_save_files = false`
 
 </details>
 
 ## TODOs
 
+- [ ] add video
 - [ ] Remote sessions
-- [ ] Show current session
 - [ ] Make it better

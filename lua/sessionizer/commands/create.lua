@@ -3,11 +3,11 @@ local M = {}
 ---@param path string
 ---@return nil
 function M.create_session(path)
-    local session = require("sessions.session")
-    local utils = require("sessions.utils")
-    local logger = require("sessions.logger")
-    local commands = require("sessions.commands")
-    local state = require("sessions.state")
+    local session = require("sessionizer.session")
+    local utils = require("sessionizer.utils")
+    local logger = require("sessionizer.logger")
+    local commands = require("sessionizer.commands")
+    local state = require("sessionizer.state")
 
     local current_session = session.get.current()
     if current_session then

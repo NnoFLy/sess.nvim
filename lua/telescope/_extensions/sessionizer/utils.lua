@@ -1,4 +1,4 @@
-local commands_utils = require("sessions.commands._utils")
+local commands_utils = require("sessionizer.commands._utils")
 
 local M = {}
 
@@ -30,8 +30,8 @@ end
 
 ---@return Session[]
 function M.get_items()
-    local session = require("sessions.session")
-    local opts = require("sessions").get_opts()
+    local session = require("sessionizer.session")
+    local opts = require("sessionizer").get_opts()
 
     local all_sessions = session.get.all()
     local current_session = session.get.current()

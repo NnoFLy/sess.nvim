@@ -4,10 +4,10 @@ local M = {}
 ---@param after_load_opts AfterLoadOpts | nil
 ---@return boolean
 function M.open_last(before_load_opts, after_load_opts)
-    local session = require("sessions.session")
-    local commands = require("sessions.commands")
-    local previous_session = require("sessions.state").get_prev_session()
-    local logger = require("sessions.logger")
+    local session = require("sessionizer.session")
+    local commands = require("sessionizer.commands")
+    local previous_session = require("sessionizer.state").get_prev_session()
+    local logger = require("sessionizer.logger")
 
     if not previous_session or not previous_session.name then
         logger.error("No previous session")

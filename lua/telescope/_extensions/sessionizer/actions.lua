@@ -3,16 +3,16 @@ local M = {}
 local actions = require("telescope.actions")
 local action_state = require("telescope.actions.state")
 
-local commands = require("sessions.commands")
-local session = require("sessions.session")
-local logger = require("sessions.logger")
+local commands = require("sessionizer.commands")
+local session = require("sessionizer.session")
+local logger = require("sessionizer.logger")
 
 ---@param prompt_bufnr number
 ---@return nil
 function M.enter(prompt_bufnr)
     actions.close(prompt_bufnr)
 
-    local opts = require("sessions").get_opts()
+    local opts = require("sessionizer").get_opts()
 
     ---@type Session
     local selected_session = action_state.get_selected_entry().value

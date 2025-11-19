@@ -1,5 +1,5 @@
-local commands = require("sessions.commands")
-local session = require("sessions.session")
+local commands = require("sessionizer.commands")
+local session = require("sessionizer.session")
 
 local subcommands = {
     list = commands.list,
@@ -44,7 +44,7 @@ local subcommands = {
 
 local function command_exists(cmd)
     for _, value in pairs({ "load", "delete", "pin" }) do
-        if string.find(cmd, "Sessions%s+" .. value) then
+        if string.find(cmd, "Sess%s+" .. value) then
             return true
         end
     end
@@ -71,9 +71,9 @@ local function generate_completion()
     end
 end
 
-vim.api.nvim_create_user_command("Sessions", function(args)
+vim.api.nvim_create_user_command("Sess", function(args)
         local cmd = args.fargs[1]
-        local logger = require("sessions.logger")
+        local logger = require("sessionizer.logger")
         if subcommands[cmd] then
             subcommands[cmd](args.fargs[2])
         else

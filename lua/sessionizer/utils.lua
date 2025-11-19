@@ -62,8 +62,8 @@ function M.purge_term_buffers()
 end
 
 function M.setup_auto_load()
-    local commands = require("sessions.commands")
-    local session = require("sessions.session")
+    local commands = require("sessionizer.commands")
+    local session = require("sessionizer.session")
 
     vim.api.nvim_create_autocmd("VimEnter", {
         callback = function()
@@ -80,8 +80,8 @@ function M.setup_auto_load()
 end
 
 function M.setup_auto_save()
-    local commands = require("sessions.commands")
-    local opts = require("sessions").get_opts()
+    local commands = require("sessionizer.commands")
+    local opts = require("sessionizer").get_opts()
 
     vim.api.nvim_create_autocmd("VimLeavePre", {
         callback = function()

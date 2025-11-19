@@ -1,10 +1,10 @@
 local M = {}
 
-local logger = require("sessions.logger")
-local utils = require("sessions.utils")
-local commands_utils = require("sessions.commands._utils")
-local state = require("sessions.state")
-local session = require("sessions.session")
+local logger = require("sessionizer.logger")
+local utils = require("sessionizer.utils")
+local commands_utils = require("sessionizer.commands._utils")
+local state = require("sessionizer.state")
+local session = require("sessionizer.session")
 
 ---@param s Session | nil
 ---@return boolean
@@ -44,8 +44,8 @@ function M.load_session(s, before_load_opts, after_load_opts)
         return false
     end
 
-    local commands = require("sessions.commands")
-    local opts = require("sessions").get_opts()
+    local commands = require("sessionizer.commands")
+    local opts = require("sessionizer").get_opts()
 
     before_load_opts = vim.tbl_deep_extend("force", opts.before_load, before_load_opts or {})
     after_load_opts = vim.tbl_deep_extend("force", opts.after_load, after_load_opts or {})

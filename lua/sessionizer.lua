@@ -3,7 +3,7 @@ local M = {}
 local is_loaded = false
 
 ---@type Opts
-local opts = require("sessions.default_opts")
+local opts = require("sessionizer.default_opts")
 
 ---@param user_opts Opts
 function M.setup(user_opts)
@@ -11,9 +11,9 @@ function M.setup(user_opts)
         return
     end
 
-    local consts = require("sessions.consts")
-    local file = require("sessions.file")
-    local utils = require("sessions.utils")
+    local consts = require("sessionizer.consts")
+    local file = require("sessionizer.file")
+    local utils = require("sessionizer.utils")
 
     if user_opts ~= nil then
         opts = vim.tbl_deep_extend("force", opts, user_opts)

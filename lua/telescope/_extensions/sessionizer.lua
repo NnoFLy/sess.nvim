@@ -1,4 +1,4 @@
-local logger = require("sessions.logger")
+local logger = require("sessionizer.logger")
 
 local ok, telescope = pcall(require, "telescope")
 if not ok then

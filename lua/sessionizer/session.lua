@@ -7,9 +7,9 @@ local M = {
     get = {},
 }
 
-local file = require("sessions.file")
-local consts = require("sessions.consts")
-local logger = require("sessions.logger")
+local file = require("sessionizer.file")
+local consts = require("sessionizer.consts")
+local logger = require("sessionizer.logger")
 
 ---@param file_name string
 ---@return Session | nil

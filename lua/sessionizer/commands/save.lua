@@ -2,8 +2,8 @@ local M = {}
 
 ---@return boolean
 function M.save_session()
-    local session = require("sessions.session")
-    local logger = require("sessions.logger")
+    local session = require("sessionizer.session")
+    local logger = require("sessionizer.logger")
 
     local current_session = session.get.current()
     local session_name
