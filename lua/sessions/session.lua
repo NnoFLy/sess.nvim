@@ -12,6 +12,7 @@ local M = {
 
 local file = require("sessions.file")
 local consts = require("sessions.consts")
+local logger = require("sessions.logger")
 
 ---@param file_name string
 ---@return Session | nil
@@ -75,8 +76,12 @@ end
 ---@return Session | nil
 function M.load(session)
     local str = "silent source " .. consts.path .. to_file_name(session)
-    local ok, _ = pcall(function() vim.cmd(str) end)
+    local ok, msg = pcall(function() vim.cmd(str) end)
+    if not ok and msg and msg:gmatch("Can't re-enter normal mode from terminal mode") then
+        return session
+    end
     if not ok then
+        logger.error("Message: " .. msg)
         return nil
     end
     return session
