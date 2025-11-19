@@ -87,6 +87,36 @@ vim.keymap.set("n", "<leader>sl", "<cmd>Sessions list<cr>", { desc = "List sessi
 vim.keymap.set("n", "<leader><C-^>", "<cmd>Sessions last<cr>", { desc = "Load the previous session" })
 ```
 
+## Telescope
+
+```lua
+require("telescope").load_extension("sessionizer")
+
+local sessionizer_actions = require("telescope._extensions.sessionizer.actions")
+
+require("telescope").setup({
+    extensions = {
+        -- Defaults:
+        sessionizer = {
+            prompt_title = "🗃️ All sessions",
+            mappings = {
+                ["i"] = {
+                    ["<C-d>"] = sessionizer_actions.delete_session,
+                    ["<C-r>"] = sessionizer_actions.rename_session,
+                    ["<CR>"] = sessionizer_actions.enter,
+                },
+                ["n"] = {
+                    ["dd"] = sessionizer_actions.delete_session,
+                    ["rr"] = sessionizer_actions.rename_session,
+                    ["<CR>"] = sessionizer_actions.enter,
+                },
+            },
+        }
+    }
+})
+
+```
+
 ## API
 
 ```lua
@@ -136,9 +166,9 @@ commands.load(<session>, <before_load_opts>, <after_load_opts>)  -- or :Sessions
 - Telescope list sessions
 
 ```lua
----@param prompt_title string | nil
+---@param opts table | nil
 ---@return nil
-commands.list("Title")  -- or :Sessions list
+commands.list({ prompt_title = "Title", ... })  -- or :Sessions list
 ```
 
 - Delete session (if 'session_name' is not provided, delete current session)
@@ -197,23 +227,6 @@ get.by_name(<name>)
 ---@param path string
 ---@return Session | nil
 get.by_path(<path>)
-```
-
-## Telescope maps
-
-```lua
-{
-    ["n"] = {
-        ["dd"] = delete_session,
-        ["rr"] = rename_session,
-        ["<CR>"] = load_session,
-    },
-    ["i"] = {
-        ["<C-d>"] = delete_session,
-        ["<C-r>"] = rename_session,
-        ["<CR>"] = load_session,
-    }
-}
 ```
 
 ## Troubleshooting
