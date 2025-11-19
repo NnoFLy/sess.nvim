@@ -1,1 +1,1 @@
-return require("sessionizer.init")
+return require("sessionizer")

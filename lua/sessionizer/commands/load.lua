@@ -6,28 +6,16 @@ local commands_utils = require("sessionizer.commands._utils")
 local state = require("sessionizer.state")
 local session = require("sessionizer.session")
 
----@param s Session | nil
+---@param s Session
 ---@return boolean
 local function load_session(s)
-    local current_session = session.get.current()
+    local current_session = session.get_current()
 
-    ---@type Session | nil
-    local ses
-    if s then
-        ses = session.get.by_name(s.name)
-    else
-        ses = current_session
-    end
-
-    if not ses then
+    if not session.load(s) then
         return false
     end
 
-    if not session.load(ses) then
-        return false
-    end
-
-    if current_session and (ses.name ~= current_session.name) then
+    if current_session and (s.name ~= current_session.name) then
         state.set_prev_session(current_session)
     end
 
