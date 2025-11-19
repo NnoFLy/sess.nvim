@@ -246,7 +246,7 @@ require("conform").setup({
     format_after_save = { lsp_format = "fallback", timeout_ms = 500, async = true },
 
     -- use format_on_save instead
-    fromat_on_save = { lsp_format = "fallback", timeout_ms = 500 },
+    format_on_save = { timeout_ms = 500, lsp_format = "fallback" },
 })
 
 ```
@@ -257,4 +257,8 @@ Or just set `auto_save_files = false`
 
 ## TODOs
 
-1. Make it better
+1. Sort by last used
+2. Save before switching
+3. Remote sessions
+4. Show current session
+5. Make it better
