@@ -15,12 +15,22 @@ local utils = require("sessions.utils")
 local consts = require("sessions.consts")
 
 ---@param file_name string
----@return Session
+---@return Session | nil
 local function parse_file_name(file_name)
-    local parts = utils.split(file_name, consts.separators.main)
+    local parts = vim.split(file_name, consts.separators.main)
 
-    local path = table.concat(utils.split(parts[2], consts.separators.path), "/")
-    local name = table.concat(utils.split(parts[1], consts.separators.path), "/")
+    ---@type string
+    local p = parts[2]
+    if not p then
+        return nil
+    end
+    local path = p:gsub(consts.separators.path, "/")
+
+    local n = parts[1]
+    if not n then
+        return nil
+    end
+    local name = n:gsub(consts.separators.path, "/")
 
     return {
         name = name,
@@ -35,11 +45,11 @@ local function to_file_name(session)
     ---@type Session
     local local_session = {
         name = table.concat(
-            utils.split(session.name, "/"),
+            vim.split(session.name, "/"),
             consts.separators.path
         ),
         path = table.concat(
-            utils.split(session.path, "/"),
+            vim.split(session.path, "/"),
             consts.separators.path
         ),
         last_used = session.last_used,
@@ -98,7 +108,6 @@ function M.save(session)
     end
     return true
 end
-
 
 ---@param session Session
 ---@param new_session Session
@@ -164,7 +173,9 @@ function M.get.all(path)
     for file_name, _ in vim.fn.execute("!ls " .. path):gmatch(consts.prefix .. "[^\n]+") do
         local parsed = file_name:sub(#consts.prefix + 1)
         local session = parse_file_name(parsed)
-        table.insert(sessions, session)
+        if session then
+            table.insert(sessions, session)
+        end
     end
     return sessions
 end

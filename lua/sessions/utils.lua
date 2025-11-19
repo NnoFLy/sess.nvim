@@ -15,32 +15,6 @@ function M.notify(msg, level)
     vim.notify("Sessions.nvim: " .. msg, level)
 end
 
----@param value string
----@param arr string[]
----@return string | nil
-function M.contains(value, arr)
-    for _, v in ipairs(arr) do
-        if v == value then
-            return v
-        end
-    end
-end
-
----@param str string
----@returns string[]
-function M.split(str, sep)
-    local t = {}
-    local start = 1
-    local sep_start, sep_end = str:find(sep, start)
-    while sep_start do
-        table.insert(t, str:sub(start, sep_start - 1))
-        start = sep_end + 1
-        sep_start, sep_end = str:find(sep, start)
-    end
-    table.insert(t, str:sub(start))
-    return t
-end
-
 ---@param opts PurgeOpts | nil
 ---@return nil
 function M.purge_hidden_buffers(opts)
@@ -91,6 +65,35 @@ function M.purge_term_buffers()
             vim.api.nvim_buf_delete(buf, { force = true })
         end
     end
+end
+
+function M.setup_auto_load()
+    local commands = require("sessions.commands")
+
+    vim.api.nvim_create_autocmd("VimEnter", {
+        callback = function()
+            vim.schedule(function()
+                if vim.fn.argc() == 0 then
+                    commands.load()
+                end
+            end)
+        end,
+    })
+end
+
+function M.setup_auto_save()
+    local commands = require("sessions.commands")
+    local opts = require("sessions").get_opts()
+
+    vim.api.nvim_create_autocmd("VimLeavePre", {
+        callback = function()
+            if vim.list_contains(opts.exclude_filetypes, vim.bo.filetype) then
+                print("Skipping save")
+                return
+            end
+            commands.save()
+        end
+    })
 end
 
 return M
