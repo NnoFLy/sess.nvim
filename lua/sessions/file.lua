@@ -1,6 +1,6 @@
 local M = {}
 
-local utils = require("sessions.utils")
+local logger = require("sessions.logger")
 
 ---@class Files
 ---@field path string
@@ -11,7 +11,7 @@ local utils = require("sessions.utils")
 function M.create_dir(path)
     local ok, err_msg = os.execute("mkdir -p " .. path)
     if not ok then
-        utils.notify(err_msg or "Can't create dir", vim.log.levels.ERROR)
+        logger.error(err_msg or "Can't create dir")
     end
 end
 
@@ -32,7 +32,7 @@ end
 function M.rename(from, to)
     local ok, err_msg = os.rename(from, to)
     if not ok then
-        utils.notify(err_msg or "Can't rename file", vim.log.levels.ERROR)
+        logger.error(err_msg or "Can't rename file")
         return
     end
 end
@@ -42,7 +42,7 @@ end
 function M.delete(file)
     local ok, err_msg = os.remove(file)
     if not ok then
-        utils.notify(err_msg or "Can't delete file", vim.log.levels.ERROR)
+        logger.error(err_msg or "Can't delete file")
     end
 end
 

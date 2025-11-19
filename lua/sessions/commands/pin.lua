@@ -6,6 +6,7 @@ local M = {}
 function M.pin_session(old_name, new_name)
     local session = require("sessions.session")
     local utils = require("sessions.utils")
+    local logger = require("sessions.logger")
     local commands_utils = require("sessions.commands._utils")
 
     local old_session
@@ -16,7 +17,7 @@ function M.pin_session(old_name, new_name)
     end
 
     if not old_session then
-        utils.notify("No session found", vim.log.levels.ERROR)
+        logger.error("No session found")
         return
     end
 
@@ -26,20 +27,20 @@ function M.pin_session(old_name, new_name)
             commands_utils.get_last_folder_in_path(old_session.name or vim.fn.getcwd())
         )
         if not new_name then
-            utils.notify("Cancelled", vim.log.levels.INFO)
+            logger.info("Cancelled")
             return
         end
     end
 
     local new_session = session.new(new_name, old_session.path)
     if not old_session then
-        utils.notify("Session not found", vim.log.levels.ERROR)
+        logger.error("Session not found")
         return
     end
 
     session.rename(old_session, new_session)
 
-    utils.notify("Session pinned: " .. new_name, vim.log.levels.INFO)
+    logger.info("Session pinned: " .. new_name)
 end
 
 return M

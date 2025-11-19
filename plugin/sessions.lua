@@ -42,18 +42,18 @@ end
 
 vim.api.nvim_create_user_command("Sessions", function(args)
         local cmd = args.fargs[1]
-        local utils = require("sessions.utils")
+        local logger = require("sessions.logger")
         if subcommands[cmd] then
             subcommands[cmd](args.fargs[2])
         else
-            utils.notify("Unknown subcommand: " .. tostring(cmd), vim.log.levels.ERROR)
+            logger.error("Unknown subcommand: " .. tostring(cmd))
         end
     end,
     {
         nargs = "*",
         complete = function(arglead, cmdline, cursorpos)
             local consts = require("sessions.consts")
-            local completion_fn = generate_completion(consts.path, consts.marker)
+            local completion_fn = generate_completion(consts.path, "")
             return completion_fn(arglead, cmdline, cursorpos)
         end
     }

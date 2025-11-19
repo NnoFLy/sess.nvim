@@ -9,12 +9,6 @@
 
 local M = {}
 
----@param msg string
----@param level number
-function M.notify(msg, level)
-    vim.notify("Sessions.nvim: " .. msg, level)
-end
-
 ---@param opts PurgeOpts | nil
 ---@return nil
 function M.purge_hidden_buffers(opts)

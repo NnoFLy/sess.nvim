@@ -9,7 +9,7 @@ function M.delete_session(session_name)
     end
 
     local session = require("sessions.session")
-    local utils = require("sessions.utils")
+    local logger = require("sessions.logger")
 
     local ses
     if not session_name then
@@ -19,13 +19,13 @@ function M.delete_session(session_name)
     end
 
     if not ses then
-        utils.notify("Session not found", vim.log.levels.ERROR)
+        logger.error("Session not found")
         return
     end
 
     require("sessions.session").delete(ses)
 
-    utils.notify("Session deleted: " .. ses.name, vim.log.levels.INFO)
+    logger.info("Session deleted: " .. ses.name)
 end
 
 return M

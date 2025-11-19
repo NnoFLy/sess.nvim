@@ -11,7 +11,6 @@ local M = {
 }
 
 local file = require("sessions.file")
-local utils = require("sessions.utils")
 local consts = require("sessions.consts")
 
 ---@param file_name string

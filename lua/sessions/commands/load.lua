@@ -42,6 +42,7 @@ function M.load_session(session_name, before_load_opts, after_load_opts)
     after_load_opts = vim.tbl_deep_extend("force", opts.after_load, after_load_opts or {})
 
     local utils = require("sessions.utils")
+    local logger = require("sessions.logger")
     local commands_utils = require("sessions.commands._utils")
     local session = require("sessions.session")
     local commands = require("sessions.commands")
@@ -50,11 +51,10 @@ function M.load_session(session_name, before_load_opts, after_load_opts)
     local modified = commands_utils.get_modified_buffers()
     if #modified > 0 then
         if not before_load_opts.auto_save_files then
-            utils.notify(
+            logger.warn(
                 "You have unsaved changes in the following buffers(" .. #modified .. "):\n"
                 .. table.concat(modified, ", ") .. "\n\n"
-                .. "Please save or close them before loading a session.",
-                vim.log.levels.WARN
+                .. "Please save or close them before loading a session."
             )
             return false
         end
@@ -73,7 +73,7 @@ function M.load_session(session_name, before_load_opts, after_load_opts)
 
     local ses = session.get.by_name(session_name)
     if not ses then
-        utils.notify("Session doesn't exist: " .. session_name, vim.log.levels.ERROR)
+        logger.error("Session doesn't exist: " .. session_name)
         return false
     end
 
@@ -86,13 +86,15 @@ function M.load_session(session_name, before_load_opts, after_load_opts)
     end
 
     if not load_session(ses) then
-        utils.notify("Can't load session: " .. ses.name, vim.log.levels.ERROR)
+        logger.error("Can't load session: " .. ses.name)
         return false
     end
 
     if after_load_opts.custom then
         after_load_opts.custom()
     end
+
+    logger.info("Current session: " .. ses.name)
 
     return true
 end

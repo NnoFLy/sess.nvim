@@ -5,6 +5,7 @@ local M = {}
 function M.create_session(path)
     local session = require("sessions.session")
     local utils = require("sessions.utils")
+    local logger = require("sessions.logger")
     local commands = require("sessions.commands")
     local state = require("sessions.state")
 
@@ -18,7 +19,7 @@ function M.create_session(path)
 
     local ses = session.new()
     if not session.save(ses) then
-        utils.notify("Failed to create session", vim.log.levels.ERROR)
+        logger.error("Failed to create session")
         return
     end
 
@@ -26,7 +27,7 @@ function M.create_session(path)
 
     vim.cmd("e .")
 
-    utils.notify("Session created: " .. ses.name, vim.log.levels.INFO)
+    logger.info("Session created: " .. ses.name)
 end
 
 return M
