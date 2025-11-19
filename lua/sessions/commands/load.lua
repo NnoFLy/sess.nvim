@@ -31,11 +31,11 @@ local function load_session(s)
     return true
 end
 
----@param session_name string | nil
+---@param s Session | nil
 ---@param before_load_opts BeforeLoadOpts | nil
 ---@param after_load_opts AfterLoadOpts | nil
 ---@return boolean
-function M.load_session(session_name, before_load_opts, after_load_opts)
+function M.load_session(s, before_load_opts, after_load_opts)
     local opts = require("sessions").get_opts()
 
     before_load_opts = vim.tbl_deep_extend("force", opts.before_load, before_load_opts or {})
@@ -44,7 +44,6 @@ function M.load_session(session_name, before_load_opts, after_load_opts)
     local utils = require("sessions.utils")
     local logger = require("sessions.logger")
     local commands_utils = require("sessions.commands._utils")
-    local session = require("sessions.session")
     local commands = require("sessions.commands")
     local state = require("sessions.state")
 
@@ -67,14 +66,8 @@ function M.load_session(session_name, before_load_opts, after_load_opts)
 
     state.set_session_is_loaded(true)
 
-    if not session_name then
+    if not s or not s.name then
         return load_session()
-    end
-
-    local ses = session.get.by_name(session_name)
-    if not ses then
-        logger.error("Session doesn't exist: " .. session_name)
-        return false
     end
 
     if before_load_opts.auto_remove_buffers then
@@ -85,8 +78,8 @@ function M.load_session(session_name, before_load_opts, after_load_opts)
         before_load_opts.custom()
     end
 
-    if not load_session(ses) then
-        logger.error("Can't load session: " .. ses.name)
+    if not load_session(s) then
+        logger.error("Can't load session: " .. s.name)
         return false
     end
 
@@ -94,7 +87,7 @@ function M.load_session(session_name, before_load_opts, after_load_opts)
         after_load_opts.custom()
     end
 
-    logger.info("Current session: " .. ses.name)
+    logger.info("Current session: " .. s.name)
 
     return true
 end

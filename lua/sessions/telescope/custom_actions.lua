@@ -1,8 +1,6 @@
-
 local ok, _ = pcall(require, "telescope")
 if not ok then
-    local utils = require("sessions.utils")
-    utils.notify("You need to install telescope.nvim for this command", vim.log.levels.ERROR)
+    require("sessions.logger").error("You need to install telescope.nvim for this command")
     return
 end
 
@@ -18,20 +16,18 @@ local action_state = require("telescope.actions.state")
 function M.enter(prompt_bufnr)
     actions.close(prompt_bufnr)
 
-    local session = require("sessions.session")
     local commands = require("sessions.commands")
     local opts = require("sessions").get_opts()
 
-    local selected = action_state.get_selected_entry()
-    local session_name = selected[1]
+    ---@type Session
+    local selected_session = action_state.get_selected_entry().value
 
-    local ses = session.get.by_name(session_name)
-    if not ses then
-        commands.create(session_name)
+    if selected_session.last_used == 0 then
+        commands.create(selected_session.name)
         return
     end
 
-    commands.load(ses.name, opts.before_load, opts.after_load)
+    commands.load(selected_session, opts.before_load, opts.after_load)
 end
 
 ---@param prompt_bufnr number
@@ -41,16 +37,17 @@ function M.delete_session(prompt_bufnr)
 
     local session = require("sessions.session")
     local commands = require("sessions.commands")
+    local logger = require("sessions.logger")
 
-    local selected = action_state.get_selected_entry()
-    local session_name = selected[1]
+    ---@type Session
+    local selected_session = action_state.get_selected_entry().value
 
-    local ses = session.get.by_name(session_name)
-    if not ses then
-        return
+    if selected_session.last_used ~= 0 then
+        session.delete(selected_session)
+        logger.info("Session deleted: " .. selected_session.name)
+    else
+        logger.warn("Session was never used: " .. selected_session.name)
     end
-
-    session.delete(ses)
     commands.list()
 end
 
@@ -61,10 +58,10 @@ function M.rename_session(prompt_bufnr)
 
     local commands = require("sessions.commands")
 
-    local selected = action_state.get_selected_entry()
-    local session_name = selected[1]
+    ---@type Session
+    local selected_session = action_state.get_selected_entry().value
 
-    commands.pin(session_name)
+    commands.pin(selected_session)
 end
 
 ---@param prompt_title string

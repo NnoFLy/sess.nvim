@@ -1,31 +1,26 @@
 local M = {}
 
----@param session_name string | nil
+---@param s Session | nil
 ---@return nil
-function M.delete_session(session_name)
-    local user_input = vim.fn.input("Are you sure you want to delete session " .. session_name .. "? (y/N): ")
-    if user_input ~= "y" then
-        return
-    end
-
+function M.delete_session(s)
     local session = require("sessions.session")
     local logger = require("sessions.logger")
 
-    local ses
-    if not session_name then
-        ses = session.get.current()
-    else
-        ses = session.get.by_name(session_name)
-    end
+    s = s or session.get.current()
 
-    if not ses then
+    if not s then
         logger.error("Session not found")
         return
     end
 
-    require("sessions.session").delete(ses)
+    local user_input = vim.fn.input("Are you sure you want to delete session " .. s.name .. "? (y/N): ")
+    if user_input ~= "y" then
+        return
+    end
 
-    logger.info("Session deleted: " .. ses.name)
+    require("sessions.session").delete(s)
+
+    logger.info("Session deleted: " .. s.name)
 end
 
 return M

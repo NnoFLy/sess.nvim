@@ -1,5 +1,11 @@
 local M = {}
 
+---@param s Session
+---@return boolean
+function M.is_pinned(s)
+    return s.name ~= s.path
+end
+
 ---@param path string
 ---@return string
 function M.get_last_folder_in_path(path)

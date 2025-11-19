@@ -1,6 +1,6 @@
 local M = {}
 
----@param items string[]
+---@param items Session[]
 ---@param prompt_title string
 ---@return table
 function M.get_options(items, prompt_title)
@@ -13,6 +13,13 @@ function M.get_options(items, prompt_title)
         prompt_title = prompt_title,
         finder = finders.new_table({
             results = items,
+            entry_maker = function(entry)
+                return {
+                    value = entry,
+                    display = entry.name,
+                    ordinal = entry.name,
+                }
+            end,
         }),
         sorter = conf.generic_sorter(),
 
@@ -27,43 +34,53 @@ function M.get_options(items, prompt_title)
     }
 end
 
----@return string[]
+---@return Session[]
 function M.get_items()
     local session = require("sessions.session")
     local commands_utils = require("sessions.commands._utils")
     local opts = require("sessions").get_opts()
 
     local all_sessions = session.get.all()
+    local current_session = session.get.current()
 
+    ---@type Session[]
     local items = {}
-    local count = {}
+    ---@type string[]
+    local paths = {}
     for _, ses in ipairs(all_sessions) do
-        table.insert(items, ses)
-        if ses.name ~= ses.path then
-            count[ses.path] = (count[ses.path] or 0) + 1
-        end
-    end
-    for _, path in pairs(opts.paths) do
-        for _, dir in ipairs(commands_utils.get_user_dirs(path)) do
-            table.insert(items, { name = dir, path = dir })
-            count[dir] = (count[dir] or 0) + 1
-        end
-    end
-
-    local result = {}
-    local seen = {}
-    for _, value in ipairs(items) do
-        if seen[value.path] then
+        if current_session and current_session.path == ses.path then
             goto continue
         end
-        if count[value] == nil or count[value] == 1 then
-            table.insert(result, value.name)
-            seen[value.path] = true
-        end
+
+        table.insert(items, ses)
+        table.insert(paths, ses.path)
+
         ::continue::
     end
 
-    return result
+    table.sort(items, function(a, b)
+        local pa, pb = commands_utils.is_pinned(a), commands_utils.is_pinned(b)
+        if pa ~= pb then
+            return pa
+        end
+        if a.last_used ~= b.last_used then
+            return a.last_used > b.last_used
+        end
+        if a.name ~= b.name then
+            return a.name < b.name
+        end
+        return a.path < b.path
+    end)
+
+    for _, path in pairs(opts.paths) do
+        for _, dir in ipairs(commands_utils.get_user_dirs(path)) do
+            if not vim.list_contains(paths, dir) then
+                table.insert(items, { name = dir, path = dir, last_used = 0 })
+            end
+        end
+    end
+
+    return items
 end
 
 return M

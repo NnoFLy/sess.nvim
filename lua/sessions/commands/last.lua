@@ -20,7 +20,7 @@ function M.open_last(load_opts)
         return false
     end
 
-    if not commands.load(previous_session.name, load_opts) then
+    if not commands.load(previous_session, load_opts) then
         return false
     end
 
