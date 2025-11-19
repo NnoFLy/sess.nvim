@@ -14,12 +14,17 @@ function M.pin_session(s, new_name)
         return
     end
 
+    if s.last_used == 0 then
+        logger.warn("Session is not used")
+        return
+    end
+
     if not new_name then
         new_name = vim.fn.input(
             "Enter Session Name: ",
             commands_utils.get_last_folder_in_path(s.name or vim.fn.getcwd())
         )
-        if not new_name then
+        if not new_name or new_name == "" then
             return
         end
     end

@@ -43,9 +43,16 @@ function M.load_session(s, before_load_opts, after_load_opts)
 
     local utils = require("sessions.utils")
     local logger = require("sessions.logger")
+    local session = require("sessions.session")
     local commands_utils = require("sessions.commands._utils")
     local commands = require("sessions.commands")
     local state = require("sessions.state")
+
+    local current_session = session.get.current()
+    if s and current_session and current_session.name == s.name then
+        logger.info("This session is already loaded")
+        return true
+    end
 
     local modified = commands_utils.get_modified_buffers()
     if #modified > 0 then

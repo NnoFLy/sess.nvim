@@ -47,6 +47,11 @@ function M.get_items()
     local items = {}
     ---@type string[]
     local paths = {}
+
+    if current_session then
+        table.insert(paths, current_session.path)
+    end
+
     for _, ses in ipairs(all_sessions) do
         if current_session and current_session.path == ses.path then
             goto continue
@@ -71,6 +76,10 @@ function M.get_items()
         end
         return a.path < b.path
     end)
+
+    if current_session then
+        table.insert(items, 1, current_session)
+    end
 
     for _, path in pairs(opts.paths) do
         for _, dir in ipairs(commands_utils.get_user_dirs(path)) do

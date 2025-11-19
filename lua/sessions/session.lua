@@ -41,16 +41,22 @@ end
 ---@param session Session
 ---@return string
 local function to_file_name(session)
+    local path = table.concat(
+        vim.split(session.path, "/"),
+        consts.separators.path
+    )
+    local name = table.concat(
+        vim.split(session.name, "/"),
+        consts.separators.path
+    )
+    if not name or name == "" then
+        name = path
+    end
+
     ---@type Session
     local local_session = {
-        name = table.concat(
-            vim.split(session.name, "/"),
-            consts.separators.path
-        ),
-        path = table.concat(
-            vim.split(session.path, "/"),
-            consts.separators.path
-        ),
+        name = name,
+        path = path,
         last_used = session.last_used,
     }
 

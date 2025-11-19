@@ -82,7 +82,6 @@ function M.setup_auto_save()
     vim.api.nvim_create_autocmd("VimLeavePre", {
         callback = function()
             if vim.list_contains(opts.exclude_filetypes, vim.bo.filetype) then
-                print("Skipping save")
                 return
             end
             commands.save()
