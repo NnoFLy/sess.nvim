@@ -257,8 +257,7 @@ Or just set `auto_save_files = false`
 
 ## TODOs
 
-1. Sort by last used
-2. Save before switching
-3. Remote sessions
-4. Show current session
-5. Make it better
+- [ ] Sort by last used
+- [ ] Remote sessions
+- [ ] Show current session
+- [ ] Make it better
