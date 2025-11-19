@@ -1,8 +1,9 @@
 local M = {}
 
----@param load_opts BeforeLoadOpts | nil
+---@param before_load_opts BeforeLoadOpts | nil
+---@param after_load_opts AfterLoadOpts | nil
 ---@return boolean
-function M.open_last(load_opts)
+function M.open_last(before_load_opts, after_load_opts)
     local session = require("sessions.session")
     local commands = require("sessions.commands")
     local previous_session = require("sessions.state").get_prev_session()
@@ -20,7 +21,7 @@ function M.open_last(load_opts)
         return false
     end
 
-    if not commands.load(previous_session, load_opts) then
+    if not commands.load(previous_session, before_load_opts, after_load_opts) then
         return false
     end
 

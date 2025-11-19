@@ -3,9 +3,6 @@
 ---@field path string
 ---@field last_used number
 
----@class GetByOpts
----@field path string
-
 local M = {
     get = {},
 }
@@ -145,12 +142,9 @@ function M.delete(session)
 end
 
 ---@param name string
----@param opts GetByOpts | nil
 ---@return Session | nil
-function M.get.by_name(name, opts)
-    opts = opts or {}
-
-    local sessions = M.get.all(opts.path or consts.path)
+function M.get.by_name(name)
+    local sessions = M.get.all()
     for _, session in ipairs(sessions) do
         if session.name == name then
             return session
@@ -159,13 +153,10 @@ function M.get.by_name(name, opts)
     return nil
 end
 
----@param path string | nil
----@param opts GetByOpts | nil
+---@param path string
 ---@return Session | nil
-function M.get.by_path(path, opts)
-    opts = opts or {}
-
-    local sessions = M.get.all(opts.path or consts.path)
+function M.get.by_path(path)
+    local sessions = M.get.all()
     for _, session in ipairs(sessions) do
         if session.path == path then
             return session
@@ -174,13 +165,10 @@ function M.get.by_path(path, opts)
     return nil
 end
 
----@param path string | nil
 ---@return Session[]
-function M.get.all(path)
-    path = path or consts.path
-
+function M.get.all()
     local sessions = {}
-    for file_name, _ in vim.fn.execute("!ls " .. path):gmatch(consts.prefix .. "[^\n]+") do
+    for file_name, _ in vim.fn.execute("!ls " .. consts.path):gmatch(consts.prefix .. "[^\n]+") do
         local parsed = file_name:sub(#consts.prefix + 1)
         local session = parse_file_name(parsed)
         if session then
@@ -192,9 +180,7 @@ end
 
 ---@return Session | nil
 M.get.current = function()
-    local path = vim.fn.getcwd()
-    local session = M.get.by_path(path)
-    return session
+    return M.get.by_path(vim.fn.getcwd())
 end
 
 return M

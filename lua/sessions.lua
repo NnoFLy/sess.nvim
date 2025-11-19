@@ -25,7 +25,7 @@ function M.setup(user_opts)
         utils.setup_auto_load()
     end
 
-    if opts.smart_auto_save then
+    if opts.auto_save then
         utils.setup_auto_save()
     end
 
