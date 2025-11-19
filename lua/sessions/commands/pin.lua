@@ -1,34 +1,38 @@
 local M = {}
 
----@param session_name string | nil
+local session = require("sessions.session")
+local logger = require("sessions.logger")
+local commands_utils = require("sessions.commands._utils")
+
+---@param s Session
+---@param new_name string | nil
 ---@return nil
-function M.pin_session(session_name)
-    local session = require("sessions.commands").get.current()
-    if session and session.name then
-        require("sessions.commands").rename(session.name)
-        require("sessions.commands").save()
+function M.pin_session(s, new_name)
+    if not s then
+        logger.error("No session found")
         return
     end
 
-    local utils = require("sessions.utils")
-    local save_session = require("sessions.commands").save
-    local convert = require("sessions.convert")
-
-    if not session_name then
-        local prompt = utils.input("Enter Session Name", utils.get_last_folder_in_path(vim.fn.getcwd()))
-        if not prompt then
-            return
-        end
-        session_name = prompt.result
+    if s.last_used == 0 then
+        logger.warn("Session is not used")
+        return
     end
 
-    save_session()
+    if not new_name then
+        new_name = vim.fn.input(
+            "Enter Session Name: ",
+            commands_utils.get_last_folder_in_path(s.name or vim.fn.getcwd())
+        )
+        if not new_name or new_name == "" then
+            return
+        end
+    end
 
-    local file_path = convert.from_path(vim.fn.getcwd()) .. ".vim"
-    local file_name = convert.make_file_name(file_path, { name = session_name })
+    local new_session = session.new(new_name, s.path)
 
-    os.execute("touch " .. file_name)
-    utils.notify("Session pinned: " .. session_name, vim.log.levels.INFO)
+    session.rename(s, new_session)
+
+    logger.info("Session pinned: " .. new_name)
 end
 
 return M

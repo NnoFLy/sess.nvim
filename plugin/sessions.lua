@@ -1,17 +1,49 @@
 local commands = require("sessions.commands")
+local session = require("sessions.session")
 
 local subcommands = {
     list = commands.list,
     save = commands.save,
-    pin = commands.pin,
-    load = commands.load,
+    pin = function(session_name)
+        local s = nil
+        if session_name and session_name ~= "" then
+            s = session.get.by_name(session_name)
+        else
+            s = session.get.current()
+        end
+        if s then
+            commands.pin(s)
+        end
+    end,
+    load = function(session_name)
+        if session_name then
+            local s = nil
+            if session_name and session_name ~= "" then
+                s = session.get.by_name(session_name)
+            else
+                s = session.get.current()
+            end
+            if s then
+                commands.load(s)
+            end
+        end
+    end,
+    delete = function(session_name)
+        local s = nil
+        if session_name and session_name ~= "" then
+            s = session.get.by_name(session_name)
+        else
+            s = session.get.current()
+        end
+        if s then
+            commands.delete(s)
+        end
+    end,
     last = commands.last,
-    rename = commands.rename,
-    delete = commands.delete
 }
 
 local function command_exists(cmd)
-    for _, value in pairs({ "load", "rename", "delete" }) do
+    for _, value in pairs({ "load", "delete", "pin" }) do
         if string.find(cmd, "Sessions%s+" .. value) then
             return true
         end
@@ -19,16 +51,14 @@ local function command_exists(cmd)
     return false
 end
 
----@param path string
----@param marker string
 ---@return fun(arglead: string, cmdline: string, cursorpos: number): string[]
-local function generate_completion(path, marker)
+local function generate_completion()
     return function(arglead, cmdline, _)
         if command_exists(cmdline) then
-            local sessions = commands.get.all(path, marker)
+            local sessions = session.get.all()
             local sessions_names = {}
-            for _, session in pairs(sessions) do
-                table.insert(sessions_names, session.name)
+            for _, s in pairs(sessions) do
+                table.insert(sessions_names, s.name)
             end
             return vim.tbl_filter(function(name)
                 return vim.startswith(name, arglead)
@@ -43,18 +73,17 @@ end
 
 vim.api.nvim_create_user_command("Sessions", function(args)
         local cmd = args.fargs[1]
-        local utils = require("sessions.utils")
+        local logger = require("sessions.logger")
         if subcommands[cmd] then
             subcommands[cmd](args.fargs[2])
         else
-            utils.notify("Unknown subcommand: " .. tostring(cmd), vim.log.levels.ERROR)
+            logger.error("Unknown subcommand: " .. tostring(cmd))
         end
     end,
     {
         nargs = "*",
         complete = function(arglead, cmdline, cursorpos)
-            local consts = require("sessions.consts")
-            local completion_fn = generate_completion(consts.path, consts.marker)
+            local completion_fn = generate_completion()
             return completion_fn(arglead, cmdline, cursorpos)
         end
     }

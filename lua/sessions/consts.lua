@@ -1,7 +1,16 @@
+---@class Separators
+---@field main string
+---@field path string
+
 ---@class Consts
 ---@field path string
----@field marker string
+---@field prefix string
+---@field separators Separators
 return {
     path = vim.fn.stdpath("data") .. "/sessions/",
-    marker = "MARKER",
+    prefix = "SESSION",
+    separators = {
+        main = ":SP:",
+        path = ":SL:"
+    },
 }
