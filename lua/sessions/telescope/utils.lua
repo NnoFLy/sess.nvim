@@ -30,7 +30,7 @@ end
 ---@return string[]
 function M.get_items()
     local session = require("sessions.session")
-    local utils = require("sessions.utils")
+    local commands_utils = require("sessions.commands._utils")
     local opts = require("sessions").get_opts()
 
     local all_sessions = session.get.all()
@@ -44,7 +44,7 @@ function M.get_items()
         end
     end
     for _, path in pairs(opts.paths) do
-        for _, dir in ipairs(utils.get_dirs(path)) do
+        for _, dir in ipairs(commands_utils.get_user_dirs(path)) do
             table.insert(items, { name = dir, path = dir })
             count[dir] = (count[dir] or 0) + 1
         end

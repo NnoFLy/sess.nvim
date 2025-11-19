@@ -6,6 +6,7 @@ local M = {}
 function M.pin_session(old_name, new_name)
     local session = require("sessions.session")
     local utils = require("sessions.utils")
+    local commands_utils = require("sessions.commands._utils")
 
     local old_session
     if not old_name then
@@ -22,7 +23,7 @@ function M.pin_session(old_name, new_name)
     if not new_name then
         new_name = vim.fn.input(
             "Enter Session Name: ",
-            utils.get_last_folder_in_path(old_session.name or vim.fn.getcwd())
+            commands_utils.get_last_folder_in_path(old_session.name or vim.fn.getcwd())
         )
         if not new_name then
             utils.notify("Cancelled", vim.log.levels.INFO)

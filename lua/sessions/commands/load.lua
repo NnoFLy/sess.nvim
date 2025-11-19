@@ -42,11 +42,12 @@ function M.load_session(session_name, before_load_opts, after_load_opts)
     after_load_opts = vim.tbl_deep_extend("force", opts.after_load, after_load_opts or {})
 
     local utils = require("sessions.utils")
+    local commands_utils = require("sessions.commands._utils")
     local session = require("sessions.session")
     local commands = require("sessions.commands")
     local state = require("sessions.state")
 
-    local modified = utils.get_modified_buffers()
+    local modified = commands_utils.get_modified_buffers()
     if #modified > 0 then
         if not before_load_opts.auto_save_files then
             utils.notify(
