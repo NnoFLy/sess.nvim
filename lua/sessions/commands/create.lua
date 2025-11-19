@@ -6,12 +6,12 @@ function M.create_session(path)
     local session = require("sessions.session")
     local utils = require("sessions.utils")
     local commands = require("sessions.commands")
-    local set_prev_session = require("sessions.commands.last").set_prev_session
+    local state = require("sessions.state")
 
     local current_session = session.get.current()
     if current_session then
         commands.save()
-        set_prev_session(current_session)
+        state.set_prev_session(current_session)
     end
 
     vim.fn.chdir(path)

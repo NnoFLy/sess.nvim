@@ -4,7 +4,7 @@ local M = {}
 ---@return boolean
 local function load_session(s)
     local session = require("sessions.session")
-    local set_prev_session = require("sessions.commands.last").set_prev_session
+    local state = require("sessions.state")
 
     local current_session = session.get.current()
 
@@ -25,7 +25,7 @@ local function load_session(s)
     end
 
     if current_session and (ses.name ~= current_session.name) then
-        set_prev_session(current_session)
+        state.set_prev_session(current_session)
     end
 
     return true
@@ -43,6 +43,8 @@ function M.load_session(session_name, before_load_opts, after_load_opts)
 
     local utils = require("sessions.utils")
     local session = require("sessions.session")
+    local commands = require("sessions.commands")
+    local state = require("sessions.state")
 
     local modified = utils.get_modified_buffers()
     if #modified > 0 then
@@ -50,13 +52,19 @@ function M.load_session(session_name, before_load_opts, after_load_opts)
             utils.notify(
                 "You have unsaved changes in the following buffers(" .. #modified .. "):\n"
                 .. table.concat(modified, ", ") .. "\n\n"
-                .. "Please save or close them before loading a session." ,
+                .. "Please save or close them before loading a session.",
                 vim.log.levels.WARN
             )
             return false
         end
         vim.cmd("wall")
     end
+
+    if state.is_session_loaded() then
+        commands.save()
+    end
+
+    state.set_session_is_loaded(true)
 
     if not session_name then
         return load_session()
