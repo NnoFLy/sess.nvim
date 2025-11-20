@@ -142,7 +142,7 @@ commands.save()  -- or :Sess save
 ```lua
 ---@param s Session
 ---@param new_name string | nil
----@return nil
+---@return boolean
 commands.pin(<session>)  -- or :Sess pin [<session_name>]
 ```
 
@@ -170,7 +170,7 @@ commands.load(<session>, <before_load_opts>, <after_load_opts>)  -- or :Sess loa
 
 ```lua
 ---@param s Session
----@return nil
+---@return boolean
 commands.delete(<session>)  -- or :Sess delete [<session_name>]
 ```
 

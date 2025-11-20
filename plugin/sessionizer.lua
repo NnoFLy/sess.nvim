@@ -1,5 +1,6 @@
 local commands = require("sessionizer.commands")
 local session = require("sessionizer.session")
+local logger = require("sessionizer.logger")
 
 local subcommands = {
     list = commands.list,
@@ -9,11 +10,18 @@ local subcommands = {
         if session_name and session_name ~= "" then
             s = session.get.by_name(session_name)
         else
+            if not commands.save() then
+                logger.error("Cannot save session")
+                return
+            end
             s = session.get.current()
         end
-        if s then
-            commands.pin(s)
+        if not s then
+            logger.error("Cannot get session for pinning")
+            return
         end
+
+        commands.pin(s)
     end,
     load = function(session_name)
         if session_name then
@@ -23,9 +31,12 @@ local subcommands = {
             else
                 s = session.get.current()
             end
-            if s then
-                commands.load(s)
+            if not s then
+                logger.error("Cannot get session for loading")
+                return
             end
+
+            commands.load(s)
         end
     end,
     delete = function(session_name)
@@ -35,9 +46,13 @@ local subcommands = {
         else
             s = session.get.current()
         end
-        if s then
-            commands.delete(s)
+
+        if not s then
+            logger.error("Cannot get session for deletion")
+            return
         end
+
+        commands.delete(s)
     end,
     last = commands.last,
 }
