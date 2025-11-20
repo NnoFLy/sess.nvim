@@ -9,7 +9,7 @@ local session = require("sessionizer.session")
 ---@param s Session
 ---@return boolean
 local function load_session(s)
-    local current_session = session.get_current()
+    local current_session = session.get.current()
 
     if not session.load(s) then
         return false
