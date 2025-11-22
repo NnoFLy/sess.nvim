@@ -28,13 +28,14 @@ end
 
 ---@param from string
 ---@param to string
----@return nil
+---@return boolean
 function M.rename(from, to)
     local ok, err_msg = os.rename(from, to)
     if not ok then
         logger.error(err_msg or "Can't rename file")
-        return
+        return false
     end
+    return true
 end
 
 ---@param file string
