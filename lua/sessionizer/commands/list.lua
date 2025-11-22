@@ -1,7 +1,6 @@
-local M = {}
-
 ---@param opts table | nil
-function M.open_telescope_sessionizer(opts)
+---@return nil
+return function(opts)
     local logger = require("sessionizer.logger")
     local ok, _ = pcall(require, "telescope")
     if not ok then
@@ -12,5 +11,3 @@ function M.open_telescope_sessionizer(opts)
     local sessionizer = require("telescope._extensions.sessionizer.pickers")
     sessionizer(opts)
 end
-
-return M

@@ -1,11 +1,11 @@
 local M = {}
 
-M.save = require("sessionizer.commands.save").save_session
-M.pin = require("sessionizer.commands.pin").pin_session
-M.load = require("sessionizer.commands.load").load_session
-M.last = require("sessionizer.commands.last").open_last
-M.create = require("sessionizer.commands.create").create_session
-M.delete = require("sessionizer.commands.delete").delete_session
-M.list = require("sessionizer.commands.list").open_telescope_sessionizer
+M.save = require("sessionizer.commands.save")
+M.pin = require("sessionizer.commands.pin")
+M.load = require("sessionizer.commands.load")
+M.last = require("sessionizer.commands.last")
+M.create = require("sessionizer.commands.create")
+M.delete = require("sessionizer.commands.delete")
+M.list = require("sessionizer.commands.list")
 
 return M

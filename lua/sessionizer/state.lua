@@ -2,10 +2,10 @@ local M = {}
 
 ---@class State
 ---@field prev_session Session | nil
----@field session_is_loaded boolean
+---@field current_session Session | nil
 M._state = {
     prev_session = nil,
-    session_is_loaded = false,
+    current_session = nil,
 }
 
 ---@param session Session
@@ -19,15 +19,15 @@ function M.get_prev_session()
     return M._state.prev_session
 end
 
----@param session_is_loaded boolean
+---@param session Session | nil
 ---@return nil
-function M.set_session_is_loaded(session_is_loaded)
-    M._state.session_is_loaded = session_is_loaded
+function M.set_current_session(session)
+    M._state.current_session = session
 end
 
----@return boolean
-function M.is_session_loaded()
-    return M._state.session_is_loaded
+---@return Session | nil
+function M.get_current_session()
+    return M._state.current_session
 end
 
 return M

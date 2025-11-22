@@ -24,7 +24,7 @@ function M.purge_hidden_buffers(opts)
     local scratch = api.nvim_create_buf(false, true)
     api.nvim_set_current_buf(scratch)
 
-    for _, bufnr in ipairs(bufs) do
+    for _, bufnr in pairs(bufs) do
         if bufnr ~= scratch and api.nvim_buf_is_valid(bufnr) then
             if opts.wipe then
                 local ok = pcall(api.nvim_buf_delete, bufnr, { force = true })
@@ -53,7 +53,7 @@ end
 
 ---@return nil
 function M.purge_term_buffers()
-    for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    for _, buf in pairs(vim.api.nvim_list_bufs()) do
         local name = vim.api.nvim_buf_get_name(buf)
         if name:match("^term://") then
             vim.api.nvim_buf_delete(buf, { force = true })
@@ -69,7 +69,7 @@ function M.setup_auto_load()
         callback = function()
             vim.schedule(function()
                 if vim.fn.argc() == 0 then
-                    local s = session.get.current()
+                    local s = session.get.by_path(vim.fn.getcwd())
                     if s then
                         commands.load(s)
                     end
@@ -82,10 +82,14 @@ end
 function M.setup_auto_save()
     local commands = require("sessionizer.commands")
     local opts = require("sessionizer").get_opts()
+    local state = require("sessionizer.state")
 
     vim.api.nvim_create_autocmd("VimLeavePre", {
         callback = function()
             if vim.list_contains(opts.exclude_filetypes, vim.bo.filetype) then
+                return
+            end
+            if not state.get_current_session() then
                 return
             end
             commands.save()

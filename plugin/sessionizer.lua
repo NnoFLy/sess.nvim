@@ -1,6 +1,7 @@
 local commands = require("sessionizer.commands")
 local session = require("sessionizer.session")
 local logger = require("sessionizer.logger")
+local state = require("sessionizer.state")
 
 local subcommands = {
     list = commands.list,
@@ -14,7 +15,7 @@ local subcommands = {
                 logger.error("Cannot save session")
                 return
             end
-            s = session.get.current()
+            s = state.get_current_session()
         end
         if not s then
             logger.error("Cannot get session for pinning")
@@ -24,27 +25,25 @@ local subcommands = {
         commands.pin(s)
     end,
     load = function(session_name)
-        if session_name then
-            local s = nil
-            if session_name and session_name ~= "" then
-                s = session.get.by_name(session_name)
-            else
-                s = session.get.current()
-            end
-            if not s then
-                logger.error("Cannot get session for loading")
-                return
-            end
-
-            commands.load(s)
+        local s = nil
+        if session_name and session_name ~= "" then
+            s = session.get.by_name(session_name)
+        else
+            s = session.get.by_path(vim.fn.getcwd())
         end
+        if not s then
+            logger.error("Cannot get session for loading")
+            return
+        end
+
+        commands.load(s)
     end,
     delete = function(session_name)
         local s = nil
         if session_name and session_name ~= "" then
             s = session.get.by_name(session_name)
         else
-            s = session.get.current()
+            s = state.get_current_session()
         end
 
         if not s then

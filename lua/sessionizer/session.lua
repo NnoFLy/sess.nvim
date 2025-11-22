@@ -72,16 +72,21 @@ end
 ---@param session Session
 ---@return Session | nil
 function M.load(session)
-    local str = "silent source " .. consts.path .. to_file_name(session)
+    local s = M.get.by_name(session.name)
+    if not s then
+        return nil
+    end
+
+    local str = "silent source " .. consts.path .. to_file_name(s)
     local ok, msg = pcall(function() vim.cmd(str) end)
     if not ok and msg and msg:gmatch("Can't re-enter normal mode from terminal mode") then
-        return session
+        return s
     end
     if not ok then
         logger.error("Message: " .. msg)
         return nil
     end
-    return session
+    return s
 end
 
 ---@param name string | nil
@@ -102,11 +107,12 @@ end
 ---@param session Session
 ---@return boolean
 function M.save(session)
-    local exists_session = M.get.by_path(session.path)
-    if exists_session then
-        local file_path = to_file_name(exists_session)
+    local s = M.get.by_name(session.name)
+
+    if s then
+        local file_path = to_file_name(s)
         file.delete(consts.path .. file_path)
-        session.name = exists_session.name
+        session.name = s.name
     end
     local file_path = to_file_name(session)
     local ok = file.mksession(consts.path .. file_path)
@@ -120,7 +126,12 @@ end
 ---@param new_session Session
 ---@return boolean
 function M.rename(session, new_session)
-    local file_path = consts.path .. to_file_name(session)
+    local s = M.get.by_name(session.name)
+    if not s then
+        return false
+    end
+
+    local file_path = consts.path .. to_file_name(s)
     local new_name = consts.path .. to_file_name(new_session)
 
     local ok = file.rename(file_path, new_name)
@@ -133,7 +144,12 @@ end
 ---@param session Session
 ---@return boolean
 function M.delete(session)
-    local file_path = consts.path .. to_file_name(session)
+    local s = M.get.by_name(session.name)
+    if not s then
+        return false
+    end
+
+    local file_path = consts.path .. to_file_name(s)
     local ok = file.delete(file_path)
     if not ok then
         return false
@@ -145,7 +161,7 @@ end
 ---@return Session | nil
 function M.get.by_name(name)
     local sessions = M.get.all()
-    for _, session in ipairs(sessions) do
+    for _, session in pairs(sessions) do
         if session.name == name then
             return session
         end
@@ -157,7 +173,7 @@ end
 ---@return Session | nil
 function M.get.by_path(path)
     local sessions = M.get.all()
-    for _, session in ipairs(sessions) do
+    for _, session in pairs(sessions) do
         if session.path == path then
             return session
         end
@@ -176,11 +192,6 @@ function M.get.all()
         end
     end
     return sessions
-end
-
----@return Session | nil
-M.get.current = function()
-    return M.get.by_path(vim.fn.getcwd())
 end
 
 return M

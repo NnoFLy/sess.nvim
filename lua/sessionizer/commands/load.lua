@@ -1,5 +1,3 @@
-local M = {}
-
 local logger = require("sessionizer.logger")
 local utils = require("sessionizer.utils")
 local commands_utils = require("sessionizer.commands._utils")
@@ -7,26 +5,10 @@ local state = require("sessionizer.state")
 local session = require("sessionizer.session")
 
 ---@param s Session
----@return boolean
-local function load_session(s)
-    local current_session = session.get.current()
-
-    if not session.load(s) then
-        return false
-    end
-
-    if current_session and (s.name ~= current_session.name) then
-        state.set_prev_session(current_session)
-    end
-
-    return true
-end
-
----@param s Session
 ---@param before_load_opts BeforeLoadOpts | nil
 ---@param after_load_opts AfterLoadOpts | nil
 ---@return boolean
-function M.load_session(s, before_load_opts, after_load_opts)
+return function(s, before_load_opts, after_load_opts)
     if not s then
         logger.error("No session found")
         return false
@@ -51,10 +33,10 @@ function M.load_session(s, before_load_opts, after_load_opts)
         vim.cmd("wall")
     end
 
-    if state.is_session_loaded() then
+    local current_session = state.get_current_session()
+    if current_session then
         commands.save()
     end
-    state.set_session_is_loaded(true)
 
     if before_load_opts.auto_remove_buffers then
         utils.purge_hidden_buffers()
@@ -64,10 +46,21 @@ function M.load_session(s, before_load_opts, after_load_opts)
         before_load_opts.custom()
     end
 
-    if not load_session(s) then
+    if current_session and (s.name == current_session.name) then
+        logger.warn("Session is different from current session")
+        return true
+    end
+
+    local new_current_session = session.load(s)
+    if not new_current_session then
         logger.error("Can't load session: " .. s.name)
         return false
     end
+
+    if current_session then
+        state.set_prev_session(current_session)
+    end
+    state.set_current_session(new_current_session)
 
     if after_load_opts.custom then
         after_load_opts.custom()
@@ -77,5 +70,3 @@ function M.load_session(s, before_load_opts, after_load_opts)
 
     return true
 end
-
-return M

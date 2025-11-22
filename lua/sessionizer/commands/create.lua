@@ -1,33 +1,33 @@
-local M = {}
-
 ---@param path string
 ---@return nil
-function M.create_session(path)
-    local session = require("sessionizer.session")
+return function(path)
     local utils = require("sessionizer.utils")
     local logger = require("sessionizer.logger")
     local commands = require("sessionizer.commands")
     local state = require("sessionizer.state")
+    local session = require("sessionizer.session")
 
-    local current_session = session.get.current()
+    local current_session = state.get_current_session()
     if current_session then
         commands.save()
-        state.set_prev_session(current_session)
     end
 
     vim.fn.chdir(path)
-
-    local ses = session.new()
-    if not session.save(ses) then
-        logger.error("Failed to create session")
-        return
-    end
 
     utils.purge_hidden_buffers()
 
     vim.cmd("e .")
 
-    logger.info("Session created: " .. ses.name)
-end
+    local s = session.new()
+    if not session.save(s) then
+        logger.error("Failed to create session")
+        return
+    end
 
-return M
+    if current_session then
+        state.set_prev_session(current_session)
+    end
+    state.set_current_session(s)
+
+    logger.info("Session created: " .. s.name)
+end

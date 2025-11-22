@@ -1,10 +1,8 @@
-local M = {}
-
 local logger = require("sessionizer.logger")
 
 ---@param s Session
 ---@return boolean
-function M.delete_session(s)
+return function(s)
     if not s then
         logger.error("No session found")
         return false
@@ -21,5 +19,3 @@ function M.delete_session(s)
 
     return ok
 end
-
-return M

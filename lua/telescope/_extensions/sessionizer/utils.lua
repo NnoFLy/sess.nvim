@@ -31,10 +31,11 @@ end
 ---@return Session[]
 function M.get_items()
     local session = require("sessionizer.session")
+    local state = require("sessionizer.state")
     local opts = require("sessionizer").get_opts()
 
     local all_sessions = session.get.all()
-    local current_session = session.get.current()
+    local current_session = state.get_current_session()
 
     ---@type Session[]
     local items = {}
