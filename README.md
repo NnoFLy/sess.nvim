@@ -208,6 +208,13 @@ commands.list({ prompt_title = "Title", ... })  -- or :Sess list
 get.current()
 ```
 
+- Get previous session
+
+```lua
+---@return Session | nil
+get.prev()
+```
+
 - Get all sessions
 
 ```lua
