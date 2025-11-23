@@ -43,7 +43,9 @@ return function(s, new_name)
         return false
     end
 
-    state.set_current_session(new_session)
+    if new_session.path == vim.fn.getcwd() then
+        state.set_current_session(new_session)
+    end
 
     logger.info("Session pinned: " .. new_name)
 

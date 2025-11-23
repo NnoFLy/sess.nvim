@@ -34,8 +34,11 @@ function M.delete_session(prompt_bufnr)
     local selected_session = action_state.get_selected_entry().value
 
     if selected_session.last_used ~= 0 then
-        session.delete(selected_session)
-        logger.info("Session deleted: " .. selected_session.name)
+        if not commands.delete(selected_session) then
+            logger.error("Failed to delete session")
+        else
+            logger.info("Session deleted: " .. selected_session.name)
+        end
     else
         logger.warn("Session was never used: " .. selected_session.name)
     end

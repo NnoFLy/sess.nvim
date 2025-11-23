@@ -7,12 +7,14 @@ local logger = require("sessionizer.logger")
 ---@field marked_path string | nil
 
 ---@param path string
----@return nil
+---@return boolean
 function M.create_dir(path)
     local ok, err_msg = os.execute("mkdir -p " .. path)
     if not ok then
         logger.error(err_msg or "Can't create dir")
+        return false
     end
+    return true
 end
 
 ---@param path string
@@ -39,12 +41,14 @@ function M.rename(from, to)
 end
 
 ---@param file string
----@return nil
+---@return boolean
 function M.delete(file)
     local ok, err_msg = os.remove(file)
     if not ok then
         logger.error(err_msg or "Can't delete file")
+        return false
     end
+    return true
 end
 
 return M

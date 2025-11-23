@@ -72,7 +72,7 @@ end
 ---@param session sessionizer.Session
 ---@return sessionizer.Session | nil
 function M.load(session)
-    local s = M.get.by_name(session.name)
+    local s = M.get.by_path(session.path)
     if not s then
         return nil
     end
@@ -107,7 +107,7 @@ end
 ---@param session sessionizer.Session
 ---@return boolean
 function M.save(session)
-    local s = M.get.by_name(session.name)
+    local s = M.get.by_path(session.path)
 
     if s then
         local file_path = to_file_name(s)
@@ -126,15 +126,15 @@ end
 ---@param new_session sessionizer.Session
 ---@return boolean
 function M.rename(session, new_session)
-    local s = M.get.by_name(session.name)
+    local s = M.get.by_path(session.path)
     if not s then
         return false
     end
 
-    local file_path = consts.path .. to_file_name(s)
+    local old_name = consts.path .. to_file_name(s)
     local new_name = consts.path .. to_file_name(new_session)
 
-    local ok = file.rename(file_path, new_name)
+    local ok = file.rename(old_name, new_name)
     if not ok then
         return false
     end
@@ -144,7 +144,7 @@ end
 ---@param session sessionizer.Session
 ---@return boolean
 function M.delete(session)
-    local s = M.get.by_name(session.name)
+    local s = M.get.by_path(session.path)
     if not s then
         return false
     end
