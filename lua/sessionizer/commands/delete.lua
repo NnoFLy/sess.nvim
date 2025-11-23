@@ -1,4 +1,5 @@
 local logger = require("sessionizer.logger")
+local state = require("sessionizer.state")
 
 ---@param s sessionizer.Session
 ---@return boolean
@@ -15,7 +16,16 @@ return function(s)
 
     local ok = require("sessionizer.session").delete(s)
 
+    if not ok then
+        logger.error("Failed to delete session")
+        return false
+    end
+
+    if s.path == state.get_current_session().path then
+        state.set_current_session(nil)
+    end
+
     logger.info("Session deleted: " .. s.name)
 
-    return ok
+    return true
 end
