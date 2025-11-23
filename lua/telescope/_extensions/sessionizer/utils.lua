@@ -2,8 +2,8 @@ local commands_utils = require("sessionizer.commands._utils")
 
 local M = {}
 
----@param a Session
----@param b Session
+---@param a sessionizer.Session
+---@param b sessionizer.Session
 ---@return boolean
 local function compare_sessions(a, b)
     local pa, pb = commands_utils.is_pinned(a), commands_utils.is_pinned(b)
@@ -28,7 +28,7 @@ local function compare_sessions(a, b)
     return a.path < b.path
 end
 
----@return Session[]
+---@return sessionizer.Session[]
 function M.get_items()
     local session = require("sessionizer.session")
     local state = require("sessionizer.state")
@@ -37,7 +37,7 @@ function M.get_items()
     local all_sessions = session.get.all()
     local current_session = state.get_current_session()
 
-    ---@type Session[]
+    ---@type sessionizer.Session[]
     local items = {}
     ---@type string[]
     local paths = {}

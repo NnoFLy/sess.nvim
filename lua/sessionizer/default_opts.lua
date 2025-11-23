@@ -1,19 +1,19 @@
----@class BeforeLoadOpts
+---@class sessionizer.BeforeLoadOpts
 ---@field auto_save_files boolean
 ---@field auto_remove_buffers boolean
 ---@field custom function
 
----@class AfterLoadOpts
+---@class sessionizer.AfterLoadOpts
 ---@field custom function
 
----@class Opts
+---@class sessionizer.Opts
 ---@field paths string[]
 ---@field smart_auto_load boolean
 ---@field auto_save boolean
 ---@field exclude_filetypes string[]
 ---@field auto_save_files boolean
----@field before_load BeforeLoadOpts
----@field after_load AfterLoadOpts
+---@field before_load sessionizer.BeforeLoadOpts
+---@field after_load sessionizer.AfterLoadOpts
 return {
     paths = {},
     smart_auto_load = true,

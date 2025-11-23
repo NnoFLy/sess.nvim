@@ -1,5 +1,5 @@
----@param before_load_opts BeforeLoadOpts | nil
----@param after_load_opts AfterLoadOpts | nil
+---@param before_load_opts sessionizer.BeforeLoadOpts | nil
+---@param after_load_opts sessionizer.AfterLoadOpts | nil
 ---@return boolean
 return function(before_load_opts, after_load_opts)
     local commands = require("sessionizer.commands")

@@ -1,6 +1,6 @@
 local logger = require("sessionizer.logger")
 
----@param s Session
+---@param s sessionizer.Session
 ---@return boolean
 return function(s)
     if not s then

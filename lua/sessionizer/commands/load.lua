@@ -4,9 +4,9 @@ local commands_utils = require("sessionizer.commands._utils")
 local state = require("sessionizer.state")
 local session = require("sessionizer.session")
 
----@param s Session
----@param before_load_opts BeforeLoadOpts | nil
----@param after_load_opts AfterLoadOpts | nil
+---@param s sessionizer.Session
+---@param before_load_opts sessionizer.BeforeLoadOpts | nil
+---@param after_load_opts sessionizer.AfterLoadOpts | nil
 ---@return boolean
 return function(s, before_load_opts, after_load_opts)
     if not s then

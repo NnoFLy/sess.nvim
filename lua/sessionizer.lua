@@ -2,10 +2,10 @@ local M = {}
 
 local is_loaded = false
 
----@type Opts
+---@type sessionizer.Opts
 local opts = require("sessionizer.default_opts")
 
----@param user_opts Opts
+---@param user_opts sessionizer.Opts
 function M.setup(user_opts)
     if is_loaded then
         return

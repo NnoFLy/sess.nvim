@@ -3,7 +3,7 @@ local logger = require("sessionizer.logger")
 local commands_utils = require("sessionizer.commands._utils")
 local state = require("sessionizer.state")
 
----@param s Session
+---@param s sessionizer.Session
 ---@param new_name string | nil
 ---@return boolean
 return function(s, new_name)

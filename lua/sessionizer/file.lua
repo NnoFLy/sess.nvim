@@ -2,7 +2,7 @@ local M = {}
 
 local logger = require("sessionizer.logger")
 
----@class Files
+---@class sessionizer.Files
 ---@field path string
 ---@field marked_path string | nil
 

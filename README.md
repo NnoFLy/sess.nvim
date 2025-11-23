@@ -140,7 +140,7 @@ commands.save()  -- or :Sess save
     - If 'new_name' is not provided, you will be prompted to enter a new name.
 
 ```lua
----@param s Session
+---@param s sessionizer.Session
 ---@param new_name string | nil
 ---@return boolean
 commands.pin(<session>)  -- or :Sess pin [<session_name>]
@@ -150,15 +150,15 @@ commands.pin(<session>)  -- or :Sess pin [<session_name>]
     - If 's' is not provided, load the session bases on cwd.
 
 ```lua
----@class BeforeLoadOpts
+---@class sessionizer.BeforeLoadOpts
 ---@field auto_save_files boolean | nil
 ---@field auto_remove_buffers boolean | nil
 ---@field custom function | nil
 
----@class AfterLoadOpts
+---@class sessionizer.AfterLoadOpts
 ---@field custom function | nil
 
----@param s Session
+---@param s sessionizer.Session
 ---@param before_load_opts BeforeLoadOpts | nil
 ---@param after_load_opts AfterLoadOpts | nil
 ---@return boolean
@@ -169,7 +169,7 @@ commands.load(<session>, <before_load_opts>, <after_load_opts>)  -- or :Sess loa
     - If 's' is not provided, delete current session.
 
 ```lua
----@param s Session
+---@param s sessionizer.Session
 ---@return boolean
 commands.delete(<session>)  -- or :Sess delete [<session_name>]
 ```
@@ -177,12 +177,12 @@ commands.delete(<session>)  -- or :Sess delete [<session_name>]
 - Load the previous session
 
 ```lua
----@class BeforeLoadOpts
+---@class sessionizer.BeforeLoadOpts
 ---@field auto_save_files boolean | nil
 ---@field auto_remove_buffers boolean | nil
 ---@field custom function | nil
 
----@class AfterLoadOpts
+---@class sessionizer.AfterLoadOpts
 ---@field custom function | nil
 
 ---@param load_opts BeforeLoadOpts | nil
@@ -204,21 +204,21 @@ commands.list({ prompt_title = "Title", ... })  -- or :Sess list
 - Get current session
 
 ```lua
----@return Session
+---@return sessionizer.Session
 get.current()
 ```
 
 - Get previous session
 
 ```lua
----@return Session | nil
+---@return sessionizer.Session | nil
 get.prev()
 ```
 
 - Get all sessions
 
 ```lua
----@return Session[]
+---@return sessionizer.Session[]
 get.all()
 ```
 
@@ -226,7 +226,7 @@ get.all()
 
 ```lua
 ---@param name string
----@return Session | nil
+---@return sessionizer.Session | nil
 get.by_name(<name>)
 ```
 
@@ -234,7 +234,7 @@ get.by_name(<name>)
 
 ```lua
 ---@param path string
----@return Session | nil
+---@return sessionizer.Session | nil
 get.by_path(<path>)
 ```
 

@@ -14,7 +14,7 @@ function M.enter(prompt_bufnr)
 
     local opts = require("sessionizer").get_opts()
 
-    ---@type Session
+    ---@type sessionizer.Session
     local selected_session = action_state.get_selected_entry().value
 
     if selected_session.last_used == 0 then
@@ -30,7 +30,7 @@ end
 function M.delete_session(prompt_bufnr)
     actions.close(prompt_bufnr)
 
-    ---@type Session
+    ---@type sessionizer.Session
     local selected_session = action_state.get_selected_entry().value
 
     if selected_session.last_used ~= 0 then
@@ -47,7 +47,7 @@ end
 function M.rename_session(prompt_bufnr)
     actions.close(prompt_bufnr)
 
-    ---@type Session
+    ---@type sessionizer.Session
     local selected_session = action_state.get_selected_entry().value
 
     commands.pin(selected_session)

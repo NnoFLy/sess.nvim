@@ -1,4 +1,4 @@
----@class Session
+---@class sessionizer.Session
 ---@field name string
 ---@field path string
 ---@field last_used number
@@ -12,7 +12,7 @@ local consts = require("sessionizer.consts")
 local logger = require("sessionizer.logger")
 
 ---@param file_name string
----@return Session | nil
+---@return sessionizer.Session | nil
 local function parse_file_name(file_name)
     local parts = vim.split(file_name, consts.separators.main)
 
@@ -36,7 +36,7 @@ local function parse_file_name(file_name)
     }
 end
 
----@param session Session
+---@param session sessionizer.Session
 ---@return string
 local function to_file_name(session)
     local path = table.concat(
@@ -51,7 +51,7 @@ local function to_file_name(session)
         name = path
     end
 
-    ---@type Session
+    ---@type sessionizer.Session
     local local_session = {
         name = name,
         path = path,
@@ -69,8 +69,8 @@ local function to_file_name(session)
     return session_str
 end
 
----@param session Session
----@return Session | nil
+---@param session sessionizer.Session
+---@return sessionizer.Session | nil
 function M.load(session)
     local s = M.get.by_name(session.name)
     if not s then
@@ -91,11 +91,11 @@ end
 
 ---@param name string | nil
 ---@param cwd string | nil
----@return Session
+---@return sessionizer.Session
 function M.new(name, cwd)
     cwd = cwd or vim.fn.getcwd()
 
-    ---@type Session
+    ---@type sessionizer.Session
     local session = {
         name = name or cwd,
         path = cwd,
@@ -104,7 +104,7 @@ function M.new(name, cwd)
     return session
 end
 
----@param session Session
+---@param session sessionizer.Session
 ---@return boolean
 function M.save(session)
     local s = M.get.by_name(session.name)
@@ -122,8 +122,8 @@ function M.save(session)
     return true
 end
 
----@param session Session
----@param new_session Session
+---@param session sessionizer.Session
+---@param new_session sessionizer.Session
 ---@return boolean
 function M.rename(session, new_session)
     local s = M.get.by_name(session.name)
@@ -141,7 +141,7 @@ function M.rename(session, new_session)
     return true
 end
 
----@param session Session
+---@param session sessionizer.Session
 ---@return boolean
 function M.delete(session)
     local s = M.get.by_name(session.name)
@@ -158,7 +158,7 @@ function M.delete(session)
 end
 
 ---@param name string
----@return Session | nil
+---@return sessionizer.Session | nil
 function M.get.by_name(name)
     local sessions = M.get.all()
     for _, session in pairs(sessions) do
@@ -170,7 +170,7 @@ function M.get.by_name(name)
 end
 
 ---@param path string
----@return Session | nil
+---@return sessionizer.Session | nil
 function M.get.by_path(path)
     local sessions = M.get.all()
     for _, session in pairs(sessions) do
@@ -181,7 +181,7 @@ function M.get.by_path(path)
     return nil
 end
 
----@return Session[]
+---@return sessionizer.Session[]
 function M.get.all()
     local sessions = {}
     for file_name, _ in vim.fn.execute("!ls " .. consts.path):gmatch(consts.prefix .. "[^\n]+") do

@@ -1,15 +1,15 @@
----@class Input
+---@class sessionizer.Input
 ---@field user_input string
 ---@field result string
 
----@class PurgeOpts
+---@class sessionizer.PurgeOpts
 ---@field force boolean
 ---@field wipe boolean
 ---@field keep_scratch boolean
 
 local M = {}
 
----@param opts PurgeOpts | nil
+---@param opts sessionizer.PurgeOpts | nil
 ---@return nil
 function M.purge_hidden_buffers(opts)
     local default_opts = {
