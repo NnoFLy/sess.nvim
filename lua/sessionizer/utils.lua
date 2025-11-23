@@ -68,11 +68,16 @@ function M.setup_auto_load()
     vim.api.nvim_create_autocmd("VimEnter", {
         callback = function()
             vim.schedule(function()
-                if vim.fn.argc() == 0 then
-                    local s = session.get.by_path(vim.fn.getcwd())
-                    if s then
-                        commands.load(s)
-                    end
+                if vim.fn.argc() ~= 0 then
+                    return
+                end
+
+                local cwd = vim.fn.getcwd()
+                local s = session.get.by_path(cwd)
+                if s then
+                    commands.load(s)
+                else
+                    commands.create(cwd)
                 end
             end)
         end,
