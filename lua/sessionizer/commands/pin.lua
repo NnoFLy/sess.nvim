@@ -8,7 +8,7 @@ local state = require("sessionizer.state")
 ---@return boolean
 return function(s, new_name)
     if not s then
-        logger.error("No session found")
+        logger.error("Session is not provided")
         return false
     end
 

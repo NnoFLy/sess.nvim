@@ -10,7 +10,12 @@ local session = require("sessionizer.session")
 ---@return boolean
 return function(s, before_load_opts, after_load_opts)
     if not s then
-        logger.error("No session found")
+        logger.error("Session is not provided")
+        return false
+    end
+
+    if not session.get.by_path(s.path) then
+        logger.error("Session was not found: " .. s.name)
         return false
     end
 

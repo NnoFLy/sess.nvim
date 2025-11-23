@@ -4,7 +4,6 @@ local actions = require("telescope.actions")
 local action_state = require("telescope.actions.state")
 
 local commands = require("sessionizer.commands")
-local session = require("sessionizer.session")
 local logger = require("sessionizer.logger")
 
 ---@param prompt_bufnr number
@@ -33,15 +32,10 @@ function M.delete_session(prompt_bufnr)
     ---@type sessionizer.Session
     local selected_session = action_state.get_selected_entry().value
 
-    if selected_session.last_used ~= 0 then
-        if not commands.delete(selected_session) then
-            logger.error("Failed to delete session")
-        else
-            logger.info("Session deleted: " .. selected_session.name)
-        end
-    else
-        logger.warn("Session was never used: " .. selected_session.name)
-    end
+    commands.delete(selected_session)
+
+    logger.error("Failed to delete session")
+
     commands.list()
 end
 
