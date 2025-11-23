@@ -61,6 +61,7 @@ require("sessionizer").setup({
                              -- then session won't be loaded,
                              -- but if you run neovim like 'nvim', then it will be loaded
     auto_save = true,  -- auto save session on exit from neovim
+                       -- works only if session is loaded
     exclude_filetypes = { "gitcommit" },  -- exclude from auto save
     before_load = {
         auto_save_files = false,  -- auto save files before switch to another session
