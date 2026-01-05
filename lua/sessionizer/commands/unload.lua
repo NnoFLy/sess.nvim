@@ -10,5 +10,6 @@ return function()
     end
     state.set_prev_session(current_session)
     state.set_current_session(nil)
+    vim.g.sessionizer_current_session = nil
     logger.info("Session " .. current_session.name .. " unloaded")
 end

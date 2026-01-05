@@ -65,6 +65,7 @@ return function(s, before_load_opts, after_load_opts)
         state.set_prev_session(current_session)
     end
     state.set_current_session(new_current_session)
+    vim.g.sessionizer_current_session = new_current_session.name
 
     if after_load_opts.custom then
         after_load_opts.custom()

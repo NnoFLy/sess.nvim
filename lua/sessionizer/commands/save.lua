@@ -18,6 +18,7 @@ return function()
 
     if state.get_current_session() == nil then
         state.set_current_session(s)
+        vim.g.sessionizer_current_session = s.name
     end
 
     return true

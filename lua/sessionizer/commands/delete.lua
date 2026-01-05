@@ -33,6 +33,7 @@ return function(s)
 
     if s.path == state.get_current_session().path then
         state.set_current_session(nil)
+        vim.g.sessionizer_current_session = nil
     end
 
     logger.info("Session deleted: " .. s.name)

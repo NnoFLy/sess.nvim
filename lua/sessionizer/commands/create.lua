@@ -36,6 +36,7 @@ return function(path)
         state.set_prev_session(current_session)
     end
     state.set_current_session(s)
+    vim.g.sessionizer_current_session = s.name
 
     logger.info("Session created: " .. s.name)
 end

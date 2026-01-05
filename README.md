@@ -69,7 +69,7 @@ require("sessionizer").setup({
         custom = function() end,
     },
     after_load = {
-        custom = function() end,
+        custom = function() end
     }
 })
 ```
@@ -84,6 +84,27 @@ vim.keymap.set("n", "<leader>sc", "<cmd>Sess pin<cr>", { desc = "Pin session" })
 vim.keymap.set("n", "<leader>sa", "<cmd>Sess load<cr>", { desc = "Load session" })
 vim.keymap.set("n", "<leader>sl", "<cmd>Sess list<cr>", { desc = "List sessions" }) -- only if you have telescope.nvim
 vim.keymap.set("n", "<leader><C-^>", "<cmd>Sess last<cr>", { desc = "Load the previous session" })
+```
+
+## Status line
+
+Show current session in statusline:
+
+```lua
+local statusline = vim.o.statusline
+
+require("sessionizer").setup({
+    ...
+    after_load = {
+        custom = function()
+            local session = vim.g.sessionizer_current_session or ""
+            if session ~= "" then
+                session = "[" .. session .. "] "
+            end
+            vim.o.statusline = session .. statusline
+        end
+    }
+})
 ```
 
 ## Telescope
