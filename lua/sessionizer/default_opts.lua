@@ -6,6 +6,9 @@
 ---@class sessionizer.AfterLoadOpts
 ---@field custom function
 
+---@class sessionizer.OnUnloadOpts
+---@field custom function
+
 ---@class sessionizer.Opts
 ---@field paths string[]
 ---@field smart_auto_load boolean
@@ -14,6 +17,7 @@
 ---@field auto_save_files boolean
 ---@field before_load sessionizer.BeforeLoadOpts
 ---@field after_load sessionizer.AfterLoadOpts
+---@field on_unload sessionizer.OnUnloadOpts
 return {
     paths = {},
     smart_auto_load = true,
@@ -26,5 +30,8 @@ return {
     },
     after_load = {
         custom = function() end,
-    }
+    },
+    on_unload = {
+        custom = function() end,
+    },
 }

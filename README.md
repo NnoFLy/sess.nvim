@@ -70,6 +70,9 @@ require("sessionizer").setup({
     },
     after_load = {
         custom = function() end
+    },
+    on_unload = { -- runs after session is unloaded or deleted (Sess delete|unload)
+        custom = function() end
     }
 })
 ```
@@ -82,6 +85,7 @@ Example keybindings:
 vim.keymap.set("n", "<leader>ss", "<cmd>Sess save<cr>", { desc = "Save session" })
 vim.keymap.set("n", "<leader>sc", "<cmd>Sess pin<cr>", { desc = "Pin session" })
 vim.keymap.set("n", "<leader>sa", "<cmd>Sess load<cr>", { desc = "Load session" })
+vim.keymap.set("n", "<leader>su", "<cmd>Sess unload<cr>", { desc = "Unload session" })
 vim.keymap.set("n", "<leader>sl", "<cmd>Sess list<cr>", { desc = "List sessions" }) -- only if you have telescope.nvim
 vim.keymap.set("n", "<leader><C-^>", "<cmd>Sess last<cr>", { desc = "Load the previous session" })
 ```
@@ -102,6 +106,11 @@ require("sessionizer").setup({
                 session = "[" .. session .. "] "
             end
             vim.o.statusline = session .. statusline
+        end
+    },
+    on_unload = {
+        custom = function()
+            vim.o.statusline = statusline
         end
     }
 })
@@ -187,13 +196,28 @@ commands.pin(<session>)  -- or :Sess pin [<session_name>]
 commands.load(<session>, <before_load_opts>, <after_load_opts>)  -- or :Sess load [<session_name>]
 ```
 
+- Unload session.
+
+```lua
+---@class sessionizer.OnUnloadOpts
+---@field custom function
+
+---@param on_unload sessionizer.OnUnloadOpts | nil
+---@return nil
+commands.unload(<on_unload>)  -- or :Sess unload
+```
+
 - Delete session.
     - If 's' is not provided, delete current session.
 
 ```lua
+---@class sessionizer.OnUnloadOpts
+---@field custom function
+
 ---@param s sessionizer.Session
+---@param on_unload sessionizer.OnUnloadOpts | nil
 ---@return boolean
-commands.delete(<session>)  -- or :Sess delete [<session_name>]
+commands.delete(<session>, <on_unload>)  -- or :Sess delete [<session_name>]
 ```
 
 - Load the previous session
