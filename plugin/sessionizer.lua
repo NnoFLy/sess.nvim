@@ -2,6 +2,7 @@ local commands = require("sessionizer.commands")
 local session = require("sessionizer.session")
 local logger = require("sessionizer.logger")
 local state = require("sessionizer.state")
+local utils = require("sessionizer.utils")
 
 local subcommands = {
     list = commands.list,
@@ -32,7 +33,7 @@ local subcommands = {
             s = session.get.by_path(vim.fn.getcwd())
         end
         if not s then
-            logger.error("Cannot get session for loading")
+            commands.create(session_name)
             return
         end
 
@@ -56,49 +57,80 @@ local subcommands = {
     last = commands.last,
 }
 
-local function command_exists(cmd)
-    for _, value in pairs({ "load", "delete", "pin" }) do
-        if string.find(cmd, "Sess%s+" .. value) then
-            return true
-        end
-    end
-    return false
+local session_subs = { load = true, pin = true, delete = true }
+
+local function keys(t)
+    local out = {}
+    for k in pairs(t) do table.insert(out, k) end
+    table.sort(out)
+    return out
 end
 
----@return fun(arglead: string, cmdline: string, cursorpos: number): string[]
-local function generate_completion()
-    return function(arglead, cmdline, _)
-        if command_exists(cmdline) then
-            local sessions = session.get.all()
-            local sessions_names = {}
-            for _, s in pairs(sessions) do
-                table.insert(sessions_names, s.name)
-            end
-            return vim.tbl_filter(function(name)
-                return vim.startswith(name, arglead)
-            end, sessions_names)
-        end
-
-        return vim.tbl_filter(function(name)
-            return vim.startswith(name, arglead)
-        end, vim.tbl_keys(subcommands))
+local function filter_by_pattern(list, pattern)
+    if not pattern or pattern == "" then
+        return list
     end
+
+    if not pattern:find("[%*%?]") then
+        return vim.tbl_filter(function(item) return vim.startswith(item, pattern) end, list)
+    end
+
+    if pattern:sub(1,1) == "*" and pattern:sub(-1) ~= "*" then
+        pattern = pattern .. "*"
+    end
+
+    local esc = pattern:gsub("([%^%$%(%)%%%.%+%-%[%]])", "%%%1")
+    esc = esc:gsub("%*", ".*"):gsub("%?", ".")
+    local lua_pat = "^" .. esc .. "$"
+
+    return vim.tbl_filter(function(item) return item:match(lua_pat) end, list)
 end
+
+local function session_names()
+    local sessions = utils.get_items() or {}
+    local out = {}
+    for _, s in pairs(sessions) do
+        if s and s.name then table.insert(out, s.name) end
+    end
+    table.sort(out)
+    return out
+end
+
+local function sess_complete(_, cmdline, cursorpos)
+    local before = cmdline:sub(1, cursorpos)
+    local tail = before:gsub("^%s*:?%s*Sess%s*", "")
+
+    if tail == "" then
+        return keys(subcommands)
+    end
+
+    local first, rest = tail:match("^(%S+)%s*(.*)$")
+    if not first then
+        return filter_by_pattern(keys(subcommands), tail)
+    end
+
+    if not tail:match("%s") then
+        return filter_by_pattern(keys(subcommands), first)
+    end
+
+    local second_prefix = rest or ""
+
+    if session_subs[first] then
+        return filter_by_pattern(session_names(), second_prefix)
+    end
+
+    return filter_by_pattern(keys(subcommands), first)
+end
+
 
 vim.api.nvim_create_user_command("Sess", function(args)
-        local cmd = args.fargs[1]
-        local logger = require("sessionizer.logger")
-        if subcommands[cmd] then
-            subcommands[cmd](args.fargs[2])
-        else
-            logger.error("Unknown subcommand: " .. tostring(cmd))
-        end
-    end,
-    {
-        nargs = "*",
-        complete = function(arglead, cmdline, cursorpos)
-            local completion_fn = generate_completion()
-            return completion_fn(arglead, cmdline, cursorpos)
-        end
-    }
-)
+    local cmd = args.fargs[1]
+    if subcommands[cmd] then
+        subcommands[cmd](args.fargs[2])
+    else
+        logger.error("Unknown subcommand: " .. tostring(cmd))
+    end
+end, {
+    nargs = "*",
+    complete = sess_complete,
+})
