@@ -39,6 +39,7 @@ local subcommands = {
 
         commands.load(s)
     end,
+    unload = commands.unload,
     delete = function(session_name)
         local s = nil
         if session_name and session_name ~= "" then

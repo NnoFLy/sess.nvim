@@ -5,7 +5,10 @@ return function()
     local state = require("sessionizer.state")
 
     local current_session = state.get_current_session()
-    local session_name = current_session and current_session.name
+    if current_session == nil then
+        current_session = session.get.by_path(vim.fn.getcwd())
+    end
+    local session_name = current_session and current_session.name or nil
 
     local s = session.new(session_name)
     if not session.save(s) then
@@ -13,7 +16,7 @@ return function()
         return false
     end
 
-    if not current_session then
+    if state.get_current_session() == nil then
         state.set_current_session(s)
     end
 
