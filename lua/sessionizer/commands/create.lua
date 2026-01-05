@@ -13,6 +13,13 @@ return function(path)
         commands.save()
     end
 
+    path = vim.fn.expand(path)
+
+    if vim.fn.isdirectory(path) == 0 then
+        logger.error("Directory does not exist: " .. path)
+        return false
+    end
+
     vim.fn.chdir(path)
 
     utils.purge_hidden_buffers()

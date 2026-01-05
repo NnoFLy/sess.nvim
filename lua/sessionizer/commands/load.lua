@@ -52,8 +52,7 @@ return function(s, before_load_opts, after_load_opts)
     end
 
     if current_session and (s.name == current_session.name) then
-        logger.warn("Session is different from current session")
-        return true
+        logger.warn("Previous and current sessions are the same")
     end
 
     local new_current_session = session.load(s)

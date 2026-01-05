@@ -115,8 +115,7 @@ function M.save(session)
         session.name = s.name
     end
     local file_path = to_file_name(session)
-    local ok = file.mksession(consts.path .. file_path)
-    if not ok then
+    if not file.mksession(consts.path .. file_path) then
         return false
     end
     return true
@@ -134,8 +133,7 @@ function M.rename(session, new_session)
     local old_name = consts.path .. to_file_name(s)
     local new_name = consts.path .. to_file_name(new_session)
 
-    local ok = file.rename(old_name, new_name)
-    if not ok then
+    if not file.rename(old_name, new_name) then
         return false
     end
     return true

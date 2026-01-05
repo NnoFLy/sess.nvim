@@ -2,7 +2,7 @@ local M = {}
 
 local is_loaded = false
 
----@type sessionizer.Opts
+local logger = require("sessionizer.logger")
 local opts = require("sessionizer.default_opts")
 
 ---@param user_opts sessionizer.Opts
@@ -19,7 +19,9 @@ function M.setup(user_opts)
         opts = vim.tbl_deep_extend("force", opts, user_opts)
     end
 
-    file.create_dir(consts.path)
+    if not file.create_dir(consts.path) then
+        logger.error("Can't create path: " .. consts.path)
+    end
 
     if opts.smart_auto_load then
         utils.setup_auto_load()
