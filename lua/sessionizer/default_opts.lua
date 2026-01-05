@@ -9,8 +9,11 @@
 ---@class sessionizer.OnUnloadOpts
 ---@field custom function
 
+---@alias sessionizer.log_level "debug"|"info"|"warn"|"error"
+
 ---@class sessionizer.Opts
 ---@field paths string[]
+---@field log_level sessionizer.log_level
 ---@field smart_auto_load boolean
 ---@field auto_save boolean
 ---@field exclude_filetypes string[]
@@ -22,6 +25,7 @@ return {
     paths = {},
     smart_auto_load = true,
     auto_save = true,
+    log_level = "info",
     exclude_filetypes = { "gitcommit" },
     before_load = {
         auto_save_files = false,

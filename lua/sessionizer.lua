@@ -20,7 +20,7 @@ function M.setup(user_opts)
     end
 
     if not file.create_dir(consts.path) then
-        logger.error("Can't create path: " .. consts.path)
+        logger.error("Failed to create sessionizer directory")
     end
 
     if opts.smart_auto_load then

@@ -63,6 +63,7 @@ require("sessionizer").setup({
     auto_save = true,  -- auto save session on exit from neovim
                        -- works only if session is loaded
     exclude_filetypes = { "gitcommit" },  -- exclude from auto save
+    log_level = "info", -- debug|info|warn|error
     before_load = {
         auto_save_files = false,  -- auto save files before switch to another session
         auto_remove_buffers = false,  -- auto remove buffers before switch to another session
@@ -99,6 +100,7 @@ local statusline = vim.o.statusline
 
 require("sessionizer").setup({
     ...
+    log_level = "error",
     after_load = {
         custom = function()
             local session = vim.g.sessionizer_current_session or ""
