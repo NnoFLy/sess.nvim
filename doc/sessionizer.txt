@@ -1,0 +1,307 @@
+==============================================================================
+INTRODUCTION                                                  *sessionizer.nvim*
+
+sessionizer.nvim manages Neovim sessions in a workflow similar to
+"tmux-sessionizer".
+
+Core features:
+  - Save and load sessions
+  - Pin and rename sessions
+  - Delete sessions
+  - List sessions (via telescope.nvim)
+  - Jump to the last session
+
+Quick start:
+  1. Install the plugin.
+  2. Call |sessionizer.setup| once in your config.
+  3. Use |:Sess| commands or the Lua API.
+
+==============================================================================
+REQUIREMENTS                                           *sessionizer-requirements*
+
+Required:
+  - Neovim
+
+Optional (only for |:Sess| list):
+  - telescope.nvim
+  - plenary.nvim
+
+==============================================================================
+INSTALLATION                                                *sessionizer-install*
+
+lazy.nvim:
+>
+  return {
+      "i0i-i0i/sessionizer.nvim",
+      lazy = false,
+
+      -- OPTIONAL (only for 'Sess list') --
+      dependencies = {
+          "nvim-telescope/telescope.nvim",
+          "nvim-lua/plenary.nvim"
+      },
+      -- OPTIONAL (only for 'Sess list') --
+  }
+<
+
+Native (vim.pack):
+>
+  -- OPTIONAL (only for 'Sess list') --
+  vim.pack.add({ "https://github.com/nvim-telescope/telescope.nvim" })
+  vim.pack.add({ "https://github.com/nvim-lua/plenary.nvim" })
+  -- OPTIONAL (only for 'Sess list') --
+
+  vim.pack.add({ "https://github.com/i0i-i0i/sessionizer.nvim" })
+<
+
+==============================================================================
+CONFIGURATION                                               *sessionizer-setup*
+
+sessionizer.setup({opts})                                  *sessionizer.setup*
+    Configure sessionizer.nvim. Call once in your config.
+
+    Usage:
+    >
+      require("sessionizer").setup({
+          paths = {
+              "path/to/your/projects/*",  -- adds all folders in this path
+              "path/to/your/project",     -- adds this folder
+          },
+          smart_auto_load = true,  -- auto load session on "nvim" only
+          auto_save = true,        -- auto save on exit if a session is loaded
+          exclude_filetypes = { "gitcommit" },
+          log_level = "info",      -- debug|info|warn|error
+          before_load = {
+              auto_save_files = false,
+              auto_remove_buffers = false,
+              custom = function() end,
+          },
+          after_load = {
+              custom = function() end
+          },
+          on_unload = { -- runs after session is unloaded or deleted
+              custom = function() end
+          }
+      })
+    <
+
+    Keys:
+      paths                 (table)    List of project paths or globbed folders.
+      smart_auto_load       (boolean)  Auto load only when starting with `nvim`.
+      auto_save             (boolean)  Auto save on exit if a session is loaded.
+      exclude_filetypes     (table)    Filetypes excluded from auto save.
+      log_level             (string)   debug|info|warn|error.
+
+      before_load           (table)    Hooks before a load occurs.
+        auto_save_files     (boolean)  Save files before load.
+        auto_remove_buffers (boolean)  Remove buffers before load.
+        custom              (function) Custom hook.
+
+      after_load            (table)    Hooks after load.
+        custom              (function) Custom hook.
+
+      on_unload             (table)    Hooks after unload or delete.
+        custom              (function) Custom hook.
+
+Notes on Auto Load:                                       *sessionizer-autoload*
+  smart_auto_load only loads a session when Neovim is started without a file
+  or directory argument:
+    - "nvim" loads the session for the current working directory (if present)
+    - "nvim file.txt" or "nvim ." does not auto load
+
+==============================================================================
+COMMANDS                                                   *sessionizer-commands*
+
+All commands are available through |:Sess|.
+
+:Sess save                                                *:Sess-save*
+    Save current session.
+
+:Sess pin [<session_name>]                                *:Sess-pin*
+    Pin and rename a session.
+    If <session_name> is omitted, you will be prompted.
+
+:Sess load [<session_name>]                               *:Sess-load*
+    Load session by name or by current working directory.
+
+:Sess unload                                              *:Sess-unload*
+    Unload current session.
+
+:Sess delete [<session_name>]                             *:Sess-delete*
+    Delete session by name or current session.
+
+:Sess last                                                *:Sess-last*
+    Load the previous session.
+
+:Sess list                                                *:Sess-list*
+    List sessions (requires telescope.nvim).
+
+==============================================================================
+KEYMAPS                                                   *sessionizer-keymaps*
+
+Example mappings:
+>
+  vim.keymap.set("n", "<leader>ss", "<cmd>Sess save<cr>",
+    { desc = "Save session" })
+  vim.keymap.set("n", "<leader>sc", "<cmd>Sess pin<cr>",
+    { desc = "Pin session" })
+  vim.keymap.set("n", "<leader>sa", "<cmd>Sess load<cr>",
+    { desc = "Load session" })
+  vim.keymap.set("n", "<leader>su", "<cmd>Sess unload<cr>",
+    { desc = "Unload session" })
+  vim.keymap.set("n", "<leader>sl", "<cmd>Sess list<cr>",
+    { desc = "List sessions" })
+  vim.keymap.set("n", "<leader><C-^>", "<cmd>Sess last<cr>",
+    { desc = "Load the previous session" })
+<
+
+==============================================================================
+STATUSLINE                                               *sessionizer-statusline*
+
+Show current session in your statusline:
+>
+  local statusline = vim.o.statusline
+
+  require("sessionizer").setup({
+      log_level = "error",
+      after_load = {
+          custom = function()
+              local session = vim.g.sessionizer_current_session or ""
+              if session ~= "" then
+                  session = "[" .. session .. "] "
+              end
+              vim.o.statusline = session .. statusline
+          end
+      },
+      on_unload = {
+          custom = function()
+              vim.o.statusline = statusline
+          end
+      }
+  })
+<
+
+==============================================================================
+TELESCOPE                                               *sessionizer-telescope*
+
+Load extension:
+>
+  require("telescope").load_extension("sessionizer")
+<
+
+Default config:
+>
+  local sessionizer_actions =
+      require("telescope._extensions.sessionizer.actions")
+
+  require("telescope").setup({
+      extensions = {
+          sessionizer = {
+              prompt_title = "🗃️ All sessions",
+              mappings = {
+                  ["i"] = {
+                      ["<C-d>"] = sessionizer_actions.delete_session,
+                      ["<C-r>"] = sessionizer_actions.rename_session,
+                      ["<CR>"] = sessionizer_actions.enter,
+                  },
+                  ["n"] = {
+                      ["dd"] = sessionizer_actions.delete_session,
+                      ["rr"] = sessionizer_actions.rename_session,
+                      ["<CR>"] = sessionizer_actions.enter,
+                  },
+              },
+          }
+      }
+  })
+<
+
+==============================================================================
+LUA API                                                      *sessionizer-api*
+
+Use the Lua API for programmatic control.
+>
+  local commands = require("sessionizer.api").commands
+  local get = require("sessionizer.api").get
+<
+commands.save()
+  Save current session.
+  Return: ~
+      boolean
+
+commands.pin(<session>, <new_name>)
+  Pin and rename a session.
+  If <session> is omitted, uses the current session.
+  If <new_name> is omitted, you will be prompted.
+  Return: ~
+      boolean
+
+commands.load(<session>, <before_load_opts>, <after_load_opts>)
+  Load a session.
+  If <session> is omitted, loads the session based on current cwd.
+  Return: ~
+      boolean
+
+commands.unload(<on_unload>)
+  Unload current session.
+  Return: ~
+      nil
+
+commands.delete(<session>, <on_unload>)
+  Delete a session.
+  If <session> is omitted, deletes the current session.
+  Return: ~
+      boolean
+
+commands.last(<before_load_opts>, <after_load_opts>)
+  Load the previous session.
+  Return: ~
+      boolean
+
+commands.list({opts})
+  List sessions (telescope).
+  Return: ~
+      nil
+
+get.current()
+  Get current session.
+  Return: ~
+      sessionizer.Session
+
+get.prev()
+  Get previous session.
+  Return: ~
+      sessionizer.Session|nil
+
+get.all()
+  Get all sessions.
+  Return: ~
+      sessionizer.Session[]
+
+get.by_name(<name>)
+  Get session by name.
+  Return: ~
+      sessionizer.Session|nil
+
+get.by_path(<path>)
+  Get session by path.
+  Return: ~
+      sessionizer.Session|nil
+
+==============================================================================
+TROUBLESHOOTING                                          *sessionizer-troubleshooting*
+
+Conform.nvim and before_load.auto_save_files = true
+If you use conform.nvim and enable before_load.auto_save_files, you may need
+to remove format_after_save and use format_on_save instead:
+>
+  require("conform").setup({
+      formatters_by_ft = { ... },
+      format_after_save = { lsp_format = "fallback", timeout_ms = 500, async = true },
+      format_on_save = { timeout_ms = 500, lsp_format = "fallback" },
+  })
+<
+
+Alternatively, set before_load.auto_save_files = false.
+
+==============================================================================
+vim:tw=78:ts=8:ft=help:norl:
