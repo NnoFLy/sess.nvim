@@ -9,9 +9,12 @@ local logger = require("sessionizer.logger")
 ---@param path string
 ---@return boolean
 function M.create_dir(path)
-    local ok, err_msg = os.execute("mkdir -p " .. path)
-    if not ok then
-        logger.error(err_msg or "Can't create dir")
+    if vim.fn.isdirectory(path) == 1 then
+        return true
+    end
+    local ok = vim.fn.mkdir(path, "p")
+    if ok == 0 then
+        logger.error("Can't create dir")
         return false
     end
     return true
@@ -20,7 +23,7 @@ end
 ---@param path string
 ---@return boolean
 function M.mksession(path)
-    local cmd = "mksession! " .. path
+    local cmd = "mksession! " .. vim.fn.fnameescape(path)
     local ok, _ = pcall(function() vim.cmd(cmd) end)
     if not ok then
         return false

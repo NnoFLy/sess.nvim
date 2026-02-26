@@ -33,7 +33,8 @@ return function(s, on_unload)
         return false
     end
 
-    if s.path == state.get_current_session().path then
+    local current_session = state.get_current_session()
+    if current_session and s.path == current_session.path then
         state.set_current_session(nil)
         vim.g.sessionizer_current_session = nil
     end

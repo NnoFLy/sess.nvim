@@ -3,7 +3,7 @@ local logger = require("sessionizer.logger")
 local state = require("sessionizer.state")
 local session = require("sessionizer.session")
 
----@param path string
+---@param path string | nil
 ---@return nil
 return function(path)
     local commands = require("sessionizer.commands")
@@ -13,6 +13,7 @@ return function(path)
         commands.save()
     end
 
+    path = path or vim.fn.getcwd()
     path = vim.fn.expand(path)
 
     if vim.fn.isdirectory(path) == 0 then

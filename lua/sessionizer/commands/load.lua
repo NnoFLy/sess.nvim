@@ -61,6 +61,7 @@ return function(s, before_load_opts, after_load_opts)
         return false
     end
 
+    logger.debug("Previous session: " .. (current_session and current_session.name or "nil"))
     if current_session then
         state.set_prev_session(current_session)
     end

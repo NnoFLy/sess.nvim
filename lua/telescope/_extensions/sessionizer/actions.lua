@@ -32,9 +32,9 @@ function M.delete_session(prompt_bufnr)
     ---@type sessionizer.Session
     local selected_session = action_state.get_selected_entry().value
 
-    commands.delete(selected_session)
-
-    logger.error("Failed to delete session")
+    if not commands.delete(selected_session) then
+        logger.error("Failed to delete session")
+    end
 
     commands.list()
 end

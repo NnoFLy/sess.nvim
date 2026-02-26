@@ -77,7 +77,7 @@ function M.load(session)
         return nil
     end
 
-    local str = "silent source " .. consts.path .. to_file_name(s)
+    local str = "silent source " .. vim.fn.fnameescape(consts.path .. to_file_name(s))
     local ok, msg = pcall(function() vim.cmd(str) end)
     if not ok and msg and msg:gmatch("Can't re-enter normal mode from terminal mode") then
         return s
@@ -182,11 +182,14 @@ end
 ---@return sessionizer.Session[]
 function M.get.all()
     local sessions = {}
-    for file_name, _ in vim.fn.execute("!ls " .. consts.path):gmatch(consts.prefix .. "[^\n]+") do
-        local parsed = file_name:sub(#consts.prefix + 1)
-        local session = parse_file_name(parsed)
-        if session then
-            table.insert(sessions, session)
+    local files = vim.fn.readdir(consts.path)
+    for _, file_name in ipairs(files) do
+        if vim.startswith(file_name, consts.prefix) then
+            local parsed = file_name:sub(#consts.prefix + 1)
+            local session = parse_file_name(parsed)
+            if session then
+                table.insert(sessions, session)
+            end
         end
     end
     return sessions

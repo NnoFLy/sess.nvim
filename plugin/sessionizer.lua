@@ -33,7 +33,11 @@ local subcommands = {
             s = session.get.by_path(vim.fn.getcwd())
         end
         if not s then
-            commands.create(session_name)
+            if session_name and session_name ~= "" then
+                commands.create(session_name)
+            else
+                commands.create(vim.fn.getcwd())
+            end
             return
         end
 

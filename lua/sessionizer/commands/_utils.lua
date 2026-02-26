@@ -37,13 +37,11 @@ end
 function M.get_user_dirs(path)
     local home = os.getenv("HOME") or "~"
     local dirs = {}
-    local command = "ls -d " .. path:gsub("~", home)
-    local handle = io.popen(command)
-    if handle then
-        for dir in handle:lines() do
+    local patterns = vim.fn.glob(path:gsub("~", home), false, true)
+    for _, dir in ipairs(patterns) do
+        if vim.fn.isdirectory(dir) == 1 then
             table.insert(dirs, dir)
         end
-        handle:close()
     end
     return dirs
 end
