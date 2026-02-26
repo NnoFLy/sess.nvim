@@ -3,6 +3,7 @@ local utils = require("sessionizer.utils")
 local commands_utils = require("sessionizer.commands._utils")
 local state = require("sessionizer.state")
 local session = require("sessionizer.session")
+local terminals = require("sessionizer.terminals")
 
 ---@param s sessionizer.Session
 ---@param before_load_opts sessionizer.BeforeLoadOpts | nil
@@ -40,6 +41,14 @@ return function(s, before_load_opts, after_load_opts)
 
     local current_session = state.get_current_session()
     if current_session then
+        local terms = terminals.filter_valid_terminals(terminals.get_term_buffers())
+        if #terms > 0 then
+            logger.debug("Terminals captured: " .. tostring(#terms))
+            state.set_terminals(current_session, terms)
+            terminals.hide_term_buffers(terms)
+        else
+            state.set_terminals(current_session, {})
+        end
         commands.save()
     end
 
@@ -67,6 +76,13 @@ return function(s, before_load_opts, after_load_opts)
     end
     state.set_current_session(new_current_session)
     vim.g.sessionizer_current_session = new_current_session.name
+
+    local stored_terminals = terminals.filter_valid_terminals(state.get_terminals(new_current_session))
+    state.set_terminals(new_current_session, stored_terminals)
+    if #stored_terminals > 0 then
+        terminals.unhide_term_buffers(stored_terminals)
+        logger.debug("Terminals restored: " .. tostring(#stored_terminals))
+    end
 
     if after_load_opts.custom then
         after_load_opts.custom()

@@ -25,16 +25,16 @@ local subcommands = {
 
         commands.pin(s)
     end,
-    load = function(session_name)
+    load = function(session_name_or_path)
         local s = nil
-        if session_name and session_name ~= "" then
-            s = session.get.by_name(session_name)
+        if session_name_or_path and session_name_or_path ~= "" then
+            s = session.get.by_name(session_name_or_path)
         else
             s = session.get.by_path(vim.fn.getcwd())
         end
         if not s then
-            if session_name and session_name ~= "" then
-                commands.create(session_name)
+            if session_name_or_path and session_name_or_path ~= "" then
+                commands.create(session_name_or_path)
             else
                 commands.create(vim.fn.getcwd())
             end
@@ -80,7 +80,7 @@ local function filter_by_pattern(list, pattern)
         return vim.tbl_filter(function(item) return vim.startswith(item, pattern) end, list)
     end
 
-    if pattern:sub(1,1) == "*" and pattern:sub(-1) ~= "*" then
+    if pattern:sub(1, 1) == "*" and pattern:sub(-1) ~= "*" then
         pattern = pattern .. "*"
     end
 
