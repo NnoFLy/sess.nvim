@@ -10,6 +10,7 @@ Plugin for managing sessions in Neovim, like tmux-sessionizer.
 - Rename sessions
 - List sessions (with telescope.nvim)
 - Switch to last session
+- Handle terminals
 
 ## Installation
 
@@ -152,140 +153,6 @@ require("telescope").setup({
 
 ```
 
-## API
-
-```lua
-local commands = require("sessionizer.api").commands
-local get = require("sessionizer.api").get
-```
-
-### Commands
-
-- Save current session.
-
-```lua
----@return boolean
-commands.save()  -- or :Sess save
-```
-
-- Pin and give session a name.
-    - If 's' is not provided, get current session.
-    - If 'new_name' is not provided, you will be prompted to enter a new name.
-
-```lua
----@param s sessionizer.Session
----@param new_name string | nil
----@return boolean
-commands.pin(<session>)  -- or :Sess pin [<session_name>]
-```
-
-- Load the session.
-    - If 's' is not provided, load the session bases on cwd.
-
-```lua
----@class sessionizer.BeforeLoadOpts
----@field auto_save_files boolean | nil
----@field auto_remove_buffers boolean | nil
----@field custom function | nil
-
----@class sessionizer.AfterLoadOpts
----@field custom function | nil
-
----@param s sessionizer.Session
----@param before_load_opts BeforeLoadOpts | nil
----@param after_load_opts AfterLoadOpts | nil
----@return boolean
-commands.load(<session>, <before_load_opts>, <after_load_opts>)  -- or :Sess load [<session_name>]
-```
-
-- Unload session.
-
-```lua
----@class sessionizer.OnUnloadOpts
----@field custom function
-
----@param on_unload sessionizer.OnUnloadOpts | nil
----@return nil
-commands.unload(<on_unload>)  -- or :Sess unload
-```
-
-- Delete session.
-    - If 's' is not provided, delete current session.
-
-```lua
----@class sessionizer.OnUnloadOpts
----@field custom function
-
----@param s sessionizer.Session
----@param on_unload sessionizer.OnUnloadOpts | nil
----@return boolean
-commands.delete(<session>, <on_unload>)  -- or :Sess delete [<session_name>]
-```
-
-- Load the previous session
-
-```lua
----@class sessionizer.BeforeLoadOpts
----@field auto_save_files boolean | nil
----@field auto_remove_buffers boolean | nil
----@field custom function | nil
-
----@class sessionizer.AfterLoadOpts
----@field custom function | nil
-
----@param load_opts BeforeLoadOpts | nil
----@param after_load_opts AfterLoadOpts | nil
----@return boolean
-commands.last(<before_load_opts>, <after_load_opts>)  -- or :Sess last
-```
-
-- Telescope list sessions
-
-```lua
----@param opts table | nil
----@return nil
-commands.list({ prompt_title = "Title", ... })  -- or :Sess list
-```
-
-### Get
-
-- Get current session
-
-```lua
----@return sessionizer.Session
-get.current()
-```
-
-- Get previous session
-
-```lua
----@return sessionizer.Session | nil
-get.prev()
-```
-
-- Get all sessions
-
-```lua
----@return sessionizer.Session[]
-get.all()
-```
-
-- Get session by name
-
-```lua
----@param name string
----@return sessionizer.Session | nil
-get.by_name(<name>)
-```
-
-- Get by path
-
-```lua
----@param path string
----@return sessionizer.Session | nil
-get.by_path(<path>)
-```
-
 ## Troubleshooting
 
 <details>
@@ -309,6 +176,4 @@ Or just set `before_load.auto_save_files = false`
 
 ## TODOs
 
-- [ ] add video
 - [ ] Remote sessions
-- [ ] Make it better
