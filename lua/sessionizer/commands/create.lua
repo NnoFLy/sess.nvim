@@ -2,6 +2,7 @@ local utils = require("sessionizer.utils")
 local logger = require("sessionizer.logger")
 local state = require("sessionizer.state")
 local session = require("sessionizer.session")
+local usecase = require("sessionizer.usecase")
 
 ---@param path string | nil
 ---@return nil
@@ -9,8 +10,19 @@ return function(path)
     local commands = require("sessionizer.commands")
 
     local current_session = state.get_current_session()
+    if not current_session then
+        vim.ui.input({ prompt = "Do you want to save the current session? [y/N] " }, function(input)
+            if input:lower() ~= "y" then return end
+            local cwd = vim.loop.cwd()
+            if cwd then
+                current_session = session.get.by_path(cwd)
+            end
+        end)
+    end
+
     if current_session then
         commands.save()
+        usecase.hide_all_term_buffers()
     end
 
     path = path or vim.fn.getcwd()
