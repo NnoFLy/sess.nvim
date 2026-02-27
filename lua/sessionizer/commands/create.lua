@@ -11,13 +11,7 @@ return function(path)
 
     local current_session = state.get_current_session()
     if not current_session then
-        vim.ui.input({ prompt = "Do you want to save the current session? [y/N] " }, function(input)
-            if input:lower() ~= "y" then return end
-            local cwd = vim.loop.cwd()
-            if cwd then
-                current_session = session.get.by_path(cwd)
-            end
-        end)
+        current_session = usecase.do_u_wanna_save()
     end
 
     if current_session then
