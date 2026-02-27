@@ -9,11 +9,8 @@ local function is_term_buf(bufnr)
     return vim.api.nvim_buf_get_name(bufnr):match("^term://") ~= nil
 end
 
----@param bufnr integer
----@param value boolean
----@return boolean
 local function set_buflisted(bufnr, value)
-    return pcall(vim.api.nvim_set_option_value, "buflisted", value, { buf = bufnr })
+    pcall(vim.api.nvim_set_option_value, "buflisted", value, { buf = bufnr })
 end
 
 ---@param terminals sessionizer.Terminal[]|nil
@@ -60,19 +57,7 @@ end
 ---@param terminals sessionizer.Terminal[]
 function M.hide_term_buffers(terminals)
     with_valid_terms(terminals, function(bufnr)
-        local winid = nil
-        for _, win in ipairs(vim.api.nvim_list_wins()) do
-            if vim.api.nvim_win_get_buf(win) == bufnr then
-                winid = win
-                break
-            end
-        end
-
-        local ok = set_buflisted(bufnr, false)
-
-        if ok and winid then
-            pcall(vim.api.nvim_win_close, winid, true)
-        end
+        set_buflisted(bufnr, false)
     end)
 end
 

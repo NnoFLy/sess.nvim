@@ -13,42 +13,41 @@ local M = {}
 ---@return nil
 function M.purge_hidden_buffers(opts)
     local default_opts = {
-        force = true,
+        force = false,
         wipe = false,
         keep_scratch = false,
     }
     opts = vim.tbl_deep_extend("force", default_opts, opts or {})
 
-    local bufs = vim.api.nvim_list_bufs()
-    local scratch = vim.api.nvim_create_buf(false, true)
-    vim.api.nvim_set_current_buf(scratch)
+    local api = vim.api
+    local bufs = api.nvim_list_bufs()
+    local scratch = api.nvim_create_buf(false, true)
+    api.nvim_set_current_buf(scratch)
 
-    for _, bufnr in ipairs(bufs) do
-        if bufnr == scratch or not vim.api.nvim_buf_is_valid(bufnr) then
-            goto continue
-        end
-
-        local ok, listed = pcall(vim.api.nvim_get_option_value, "buflisted", { buf = bufnr })
-        if not ok or not listed then
-            goto continue
-        end
-
-        if opts.wipe then
-            ok = pcall(vim.api.nvim_buf_delete, bufnr, { force = opts.force })
-            if not ok then
-                pcall(vim.cmd, (opts.force and "silent! bwipeout! " or "silent! bwipeout ") .. bufnr)
+    for _, bufnr in pairs(bufs) do
+        if bufnr ~= scratch and api.nvim_buf_is_valid(bufnr) then
+            if opts.wipe then
+                local ok = pcall(api.nvim_buf_delete, bufnr, { force = true })
+                if not ok then
+                    pcall(function() vim.cmd("bwipeout! " .. bufnr) end)
+                end
+            else
+                local name = vim.api.nvim_buf_get_name(bufnr)
+                if name:match("^term://") then
+                    goto continue
+                end
+                pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
             end
-        else
-            pcall(vim.api.nvim_buf_delete, bufnr, { force = opts.force })
         end
-
         ::continue::
     end
 
-    local cur = vim.api.nvim_get_current_buf()
-    if cur == scratch then
-        vim.api.nvim_set_current_buf(vim.api.nvim_create_buf(true, false))
-        pcall(vim.api.nvim_buf_delete, scratch, { force = true })
+    if not opts.keep_scratch then
+        local cur = api.nvim_get_current_buf()
+        if cur == scratch then
+            api.nvim_set_current_buf(api.nvim_create_buf(true, false))
+        end
+        pcall(api.nvim_buf_delete, scratch, { force = true })
     end
 end
 
