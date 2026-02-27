@@ -29,7 +29,7 @@ return {
     exclude_filetypes = { "gitcommit" },
     before_load = {
         auto_save_files = false,
-        auto_remove_buffers = false,
+        auto_remove_buffers = true,
         custom = function() end,
     },
     after_load = {

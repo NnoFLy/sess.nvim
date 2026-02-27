@@ -39,6 +39,10 @@ return function(s, before_load_opts, after_load_opts)
         vim.cmd("wall")
     end
 
+    if before_load_opts.custom then
+        before_load_opts.custom()
+    end
+
     local current_session = state.get_current_session()
     if not current_session then
         current_session = usecase.do_u_wanna_save()
@@ -51,10 +55,6 @@ return function(s, before_load_opts, after_load_opts)
     if before_load_opts.auto_remove_buffers then
         usecase.hide_all_term_buffers()
         utils.purge_hidden_buffers()
-    end
-
-    if before_load_opts.custom then
-        before_load_opts.custom()
     end
 
     if current_session and (s.name == current_session.name) then
