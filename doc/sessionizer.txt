@@ -121,6 +121,11 @@ All commands are available through |:Sess|.
     Pin and rename a session.
     If <session_name> is omitted, you will be prompted.
 
+:Sess create [<path>]                                     *:Sess-create*
+    Create a session for <path> and load it.
+    If session already exists, it will be recreated.
+    If <path> is omitted, current working directory is used.
+
 :Sess load [<session_name>]                               *:Sess-load*
     Load session by name or by current working directory.
 
@@ -135,6 +140,11 @@ All commands are available through |:Sess|.
 
 :Sess list                                                *:Sess-list*
     List sessions (requires telescope.nvim).
+
+Completion:
+  :Sess <Tab>                  completes subcommands.
+  :Sess load|pin|delete <Tab>  completes session names.
+  :Sess create <Tab>           completes directories.
 
 ==============================================================================
 KEYMAPS                                                   *sessionizer-keymaps*

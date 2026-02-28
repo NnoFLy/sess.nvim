@@ -84,13 +84,20 @@ require("sessionizer").setup({
 Example keybindings:
 
 ```lua
-vim.keymap.set("n", "<leader>ss", "<cmd>Sess save<cr>", { desc = "Save session" })
-vim.keymap.set("n", "<leader>sc", "<cmd>Sess pin<cr>", { desc = "Pin session" })
-vim.keymap.set("n", "<leader>sa", "<cmd>Sess load<cr>", { desc = "Load session" })
-vim.keymap.set("n", "<leader>su", "<cmd>Sess unload<cr>", { desc = "Unload session" })
-vim.keymap.set("n", "<leader>sl", "<cmd>Sess list<cr>", { desc = "List sessions" }) -- only if you have telescope.nvim
+vim.keymap.set("n", "<M-s>s", "<cmd>Sess save<cr>", { desc = "Save session" })
+vim.keymap.set("n", "<M-s>p", "<cmd>Sess pin<cr>", { desc = "Pin session" })
+vim.keymap.set("n", "<M-s>c", ":Sess create ", { desc = "Create session" })
+vim.keymap.set("n", "<M-s>a", "<cmd>Sess load<cr>", { desc = "Load session" })
+vim.keymap.set("n", "<M-s>u", "<cmd>Sess unload<cr>", { desc = "Unload session" })
+vim.keymap.set("n", "<M-s>l", "<cmd>Sess list<cr>", { desc = "List sessions" }) -- only if you have telescope.nvim
 vim.keymap.set("n", "<leader><C-^>", "<cmd>Sess last<cr>", { desc = "Load the previous session" })
 ```
+
+Command completion:
+
+- `:Sess <Tab>` completes subcommands.
+- `:Sess load|pin|delete <Tab>` completes session names.
+- `:Sess create <Tab>` completes directories.
 
 ## Status line
 
