@@ -166,7 +166,12 @@ function M.get_items()
         table.insert(items, 1, current_session)
     end
 
-    for _, path in pairs(opts.paths) do
+    local user_paths = opts.paths
+    if type(user_paths) ~= "table" then
+        user_paths = {}
+    end
+
+    for _, path in pairs(user_paths) do
         for _, dir in ipairs(commands_utils.get_user_dirs(path)) do
             if not vim.list_contains(paths, dir) then
                 table.insert(items, { name = dir, path = dir, last_used = 0 })

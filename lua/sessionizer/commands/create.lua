@@ -9,6 +9,14 @@ local usecase = require("sessionizer.usecase")
 return function(path)
     local commands = require("sessionizer.commands")
 
+    path = path or vim.fn.getcwd()
+    path = vim.fs.normalize(vim.fn.fnamemodify(path, ":p"))
+
+    if vim.fn.isdirectory(path) == 0 then
+        logger.error("Directory does not exist: " .. path)
+        return false
+    end
+
     local current_session = state.get_current_session()
     if not current_session then
         current_session = usecase.do_u_wanna_save()
@@ -17,14 +25,6 @@ return function(path)
     if current_session then
         commands.save()
         usecase.hide_all_term_buffers()
-    end
-
-    path = path or vim.fn.getcwd()
-    path = vim.fn.expand(path)
-
-    if vim.fn.isdirectory(path) == 0 then
-        logger.error("Directory does not exist: " .. path)
-        return false
     end
 
     vim.fn.chdir(path)

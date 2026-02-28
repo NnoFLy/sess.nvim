@@ -7,6 +7,20 @@ local utils = require("sessionizer.utils")
 local subcommands = {
     list = commands.list,
     save = commands.save,
+    create = function(path)
+        if not path or path == "" then
+            path = vim.fn.getcwd()
+        end
+
+        local s = session.get.by_path(path)
+
+        if not s then
+            commands.create(path)
+            return
+        end
+
+        commands.load(s)
+    end,
     pin = function(session_name)
         local s = nil
         if session_name and session_name ~= "" then
@@ -101,7 +115,15 @@ local function session_names()
     return out
 end
 
-local function sess_complete(_, cmdline, cursorpos)
+local function path_dirs(arg_lead)
+    local ok, matches = pcall(vim.fn.getcompletion, arg_lead or "", "dir")
+    if not ok or type(matches) ~= "table" then
+        return {}
+    end
+    return matches
+end
+
+local function sess_complete(arg_lead, cmdline, cursorpos)
     local before = cmdline:sub(1, cursorpos)
     local tail = before:gsub("^%s*:?%s*Sess%s*", "")
 
@@ -122,6 +144,10 @@ local function sess_complete(_, cmdline, cursorpos)
 
     if session_subs[first] then
         return filter_by_pattern(session_names(), second_prefix)
+    end
+
+    if first == "create" then
+        return path_dirs(arg_lead)
     end
 
     return filter_by_pattern(keys(subcommands), first)

@@ -35,6 +35,10 @@ end
 ---@param path string
 ---@return string[]
 function M.get_user_dirs(path)
+    if type(path) ~= "string" or path == "" then
+        return {}
+    end
+
     local home = os.getenv("HOME") or "~"
     local dirs = {}
     local patterns = vim.fn.glob(path:gsub("~", home), false, true)
