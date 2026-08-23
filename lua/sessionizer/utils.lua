@@ -9,59 +9,6 @@
 
 local M = {}
 
----@param opts sessionizer.PurgeOpts | nil
----@return nil
-function M.purge_hidden_buffers(opts)
-    local default_opts = {
-        force = true,
-        wipe = false,
-        keep_scratch = false,
-    }
-    opts = vim.tbl_deep_extend("force", default_opts, opts or {})
-
-    local bufs = vim.api.nvim_list_bufs()
-    local scratch = vim.api.nvim_create_buf(false, true)
-    vim.api.nvim_set_current_buf(scratch)
-
-    for _, bufnr in ipairs(bufs) do
-        if bufnr == scratch or not vim.api.nvim_buf_is_valid(bufnr) then
-            goto continue
-        end
-
-        local ok, listed = pcall(vim.api.nvim_get_option_value, "buflisted", { buf = bufnr })
-        if not ok or not listed then
-            goto continue
-        end
-
-        if opts.wipe then
-            ok = pcall(vim.api.nvim_buf_delete, bufnr, { force = opts.force })
-            if not ok then
-                pcall(vim.cmd, (opts.force and "silent! bwipeout! " or "silent! bwipeout ") .. bufnr)
-            end
-        else
-            pcall(vim.api.nvim_buf_delete, bufnr, { force = opts.force })
-        end
-
-        ::continue::
-    end
-
-    local cur = vim.api.nvim_get_current_buf()
-    if cur == scratch then
-        vim.api.nvim_set_current_buf(vim.api.nvim_create_buf(true, false))
-        pcall(vim.api.nvim_buf_delete, scratch, { force = true })
-    end
-end
-
----@return nil
-function M.purge_term_buffers()
-    for _, buf in pairs(vim.api.nvim_list_bufs()) do
-        local name = vim.api.nvim_buf_get_name(buf)
-        if name:match("^term://") then
-            vim.api.nvim_buf_delete(buf, { force = true })
-        end
-    end
-end
-
 function M.setup_auto_load()
     local commands = require("sessionizer.commands")
     local session = require("sessionizer.session")

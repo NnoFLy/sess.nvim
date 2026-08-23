@@ -1,6 +1,6 @@
 ---@class sessionizer.BeforeLoadOpts
 ---@field auto_save_files boolean
----@field auto_remove_buffers boolean
+---@field auto_hide_buffers boolean
 ---@field custom function
 
 ---@class sessionizer.AfterLoadOpts
@@ -29,7 +29,7 @@ return {
     exclude_filetypes = { "gitcommit" },
     before_load = {
         auto_save_files = false,
-        auto_remove_buffers = true,
+        auto_hide_buffers = true,
         custom = function() end,
     },
     after_load = {

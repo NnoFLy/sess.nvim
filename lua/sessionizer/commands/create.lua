@@ -1,6 +1,6 @@
-local utils = require("sessionizer.utils")
-local logger = require("sessionizer.logger")
-local state = require("sessionizer.state")
+local buffers = require("sessionizer.buffers")
+local logger  = require("sessionizer.logger")
+local state   = require("sessionizer.state")
 local session = require("sessionizer.session")
 local usecase = require("sessionizer.usecase")
 
@@ -24,12 +24,11 @@ return function(path)
 
     if current_session then
         commands.save()
-        usecase.hide_all_term_buffers()
     end
 
     vim.fn.chdir(path)
 
-    utils.purge_hidden_buffers()
+    buffers.hide_all_buffers()
 
     vim.cmd("e .")
 

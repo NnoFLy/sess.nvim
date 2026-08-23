@@ -1,5 +1,5 @@
 local logger         = require("sessionizer.logger")
-local utils          = require("sessionizer.utils")
+local buffers        = require("sessionizer.buffers")
 local commands_utils = require("sessionizer.commands._utils")
 local state          = require("sessionizer.state")
 local session        = require("sessionizer.session")
@@ -52,9 +52,8 @@ return function(s, before_load_opts, after_load_opts)
         commands.save()
     end
 
-    if before_load_opts.auto_remove_buffers then
-        usecase.hide_all_term_buffers()
-        utils.purge_hidden_buffers()
+    if before_load_opts.auto_hide_buffers then
+        buffers.hide_all_buffers()
     end
 
     if current_session and (s.name == current_session.name) then
@@ -73,8 +72,6 @@ return function(s, before_load_opts, after_load_opts)
     end
     state.set_current_session(new_current_session)
     vim.g.sessionizer_current_session = new_current_session.name
-
-    usecase.unhide_all_term_buffers()
 
     if after_load_opts.custom then
         after_load_opts.custom()
