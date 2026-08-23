@@ -1,7 +1,7 @@
 local pickers = require("telescope.pickers")
 
-local config = require("telescope._extensions.sessionizer.config")
-local finders = require("telescope._extensions.sessionizer.finders")
+local config = require("telescope._extensions.sess.config")
+local finders = require("telescope._extensions.sess.finders")
 
 return function(opts)
     opts = opts or {}

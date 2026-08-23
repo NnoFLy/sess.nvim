@@ -1,6 +1,6 @@
 # Sess.nvim
 
-Plugin for managing sessions in Neovim, like tmux-sessionizer.
+Plugin for managing sessions in Neovim.
 
 ## Features
 
@@ -19,7 +19,7 @@ Plugin for managing sessions in Neovim, like tmux-sessionizer.
 
 ```lua
 return {
-    "i0i-i0i/sessionizer.nvim",
+    "i0i-i0i/sess.nvim",
     lazy = false,
 
 --- OPTIONAL (only for 'Sess list') ---
@@ -42,7 +42,7 @@ vim.pack.add({ "https://github.com/nvim-telescope/telescope.nvim" })
 vim.pack.add({ "https://github.com/nvim-lua/plenary.nvim" })
 --- OPTIONAL (only for 'Sess list') ---
 
-vim.pack.add({ "https://github.com/i0i-i0i/sessionizer.nvim" })
+vim.pack.add({ "https://github.com/i0i-i0i/sess.nvim" })
 ```
 
 </details>
@@ -52,7 +52,7 @@ vim.pack.add({ "https://github.com/i0i-i0i/sessionizer.nvim" })
 Default config:
 
 ```lua
-require("sessionizer").setup({
+require("sess").setup({
     paths = {
         "path/to/your/projects/*",  -- will add all folders in this path to the sessions list
         "path/to/your/project",  -- will add this folder to the sessions list
@@ -89,7 +89,7 @@ vim.keymap.set("n", "<M-s>p", "<cmd>Sess pin<cr>", { desc = "Pin session" })
 vim.keymap.set("n", "<M-s>c", ":Sess create ", { desc = "Create session" })
 vim.keymap.set("n", "<M-s>a", "<cmd>Sess load<cr>", { desc = "Load session" })
 vim.keymap.set("n", "<M-s>u", "<cmd>Sess unload<cr>", { desc = "Unload session" })
-vim.keymap.set("n", "<M-s>l", "<cmd>Sess list<cr>", { desc = "List sessions" }) -- only if you have telescope.nvim
+vim.keymap.set("n", "<C-s>", "<cmd>Sess list<cr>", { desc = "List sessions" }) -- only if you have telescope.nvim
 vim.keymap.set("n", "<leader><C-^>", "<cmd>Sess last<cr>", { desc = "Load the previous session" })
 ```
 
@@ -106,12 +106,12 @@ Show current session in statusline:
 ```lua
 local statusline = vim.o.statusline
 
-require("sessionizer").setup({
+require("sess").setup({
     ...
     log_level = "error",
     after_load = {
         custom = function()
-            local session = vim.g.sessionizer_current_session or ""
+            local session = vim.g.sess_current_session or ""
             if session ~= "" then
                 session = "[" .. session .. "] "
             end
@@ -129,29 +129,29 @@ require("sessionizer").setup({
 ## Telescope
 
 ```lua
-require("telescope").load_extension("sessionizer")
+require("telescope").load_extension("sess")
 ```
 
 ### Default config
 
 ```lua
-local sessionizer_actions = require("telescope._extensions.sessionizer.actions")
+local sess_actions = require("telescope._extensions.sess.actions")
 
 require("telescope").setup({
     extensions = {
         -- Defaults:
-        sessionizer = {
+        sess = {
             prompt_title = "🗃️ All sessions",
             mappings = {
                 ["i"] = {
-                    ["<C-d>"] = sessionizer_actions.delete_session,
-                    ["<C-r>"] = sessionizer_actions.rename_session,
-                    ["<CR>"] = sessionizer_actions.enter,
+                    ["<C-d>"] = sess_actions.delete_session,
+                    ["<C-r>"] = sess_actions.rename_session,
+                    ["<CR>"] = sess_actions.enter,
                 },
                 ["n"] = {
-                    ["dd"] = sessionizer_actions.delete_session,
-                    ["rr"] = sessionizer_actions.rename_session,
-                    ["<CR>"] = sessionizer_actions.enter,
+                    ["dd"] = sess_actions.delete_session,
+                    ["rr"] = sess_actions.rename_session,
+                    ["<CR>"] = sess_actions.enter,
                 },
             },
         }
@@ -186,8 +186,7 @@ Or just set `before_load.auto_save_files = false`
 - [X] Improve switching between sessions
 - [ ] MRU
 - [ ] Refactor
-- [ ] Instead of removing buffer, just hide them
-- [ ] Move by directories with Telescope
+- [ ] Move by directories with Telescope ('~', '/', './', '../')
 - [ ] Open remote session from Telescope ('/ssh:<login>/')
 - [ ] Remote sessions (with `ssh`)
 - [ ] Keymaps for remote session, via callback

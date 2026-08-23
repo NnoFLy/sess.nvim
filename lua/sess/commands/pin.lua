@@ -1,9 +1,9 @@
-local session = require("sessionizer.session")
-local logger = require("sessionizer.logger")
-local commands_utils = require("sessionizer.commands._utils")
-local state = require("sessionizer.state")
+local session = require("sess.session")
+local logger = require("sess.logger")
+local commands_utils = require("sess.commands._utils")
+local state = require("sess.state")
 
----@param s sessionizer.Session
+---@param s Sess.Session
 ---@param new_name string | nil
 ---@return boolean
 return function(s, new_name)
@@ -45,7 +45,7 @@ return function(s, new_name)
 
     if new_session.path == vim.fn.getcwd() then
         state.set_current_session(new_session)
-        vim.g.sessionizer_current_session = new_session.name
+        vim.g.sess_current_session = new_session.name
     end
 
     logger.info("Session pinned: " .. new_name)

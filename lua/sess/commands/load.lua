@@ -1,13 +1,13 @@
-local logger         = require("sessionizer.logger")
-local buffers        = require("sessionizer.buffers")
-local commands_utils = require("sessionizer.commands._utils")
-local state          = require("sessionizer.state")
-local session        = require("sessionizer.session")
-local usecase        = require("sessionizer.usecase")
+local logger         = require("sess.logger")
+local buffers        = require("sess.buffers")
+local commands_utils = require("sess.commands._utils")
+local state          = require("sess.state")
+local session        = require("sess.session")
+local usecase        = require("sess.usecase")
 
----@param s sessionizer.Session
----@param before_load_opts sessionizer.BeforeLoadOpts | nil
----@param after_load_opts sessionizer.AfterLoadOpts | nil
+---@param s Sess.Session
+---@param before_load_opts Sess.BeforeLoadOpts | nil
+---@param after_load_opts Sess.AfterLoadOpts | nil
 ---@return boolean
 return function(s, before_load_opts, after_load_opts)
     if not s then
@@ -20,8 +20,8 @@ return function(s, before_load_opts, after_load_opts)
         return false
     end
 
-    local commands = require("sessionizer.commands")
-    local opts = require("sessionizer").get_opts()
+    local commands = require("sess.commands")
+    local opts = require("sess").get_opts()
 
     before_load_opts = vim.tbl_deep_extend("force", opts.before_load, before_load_opts or {})
     after_load_opts = vim.tbl_deep_extend("force", opts.after_load, after_load_opts or {})
@@ -71,7 +71,7 @@ return function(s, before_load_opts, after_load_opts)
         state.set_prev_session(current_session)
     end
     state.set_current_session(new_current_session)
-    vim.g.sessionizer_current_session = new_current_session.name
+    vim.g.sess_current_session = new_current_session.name
 
     if after_load_opts.custom then
         after_load_opts.custom()

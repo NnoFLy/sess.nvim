@@ -1,8 +1,8 @@
 local M = {}
 
-local session = require("sessionizer.session")
+local session = require("sess.session")
 
----@return sessionizer.Session | nil
+---@return Sess.Session | nil
 function M.do_u_wanna_save()
     local buffers_count = 0
     for _, buf in ipairs(vim.api.nvim_list_bufs()) do

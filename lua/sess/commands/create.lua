@@ -1,13 +1,13 @@
-local buffers = require("sessionizer.buffers")
-local logger  = require("sessionizer.logger")
-local state   = require("sessionizer.state")
-local session = require("sessionizer.session")
-local usecase = require("sessionizer.usecase")
+local buffers = require("sess.buffers")
+local logger  = require("sess.logger")
+local state   = require("sess.state")
+local session = require("sess.session")
+local usecase = require("sess.usecase")
 
 ---@param path string | nil
 ---@return nil
 return function(path)
-    local commands = require("sessionizer.commands")
+    local commands = require("sess.commands")
 
     path = path or vim.fn.getcwd()
     path = vim.fs.normalize(vim.fn.fnamemodify(path, ":p"))
@@ -42,7 +42,7 @@ return function(path)
         state.set_prev_session(current_session)
     end
     state.set_current_session(s)
-    vim.g.sessionizer_current_session = s.name
+    vim.g.sess_current_session = s.name
 
     logger.info("Session created: " .. s.name)
 end

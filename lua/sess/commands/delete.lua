@@ -1,12 +1,13 @@
-local logger = require("sessionizer.logger")
-local state = require("sessionizer.state")
-local session = require("sessionizer.session")
-local opts = require("sessionizer").get_opts()
+local logger = require("sess.logger")
+local state = require("sess.state")
+local session = require("sess.session")
 
----@param s sessionizer.Session
----@param on_unload sessionizer.OnUnloadOpts | nil
+---@param s Sess.Session
+---@param on_unload Sess.OnUnloadOpts | nil
 ---@return boolean
 return function(s, on_unload)
+    local opts = require("sess").get_opts()
+
     if not s then
         logger.error("Session is not provided")
         return false
@@ -27,7 +28,7 @@ return function(s, on_unload)
         return true
     end
 
-    local ok = require("sessionizer.session").delete(s)
+    local ok = require("sess.session").delete(s)
     if not ok then
         logger.error("Failed to delete session")
         return false
@@ -36,7 +37,7 @@ return function(s, on_unload)
     local current_session = state.get_current_session()
     if current_session and s.path == current_session.path then
         state.set_current_session(nil)
-        vim.g.sessionizer_current_session = nil
+        vim.g.sess_current_session = nil
     end
 
     on_unload = vim.tbl_deep_extend("force", opts.on_unload, on_unload or {})

@@ -2,25 +2,25 @@ local M = {}
 
 local is_loaded = false
 
-local logger = require("sessionizer.logger")
-local opts = require("sessionizer.default_opts")
+local logger = require("sess.logger")
+local opts = require("sess.default_opts")
 
----@param user_opts sessionizer.Opts
+---@param user_opts Sess.Opts
 function M.setup(user_opts)
     if is_loaded then
         return
     end
 
-    local consts = require("sessionizer.consts")
-    local file = require("sessionizer.file")
-    local utils = require("sessionizer.utils")
+    local consts = require("sess.consts")
+    local file = require("sess.file")
+    local utils = require("sess.utils")
 
     if user_opts ~= nil then
         opts = vim.tbl_deep_extend("force", opts, user_opts)
     end
 
     if not file.create_dir(consts.path) then
-        logger.error("Failed to create sessionizer directory")
+        logger.error("Failed to create sess directory")
     end
 
     if opts.smart_auto_load then

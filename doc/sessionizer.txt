@@ -1,8 +1,8 @@
 ==============================================================================
-INTRODUCTION                                                  *sessionizer.nvim*
+INTRODUCTION                                                  *sess.nvim*
 
-sessionizer.nvim manages Neovim sessions in a workflow similar to
-"tmux-sessionizer".
+sess.nvim manages Neovim sessions in a workflow similar to
+"tmux-sess".
 
 Core features:
   - Save and load sessions
@@ -13,11 +13,11 @@ Core features:
 
 Quick start:
   1. Install the plugin.
-  2. Call |sessionizer.setup| once in your config.
+  2. Call |sess.setup| once in your config.
   3. Use |:Sess| commands or the Lua API.
 
 ==============================================================================
-REQUIREMENTS                                           *sessionizer-requirements*
+REQUIREMENTS                                           *sess-requirements*
 
 Required:
   - Neovim
@@ -27,12 +27,12 @@ Optional (only for |:Sess| list):
   - plenary.nvim
 
 ==============================================================================
-INSTALLATION                                                *sessionizer-install*
+INSTALLATION                                                *sess-install*
 
 lazy.nvim:
 >
   return {
-      "i0i-i0i/sessionizer.nvim",
+      "i0i-i0i/sess.nvim",
       lazy = false,
 
       -- OPTIONAL (only for 'Sess list') --
@@ -51,18 +51,18 @@ Native (vim.pack):
   vim.pack.add({ "https://github.com/nvim-lua/plenary.nvim" })
   -- OPTIONAL (only for 'Sess list') --
 
-  vim.pack.add({ "https://github.com/i0i-i0i/sessionizer.nvim" })
+  vim.pack.add({ "https://github.com/i0i-i0i/sess.nvim" })
 <
 
 ==============================================================================
-CONFIGURATION                                               *sessionizer-setup*
+CONFIGURATION                                               *sess-setup*
 
-sessionizer.setup({opts})                                  *sessionizer.setup*
-    Configure sessionizer.nvim. Call once in your config.
+sess.setup({opts})                                  *sess.setup*
+    Configure sess.nvim. Call once in your config.
 
     Usage:
     >
-      require("sessionizer").setup({
+      require("sess").setup({
           paths = {
               "path/to/your/projects/*",  -- adds all folders in this path
               "path/to/your/project",     -- adds this folder
@@ -103,14 +103,14 @@ sessionizer.setup({opts})                                  *sessionizer.setup*
       on_unload             (table)    Hooks after unload or delete.
         custom              (function) Custom hook.
 
-Notes on Auto Load:                                       *sessionizer-autoload*
+Notes on Auto Load:                                       *sess-autoload*
   smart_auto_load only loads a session when Neovim is started without a file
   or directory argument:
     - "nvim" loads the session for the current working directory (if present)
     - "nvim file.txt" or "nvim ." does not auto load
 
 ==============================================================================
-COMMANDS                                                   *sessionizer-commands*
+COMMANDS                                                   *sess-commands*
 
 All commands are available through |:Sess|.
 
@@ -147,7 +147,7 @@ Completion:
   :Sess create <Tab>           completes directories.
 
 ==============================================================================
-KEYMAPS                                                   *sessionizer-keymaps*
+KEYMAPS                                                   *sess-keymaps*
 
 Example mappings:
 >
@@ -166,17 +166,17 @@ Example mappings:
 <
 
 ==============================================================================
-STATUSLINE                                               *sessionizer-statusline*
+STATUSLINE                                               *sess-statusline*
 
 Show current session in your statusline:
 >
   local statusline = vim.o.statusline
 
-  require("sessionizer").setup({
+  require("sess").setup({
       log_level = "error",
       after_load = {
           custom = function()
-              local session = vim.g.sessionizer_current_session or ""
+              local session = vim.g.sess_current_session or ""
               if session ~= "" then
                   session = "[" .. session .. "] "
               end
@@ -192,32 +192,32 @@ Show current session in your statusline:
 <
 
 ==============================================================================
-TELESCOPE                                               *sessionizer-telescope*
+TELESCOPE                                               *sess-telescope*
 
 Load extension:
 >
-  require("telescope").load_extension("sessionizer")
+  require("telescope").load_extension("sess")
 <
 
 Default config:
 >
-  local sessionizer_actions =
-      require("telescope._extensions.sessionizer.actions")
+  local sess_actions =
+      require("telescope._extensions.sess.actions")
 
   require("telescope").setup({
       extensions = {
-          sessionizer = {
+          sess = {
               prompt_title = "🗃️ All sessions",
               mappings = {
                   ["i"] = {
-                      ["<C-d>"] = sessionizer_actions.delete_session,
-                      ["<C-r>"] = sessionizer_actions.rename_session,
-                      ["<CR>"] = sessionizer_actions.enter,
+                      ["<C-d>"] = sess_actions.delete_session,
+                      ["<C-r>"] = sess_actions.rename_session,
+                      ["<CR>"] = sess_actions.enter,
                   },
                   ["n"] = {
-                      ["dd"] = sessionizer_actions.delete_session,
-                      ["rr"] = sessionizer_actions.rename_session,
-                      ["<CR>"] = sessionizer_actions.enter,
+                      ["dd"] = sess_actions.delete_session,
+                      ["rr"] = sess_actions.rename_session,
+                      ["<CR>"] = sess_actions.enter,
                   },
               },
           }
@@ -226,12 +226,12 @@ Default config:
 <
 
 ==============================================================================
-LUA API                                                      *sessionizer-api*
+LUA API                                                      *sess-api*
 
 Use the Lua API for programmatic control.
 >
-  local commands = require("sessionizer.api").commands
-  local get = require("sessionizer.api").get
+  local commands = require("sess.api").commands
+  local get = require("sess.api").get
 <
 commands.save()
   Save current session.
@@ -275,30 +275,30 @@ commands.list({opts})
 get.current()
   Get current session.
   Return: ~
-      sessionizer.Session
+      sess.Session
 
 get.prev()
   Get previous session.
   Return: ~
-      sessionizer.Session|nil
+      sess.Session|nil
 
 get.all()
   Get all sessions.
   Return: ~
-      sessionizer.Session[]
+      sess.Session[]
 
 get.by_name(<name>)
   Get session by name.
   Return: ~
-      sessionizer.Session|nil
+      sess.Session|nil
 
 get.by_path(<path>)
   Get session by path.
   Return: ~
-      sessionizer.Session|nil
+      sess.Session|nil
 
 ==============================================================================
-TROUBLESHOOTING                                          *sessionizer-troubleshooting*
+TROUBLESHOOTING                                          *sess-troubleshooting*
 
 Conform.nvim and before_load.auto_save_files = true
 If you use conform.nvim and enable before_load.auto_save_files, you may need

@@ -1,8 +1,8 @@
 local M = {}
 
-local logger = require("sessionizer.logger")
+local logger = require("sess.logger")
 
----@class sessionizer.Files
+---@class Sess.Files
 ---@field path string
 ---@field marked_path string | nil
 

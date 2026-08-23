@@ -1,8 +1,8 @@
----@class sessionizer.Input
+---@class Sess.Input
 ---@field user_input string
 ---@field result string
 
----@class sessionizer.PurgeOpts
+---@class Sess.PurgeOpts
 ---@field force boolean
 ---@field wipe boolean
 ---@field keep_scratch boolean
@@ -10,8 +10,8 @@
 local M = {}
 
 function M.setup_auto_load()
-    local commands = require("sessionizer.commands")
-    local session = require("sessionizer.session")
+    local commands = require("sess.commands")
+    local session = require("sess.session")
 
     vim.api.nvim_create_autocmd("VimEnter", {
         callback = function()
@@ -33,9 +33,9 @@ function M.setup_auto_load()
 end
 
 function M.setup_auto_save()
-    local commands = require("sessionizer.commands")
-    local opts = require("sessionizer").get_opts()
-    local state = require("sessionizer.state")
+    local commands = require("sess.commands")
+    local opts = require("sess").get_opts()
+    local state = require("sess.state")
 
     vim.api.nvim_create_autocmd("VimLeavePre", {
         callback = function()
@@ -50,10 +50,10 @@ function M.setup_auto_save()
     })
 end
 
-local commands_utils = require("sessionizer.commands._utils")
+local commands_utils = require("sess.commands._utils")
 
----@param a sessionizer.Session
----@param b sessionizer.Session
+---@param a Sess.Session
+---@param b Sess.Session
 ---@return boolean
 local function compare_sessions(a, b)
     local pa, pb = commands_utils.is_pinned(a), commands_utils.is_pinned(b)
@@ -78,16 +78,16 @@ local function compare_sessions(a, b)
     return a.path < b.path
 end
 
----@return sessionizer.Session[]
+---@return Sess.Session[]
 function M.get_items()
-    local session = require("sessionizer.session")
-    local state = require("sessionizer.state")
-    local opts = require("sessionizer").get_opts()
+    local session = require("sess.session")
+    local state = require("sess.state")
+    local opts = require("sess").get_opts()
 
     local all_sessions = session.get.all()
     local current_session = state.get_current_session()
 
-    ---@type sessionizer.Session[]
+    ---@type Sess.Session[]
     local items = {}
     ---@type string[]
     local paths = {}

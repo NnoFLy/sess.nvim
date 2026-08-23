@@ -1,26 +1,26 @@
----@class sessionizer.BeforeLoadOpts
+---@class Sess.BeforeLoadOpts
 ---@field auto_save_files boolean
 ---@field auto_hide_buffers boolean
 ---@field custom function
 
----@class sessionizer.AfterLoadOpts
+---@class Sess.AfterLoadOpts
 ---@field custom function
 
----@class sessionizer.OnUnloadOpts
+---@class Sess.OnUnloadOpts
 ---@field custom function
 
----@alias sessionizer.log_level "debug"|"info"|"warn"|"error"
+---@alias Sess.log_level "debug"|"info"|"warn"|"error"
 
----@class sessionizer.Opts
+---@class Sess.Opts
 ---@field paths string[]
----@field log_level sessionizer.log_level
+---@field log_level Sess.log_level
 ---@field smart_auto_load boolean
 ---@field auto_save boolean
 ---@field exclude_filetypes string[]
 ---@field auto_save_files boolean
----@field before_load sessionizer.BeforeLoadOpts
----@field after_load sessionizer.AfterLoadOpts
----@field on_unload sessionizer.OnUnloadOpts
+---@field before_load Sess.BeforeLoadOpts
+---@field after_load Sess.AfterLoadOpts
+---@field on_unload Sess.OnUnloadOpts
 return {
     paths = {},
     smart_auto_load = true,

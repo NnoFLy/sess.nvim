@@ -1,4 +1,4 @@
-local actions = require("telescope._extensions.sessionizer.actions")
+local actions = require("telescope._extensions.sess.actions")
 local conf = require("telescope.config").values
 
 local config = {}

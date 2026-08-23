@@ -1,13 +1,13 @@
----@class sessionizer.Separators
+---@class Sess.Separators
 ---@field main string
 ---@field path string
 
----@class sessionizer.Consts
+---@class Sess.Consts
 ---@field path string
 ---@field prefix string
----@field separators sessionizer.Separators
+---@field separators Sess.Separators
 return {
-    path = vim.fn.stdpath("data") .. "/sessionizer/sessions/",
+    path = vim.fn.stdpath("data") .. "/sess/sessions/",
     prefix = "SESSION",
     separators = {
         main = ":SP:",

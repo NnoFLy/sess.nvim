@@ -1,8 +1,8 @@
-local commands = require("sessionizer.commands")
-local session = require("sessionizer.session")
-local logger = require("sessionizer.logger")
-local state = require("sessionizer.state")
-local utils = require("sessionizer.utils")
+local commands = require("sess.commands")
+local session = require("sess.session")
+local logger = require("sess.logger")
+local state = require("sess.state")
+local utils = require("sess.utils")
 
 local subcommands = {
     list = commands.list,

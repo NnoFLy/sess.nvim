@@ -1,6 +1,6 @@
 local M = {}
 
----@param s sessionizer.Session
+---@param s Sess.Session
 ---@return boolean
 function M.is_pinned(s)
     return s.name ~= s.path

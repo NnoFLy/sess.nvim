@@ -1,4 +1,4 @@
-local logger = require("sessionizer.logger")
+local logger = require("sess.logger")
 
 local ok, telescope = pcall(require, "telescope")
 if not ok then
@@ -6,11 +6,11 @@ if not ok then
     return
 end
 
-local config = require("telescope._extensions.sessionizer.config")
+local config = require("telescope._extensions.sess.config")
 
 return telescope.register_extension({
     setup = config.setup,
     exports = {
-        sessionizer = require("telescope._extensions.sessionizer.pickers"),
+        sess = require("telescope._extensions.sess.pickers"),
     },
 })

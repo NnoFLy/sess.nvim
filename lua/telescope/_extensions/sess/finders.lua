@@ -1,5 +1,5 @@
 local finders = require("telescope.finders")
-local utils = require("sessionizer.utils")
+local utils = require("sess.utils")
 
 local M = {}
 

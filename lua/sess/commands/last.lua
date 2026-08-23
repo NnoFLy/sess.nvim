@@ -1,10 +1,10 @@
----@param before_load_opts sessionizer.BeforeLoadOpts | nil
----@param after_load_opts sessionizer.AfterLoadOpts | nil
+---@param before_load_opts Sess.BeforeLoadOpts | nil
+---@param after_load_opts Sess.AfterLoadOpts | nil
 ---@return boolean
 return function(before_load_opts, after_load_opts)
-    local commands = require("sessionizer.commands")
-    local logger = require("sessionizer.logger")
-    local state = require("sessionizer.state")
+    local commands = require("sess.commands")
+    local logger = require("sess.logger")
+    local state = require("sess.state")
 
     local previous_session = state.get_prev_session()
     if not previous_session then

@@ -1,14 +1,14 @@
 local M = {}
 
----@alias BufferId integer
+---@alias Sess.BufferId integer
 
----@param bufnr BufferId
+---@param bufnr Sess.BufferId
 ---@return boolean, boolean | string
 function M.hide_buffer(bufnr)
     return pcall(vim.api.nvim_set_option_value, "buflisted", false, { buf = bufnr })
 end
 
----@param bufnr BufferId
+---@param bufnr Sess.BufferId
 ---@return boolean, boolean | string
 function M.get_hidden_buffer_state(bufnr)
     return pcall(vim.api.nvim_get_option_value, "buflisted", { buf = bufnr })
