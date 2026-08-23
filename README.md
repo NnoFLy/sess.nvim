@@ -1,4 +1,4 @@
-# sessionizer.nvim
+# Sess.nvim
 
 Plugin for managing sessions in Neovim, like tmux-sessionizer.
 
@@ -181,6 +181,14 @@ Or just set `before_load.auto_save_files = false`
 
 </details>
 
-## TODOs
+## TODO
 
-- [ ] Remote sessions
+- [X] Improve switching between sessions
+- [ ] MRU
+- [ ] Refactor
+- [ ] Instead of removing buffer, just hide them
+- [ ] Move by directories with Telescope
+- [ ] Open remote session from Telescope ('/ssh:<login>/')
+- [ ] Remote sessions (with `ssh`)
+- [ ] Keymaps for remote session, via callback
+- [ ] sshfs
