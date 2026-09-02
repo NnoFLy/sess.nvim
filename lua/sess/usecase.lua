@@ -20,12 +20,12 @@ function M.do_u_wanna_save()
         return nil
     end
 
-    local cwd = vim.loop.cwd()
+    local cwd = vim.fn.getcwd()
     if not cwd then
         return nil
     end
 
-    return session.get.by_path(cwd)
+    return session.get_by_path(cwd)
 end
 
 return M

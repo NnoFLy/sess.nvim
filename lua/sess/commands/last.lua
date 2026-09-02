@@ -3,12 +3,12 @@
 ---@return boolean
 return function(before_load_opts, after_load_opts)
     local commands = require("sess.commands")
-    local logger = require("sess.logger")
+    local log = require("sess.log")
     local state = require("sess.state")
 
     local previous_session = state.get_prev_session()
     if not previous_session then
-        logger.error("No previous session")
+        log.error("No previous session")
         return false
     end
 

@@ -1,129 +1,118 @@
----@class Sess.Input
----@field user_input string
----@field result string
-
----@class Sess.PurgeOpts
----@field force boolean
----@field wipe boolean
----@field keep_scratch boolean
-
 local M = {}
-
-function M.setup_auto_load()
-    local commands = require("sess.commands")
-    local session = require("sess.session")
-
-    vim.api.nvim_create_autocmd("VimEnter", {
-        callback = function()
-            vim.schedule(function()
-                if vim.fn.argc() ~= 0 then
-                    return
-                end
-
-                local cwd = vim.fn.getcwd()
-                local s = session.get.by_path(cwd)
-                if s then
-                    commands.load(s)
-                else
-                    commands.create(cwd)
-                end
-            end)
-        end,
-    })
-end
-
-function M.setup_auto_save()
-    local commands = require("sess.commands")
-    local opts = require("sess").get_opts()
-    local state = require("sess.state")
-
-    vim.api.nvim_create_autocmd("VimLeavePre", {
-        callback = function()
-            if vim.list_contains(opts.exclude_filetypes, vim.bo.filetype) then
-                return
-            end
-            if not state.get_current_session() then
-                return
-            end
-            commands.save()
-        end
-    })
-end
-
-local commands_utils = require("sess.commands._utils")
 
 ---@param a Sess.Session
 ---@param b Sess.Session
 ---@return boolean
 local function compare_sessions(a, b)
-    local pa, pb = commands_utils.is_pinned(a), commands_utils.is_pinned(b)
-    if pa ~= pb then
-        return pa
+    if a.metadata.pinned ~= b.metadata.pinned then
+        return a.metadata.pinned
     end
 
-    local a_has_custom_name = a.name ~= a.path
-    local b_has_custom_name = b.name ~= b.path
-    if a_has_custom_name ~= b_has_custom_name then
-        return a_has_custom_name
+    if a.metadata.last_used_at ~= b.metadata.last_used_at then
+        return a.metadata.last_used_at > b.metadata.last_used_at
     end
 
-    if a.last_used ~= b.last_used then
-        return a.last_used > b.last_used
+    local an = a.metadata.name:lower()
+    local bn = b.metadata.name:lower()
+    if an ~= bn then
+        return an < bn
     end
 
-    if a.name ~= b.name then
-        return a.name < b.name
-    end
-
-    return a.path < b.path
+    return a.metadata.cwd < b.metadata.cwd
 end
 
----@return Sess.Session[]
+---@param path string
+---@return string[]
+local function get_user_paths(path)
+    if type(path) ~= "string" or path == "" then
+        return {}
+    end
+
+    local home = os.getenv("HOME") or "~"
+    local dirs = {}
+    local patterns = vim.fn.glob(path:gsub("~", home), false, true)
+    for _, dir in ipairs(patterns) do
+        if vim.fn.isdirectory(dir) == 1 then
+            table.insert(dirs, vim.fs.normalize(dir))
+        end
+    end
+    return dirs
+end
+
+---@class Sess.DirectoryItem
+---@field name string
+---@field path string
+---@field last_used_at integer
+---@field pinned boolean
+
+---@return (Sess.Session|Sess.DirectoryItem)[]
 function M.get_items()
     local session = require("sess.session")
     local state = require("sess.state")
     local opts = require("sess").get_opts()
 
-    local all_sessions = session.get.all()
+    local all_sessions = session.list()
     local current_session = state.get_current_session()
 
-    ---@type Sess.Session[]
+    ---@type (Sess.Session|Sess.DirectoryItem)[]
     local items = {}
-    ---@type string[]
     local paths = {}
 
     if current_session then
-        table.insert(paths, current_session.path)
+        table.insert(items, current_session)
+        table.insert(paths, current_session.metadata.cwd)
     end
 
-    for _, ses in ipairs(all_sessions) do
-        if current_session and current_session.path == ses.path then
-            goto continue
+    for _, s in ipairs(all_sessions) do
+        if not current_session or vim.fs.normalize(current_session.metadata.cwd) ~= vim.fs.normalize(s.metadata.cwd) then
+            table.insert(items, s)
+            table.insert(paths, s.metadata.cwd)
         end
-
-        table.insert(items, ses)
-        table.insert(paths, ses.path)
-
-        ::continue::
     end
 
-    table.sort(items, compare_sessions)
+    local user_paths = type(opts.paths) == "table" and opts.paths or {}
+    for _, pattern in ipairs(user_paths) do
+        for _, dir in ipairs(get_user_paths(pattern)) do
+            local exists = false
+            for _, path in ipairs(paths) do
+                if vim.fs.normalize(path) == dir then
+                    exists = true
+                    break
+                end
+            end
 
-    if current_session then
-        table.insert(items, 1, current_session)
-    end
-
-    local user_paths = opts.paths
-    if type(user_paths) ~= "table" then
-        user_paths = {}
-    end
-
-    for _, path in pairs(user_paths) do
-        for _, dir in ipairs(commands_utils.get_user_dirs(path)) do
-            if not vim.list_contains(paths, dir) then
-                table.insert(items, { name = dir, path = dir, last_used = 0 })
+            if not exists then
+                table.insert(items, {
+                    name = vim.fn.fnamemodify(dir, ":t"),
+                    path = dir,
+                    last_used_at = 0,
+                    pinned = false,
+                })
+                table.insert(paths, dir)
             end
         end
+    end
+
+    table.sort(items, function(a, b)
+        local a_is_session = a.metadata ~= nil
+        local b_is_session = b.metadata ~= nil
+        if a_is_session and b_is_session then
+            return compare_sessions(a, b)
+        end
+        if a_is_session ~= b_is_session then
+            return a_is_session
+        end
+        return a.name:lower() < b.name:lower()
+    end)
+
+    if current_session then
+        for i, item in ipairs(items) do
+            if item.metadata and item.id == current_session.id then
+                table.remove(items, i)
+                break
+            end
+        end
+        table.insert(items, 1, current_session)
     end
 
     return items

@@ -1,9 +1,23 @@
-local logger         = require("sess.logger")
-local buffers        = require("sess.buffers")
-local commands_utils = require("sess.commands._utils")
-local state          = require("sess.state")
-local session        = require("sess.session")
-local usecase        = require("sess.usecase")
+local log     = require("sess.log")
+local buffers = require("sess.buffers")
+local state   = require("sess.state")
+local session = require("sess.session")
+local usecase = require("sess.usecase")
+
+local function get_modified_buffers()
+    local modified = {}
+
+    for _, bufnr in pairs(vim.api.nvim_list_bufs()) do
+        if vim.api.nvim_buf_is_loaded(bufnr)
+            and vim.api.nvim_get_option_value("modifiable", { buf = bufnr })
+            and vim.api.nvim_get_option_value("modified", { buf = bufnr })
+            and vim.api.nvim_buf_get_name(bufnr) ~= "" then
+            table.insert(modified, vim.api.nvim_buf_get_name(bufnr))
+        end
+    end
+
+    return modified
+end
 
 ---@param s Sess.Session
 ---@param before_load_opts Sess.BeforeLoadOpts | nil
@@ -11,12 +25,7 @@ local usecase        = require("sess.usecase")
 ---@return boolean
 return function(s, before_load_opts, after_load_opts)
     if not s then
-        logger.error("Session is not provided")
-        return false
-    end
-
-    if not session.get.by_path(s.path) then
-        logger.error("Session was not found: " .. s.name)
+        log.error("Session is not provided")
         return false
     end
 
@@ -26,10 +35,10 @@ return function(s, before_load_opts, after_load_opts)
     before_load_opts = vim.tbl_deep_extend("force", opts.before_load, before_load_opts or {})
     after_load_opts = vim.tbl_deep_extend("force", opts.after_load, after_load_opts or {})
 
-    local modified = commands_utils.get_modified_buffers()
+    local modified = get_modified_buffers()
     if #modified > 0 then
         if not before_load_opts.auto_save_files then
-            logger.warn(
+            log.warn(
                 "You have unsaved changes in the following buffers(" .. #modified .. "):\n"
                 .. table.concat(modified, ", ") .. "\n\n"
                 .. "Please save or close them before loading a session."
@@ -49,35 +58,42 @@ return function(s, before_load_opts, after_load_opts)
     end
 
     if current_session then
-        commands.save()
+        local saved = commands.save()
+        if not saved then
+            log.error("Can't load session: failed to save the current session")
+            return false
+        end
+    end
+
+    if current_session and current_session.id == s.id then
+        log.info("Session is already loaded: " .. s.metadata.name)
+        return true
     end
 
     if before_load_opts.auto_hide_buffers then
         buffers.hide_all_buffers()
     end
 
-    if current_session and (s.name == current_session.name) then
-        logger.warn("Previous and current sessions are the same")
-    end
-
-    local new_current_session = session.load(s)
-    if not new_current_session then
-        logger.error("Can't load session: " .. s.name)
+    local ok, err = session.load_session(s.id)
+    if not ok then
+        log.error(err)
+        log.error("Can't load session: " .. s.metadata.name)
         return false
     end
 
-    logger.debug("Previous session: " .. (current_session and current_session.name or "nil"))
-    if current_session then
+    log.debug("Previous session: " .. (current_session and current_session.metadata.name or "nil"))
+    if current_session and current_session.id ~= s.id then
         state.set_prev_session(current_session)
     end
-    state.set_current_session(new_current_session)
-    vim.g.sess_current_session = new_current_session.name
+
+    local loaded_session = session.get(s.id) or s
+    state.set_current_session(loaded_session)
 
     if after_load_opts.custom then
         after_load_opts.custom()
     end
 
-    logger.info("Current session: " .. s.name)
+    log.info("Current session: " .. s.metadata.name)
 
     return true
 end

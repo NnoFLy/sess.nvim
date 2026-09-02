@@ -73,7 +73,7 @@ sess.setup({opts})                                  *sess.setup*
           log_level = "info",      -- debug|info|warn|error
           before_load = {
               auto_save_files = false,
-              auto_remove_buffers = true,
+              auto_hide_buffers = true,
               custom = function() end,
           },
           after_load = {
@@ -94,7 +94,7 @@ sess.setup({opts})                                  *sess.setup*
 
       before_load           (table)    Hooks before a load occurs.
         auto_save_files     (boolean)  Save files before load.
-        auto_remove_buffers (boolean)  Remove buffers before load.
+        auto_hide_buffers (boolean)  Remove buffers before load.
         custom              (function) Custom hook.
 
       after_load            (table)    Hooks after load.
@@ -118,19 +118,22 @@ All commands are available through |:Sess|.
     Save current session.
 
 :Sess pin [<session_name>]                                *:Sess-pin*
-    Pin and rename a session.
-    If <session_name> is omitted, you will be prompted.
+    Toggle the pinned state of a session.
+    If <session_name> is omitted, the current session is used.
 
 :Sess create [<path>]                                     *:Sess-create*
     Create a session for <path> and load it.
-    If session already exists, it will be recreated.
+    If a session already exists for <path>, it is loaded instead.
     If <path> is omitted, current working directory is used.
 
-:Sess load [<session_name>]                               *:Sess-load*
-    Load session by name or by current working directory.
+:Sess load [<session_name_or_path>]                        *:Sess-load*
+    Load session by name, path, or current working directory.
 
 :Sess unload                                              *:Sess-unload*
     Unload current session.
+
+:Sess rename [<session_name>]                             *:Sess-rename*
+    Rename session by name or current session.
 
 :Sess delete [<session_name>]                             *:Sess-delete*
     Delete session by name or current session.
@@ -143,7 +146,7 @@ All commands are available through |:Sess|.
 
 Completion:
   :Sess <Tab>                  completes subcommands.
-  :Sess load|pin|delete <Tab>  completes session names.
+  :Sess load|pin|rename|delete <Tab>  completes session names.
   :Sess create <Tab>           completes directories.
 
 ==============================================================================
@@ -238,10 +241,13 @@ commands.save()
   Return: ~
       boolean
 
-commands.pin(<session>, <new_name>)
-  Pin and rename a session.
-  If <session> is omitted, uses the current session.
-  If <new_name> is omitted, you will be prompted.
+commands.pin(<session>)
+  Toggle the pinned state of a session.
+  Return: ~
+      boolean
+
+commands.rename(<session>, <name>)
+  Rename a session. If <name> is omitted, you will be prompted.
   Return: ~
       boolean
 

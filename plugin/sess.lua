@@ -1,54 +1,73 @@
 local commands = require("sess.commands")
 local session = require("sess.session")
-local logger = require("sess.logger")
+local log = require("sess.log")
 local state = require("sess.state")
-local utils = require("sess.utils")
 
 local subcommands = {
     list = commands.list,
     save = commands.save,
     create = function(path)
-        if not path or path == "" then
-            path = vim.fn.getcwd()
-        end
+        path = path and path ~= "" and path or vim.fn.getcwd()
+        path = vim.fs.normalize(path)
 
-        local s = session.get.by_path(path)
-
-        if not s then
-            commands.create(path)
+        local s = session.get_by_path(path)
+        if s then
+            commands.load(s)
             return
         end
 
-        commands.load(s)
+        commands.create(path)
     end,
     pin = function(session_name)
-        local s = nil
+        local s
         if session_name and session_name ~= "" then
-            s = session.get.by_name(session_name)
+            s = session.get_by_name(session_name)
         else
             if not commands.save() then
-                logger.error("Cannot save session")
                 return
             end
             s = state.get_current_session()
         end
+
         if not s then
-            logger.error("Cannot get session for pinning")
+            log.error("Cannot get session for pinning")
             return
         end
 
         commands.pin(s)
     end,
-    load = function(session_name_or_path)
-        local s = nil
-        if session_name_or_path and session_name_or_path ~= "" then
-            s = session.get.by_name(session_name_or_path)
+    rename = function(session_name)
+        local s
+        if session_name and session_name ~= "" then
+            s = session.get_by_name(session_name)
         else
-            s = session.get.by_path(vim.fn.getcwd())
+            s = state.get_current_session()
         end
+
+        if not s then
+            log.error("Cannot get session for renaming")
+            return
+        end
+
+        commands.rename(s)
+    end,
+    load = function(session_name_or_path)
+        local s
+        if session_name_or_path and session_name_or_path ~= "" then
+            s = session.get_by_name(session_name_or_path)
+            if not s then
+                local path = vim.fs.normalize(session_name_or_path)
+                if vim.fn.isdirectory(path) == 1 then
+                    s = session.get_by_path(path)
+                end
+            end
+        else
+            s = session.get_by_path(vim.fn.getcwd())
+        end
+
         if not s then
             if session_name_or_path and session_name_or_path ~= "" then
-                commands.create(session_name_or_path)
+                log.error("Session not found: " .. session_name_or_path)
             else
                 commands.create(vim.fn.getcwd())
             end
@@ -59,15 +78,15 @@ local subcommands = {
     end,
     unload = commands.unload,
     delete = function(session_name)
-        local s = nil
+        local s
         if session_name and session_name ~= "" then
-            s = session.get.by_name(session_name)
+            s = session.get_by_name(session_name)
         else
             s = state.get_current_session()
         end
 
         if not s then
-            logger.error("Cannot get session for deletion")
+            log.error("Cannot get session for deletion")
             return
         end
 
@@ -76,11 +95,18 @@ local subcommands = {
     last = commands.last,
 }
 
-local session_subs = { load = true, pin = true, delete = true }
+local session_subs = {
+    load = true,
+    pin = true,
+    rename = true,
+    delete = true,
+}
 
 local function keys(t)
     local out = {}
-    for k in pairs(t) do table.insert(out, k) end
+    for k in pairs(t) do
+        table.insert(out, k)
+    end
     table.sort(out)
     return out
 end
@@ -91,7 +117,9 @@ local function filter_by_pattern(list, pattern)
     end
 
     if not pattern:find("[%*%?]") then
-        return vim.tbl_filter(function(item) return vim.startswith(item, pattern) end, list)
+        return vim.tbl_filter(function(item)
+            return vim.startswith(item, pattern)
+        end, list)
     end
 
     if pattern:sub(1, 1) == "*" and pattern:sub(-1) ~= "*" then
@@ -102,14 +130,16 @@ local function filter_by_pattern(list, pattern)
     esc = esc:gsub("%*", ".*"):gsub("%?", ".")
     local lua_pat = "^" .. esc .. "$"
 
-    return vim.tbl_filter(function(item) return item:match(lua_pat) end, list)
+    return vim.tbl_filter(function(item)
+        return item:match(lua_pat)
+    end, list)
 end
 
 local function session_names()
-    local sessions = utils.get_items() or {}
+    local sessions = session.list() or {}
     local out = {}
-    for _, s in pairs(sessions) do
-        if s and s.name then table.insert(out, s.name) end
+    for _, s in ipairs(sessions) do
+        table.insert(out, s.metadata.name)
     end
     table.sort(out)
     return out
@@ -140,27 +170,35 @@ local function sess_complete(arg_lead, cmdline, cursorpos)
         return filter_by_pattern(keys(subcommands), first)
     end
 
-    local second_prefix = rest or ""
-
     if session_subs[first] then
-        return filter_by_pattern(session_names(), second_prefix)
+        return filter_by_pattern(session_names(), rest or "")
     end
 
     if first == "create" then
         return path_dirs(arg_lead)
     end
 
-    return filter_by_pattern(keys(subcommands), first)
+    return {}
 end
 
-
 vim.api.nvim_create_user_command("Sess", function(args)
+    if #args.fargs > 2 then
+        log.error("Too many arguments: expected at most a subcommand and one argument")
+        return
+    end
+
     local cmd = args.fargs[1]
+    if not cmd or cmd == "" then
+        log.error("Missing subcommand; use :Sess <Tab> to see available commands")
+        return
+    end
+
     if subcommands[cmd] then
         subcommands[cmd](args.fargs[2])
-    else
-        logger.error("Unknown subcommand: " .. tostring(cmd))
+        return
     end
+
+    log.error("Unknown subcommand: " .. tostring(cmd))
 end, {
     nargs = "*",
     complete = sess_complete,

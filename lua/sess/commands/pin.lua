@@ -1,54 +1,24 @@
 local session = require("sess.session")
-local logger = require("sess.logger")
-local commands_utils = require("sess.commands._utils")
+local log = require("sess.log")
 local state = require("sess.state")
 
 ---@param s Sess.Session
----@param new_name string | nil
----@return boolean
-return function(s, new_name)
+---@return boolean, string?
+return function(s)
     if not s then
-        logger.error("Session is not provided")
-        return false
+        return false, "session is not provided"
     end
 
-    if s.last_used == 0 then
-        logger.warn("Session was not saved. You need to save it first.")
-        return false
+    local updated, err = session.toggle_pinned(s.id)
+    if not updated then
+        log.error(err or "failed to toggle session pin")
+        return false, err
     end
 
-    if not new_name then
-        new_name = vim.fn.input(
-            "Enter Session Name: ",
-            commands_utils.get_last_folder_in_path(s.name or vim.fn.getcwd())
-        )
-        if not new_name or new_name == "" then
-            return false
-        end
+    if state.get_current_session() and state.get_current_session().id == s.id then
+        state.set_current_session(updated)
     end
 
-    local all_sessions = session.get.all()
-    for _, ses in pairs(all_sessions) do
-        if ses.name == new_name then
-            logger.error("Session already exists")
-            return false
-        end
-    end
-
-    local new_session = session.new(new_name, s.path)
-
-    local ok = session.rename(s, new_session)
-    if not ok then
-        logger.error("Failed to rename session")
-        return false
-    end
-
-    if new_session.path == vim.fn.getcwd() then
-        state.set_current_session(new_session)
-        vim.g.sess_current_session = new_session.name
-    end
-
-    logger.info("Session pinned: " .. new_name)
-
+    log.info(updated.metadata.pinned and "Session pinned: " .. updated.metadata.name or "Session unpinned: " .. updated.metadata.name)
     return true
 end

@@ -1,19 +1,17 @@
 local buffers = require("sess.buffers")
-local logger  = require("sess.logger")
-local state   = require("sess.state")
+local log = require("sess.log")
+local state = require("sess.state")
 local session = require("sess.session")
 local usecase = require("sess.usecase")
 
 ---@param path string | nil
----@return nil
+---@return boolean
 return function(path)
-    local commands = require("sess.commands")
+    local cwd = path or vim.fn.getcwd()
+    cwd = vim.fs.normalize(vim.fn.fnamemodify(cwd, ":p"))
 
-    path = path or vim.fn.getcwd()
-    path = vim.fs.normalize(vim.fn.fnamemodify(path, ":p"))
-
-    if vim.fn.isdirectory(path) == 0 then
-        logger.error("Directory does not exist: " .. path)
+    if vim.fn.isdirectory(cwd) == 0 then
+        log.error("Directory does not exist: " .. cwd)
         return false
     end
 
@@ -23,26 +21,28 @@ return function(path)
     end
 
     if current_session then
-        commands.save()
+        local ok, err = session.save(current_session.id)
+        if not ok then
+            log.error(err or "Failed to save current session")
+            return false
+        end
     end
 
-    vim.fn.chdir(path)
-
+    vim.fn.chdir(cwd)
     buffers.hide_all_buffers()
+    vim.cmd("edit .")
 
-    vim.cmd("e .")
-
-    local s = session.new()
-    if not session.save(s) then
-        logger.error("Failed to create session")
-        return
+    local s, err = session.create({ cwd = cwd })
+    if not s then
+        log.error(err or "Failed to create session")
+        return false
     end
 
     if current_session then
         state.set_prev_session(current_session)
     end
     state.set_current_session(s)
-    vim.g.sess_current_session = s.name
 
-    logger.info("Session created: " .. s.name)
+    log.info("Session created: " .. s.metadata.name)
+    return true
 end

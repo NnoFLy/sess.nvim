@@ -10,7 +10,6 @@ Plugin for managing sessions in Neovim.
 - Rename sessions
 - List sessions (with telescope.nvim)
 - Switch to last session
-- Handle terminals
 
 ## Installation
 
@@ -24,8 +23,8 @@ return {
 
 --- OPTIONAL (only for 'Sess list') ---
     dependencies = {
+        "nvim-lua/plenary.nvim",
         "nvim-telescope/telescope.nvim",
-        "nvim-lua/plenary.nvim"
     },
 --- OPTIONAL (only for 'Sess list') ---
 }
@@ -38,8 +37,8 @@ return {
 
 ```lua
 --- OPTIONAL (only for 'Sess list') ---
-vim.pack.add({ "https://github.com/nvim-telescope/telescope.nvim" })
 vim.pack.add({ "https://github.com/nvim-lua/plenary.nvim" })
+vim.pack.add({ "https://github.com/nvim-telescope/telescope.nvim" })
 --- OPTIONAL (only for 'Sess list') ---
 
 vim.pack.add({ "https://github.com/i0i-i0i/sess.nvim" })
@@ -65,9 +64,10 @@ require("sess").setup({
                        -- works only if session is loaded
     exclude_filetypes = { "gitcommit" },  -- exclude from auto save
     log_level = "info", -- debug|info|warn|error
+    store_path = vim.fn.stdpath("data") .. "/sess.nvim",
     before_load = {
         auto_save_files = false,     -- auto save files before switch to another session
-        auto_remove_buffers = true,  -- auto remove buffers before switch to another session
+        auto_hide_buffers = true,  -- auto remove buffers before switch to another session
         custom = function() end,
     },
     after_load = {
@@ -87,7 +87,7 @@ Example keybindings:
 vim.keymap.set("n", "<M-s>s", "<cmd>Sess save<cr>", { desc = "Save session" })
 vim.keymap.set("n", "<M-s>p", "<cmd>Sess pin<cr>", { desc = "Pin session" })
 vim.keymap.set("n", "<M-s>c", ":Sess create ", { desc = "Create session" })
-vim.keymap.set("n", "<M-s>a", "<cmd>Sess load<cr>", { desc = "Load session" })
+vim.keymap.set("n", "<M-s>l", "<cmd>Sess load<cr>", { desc = "Load session" })
 vim.keymap.set("n", "<M-s>u", "<cmd>Sess unload<cr>", { desc = "Unload session" })
 vim.keymap.set("n", "<C-s>", "<cmd>Sess list<cr>", { desc = "List sessions" }) -- only if you have telescope.nvim
 vim.keymap.set("n", "<leader><C-^>", "<cmd>Sess last<cr>", { desc = "Load the previous session" })
@@ -96,7 +96,7 @@ vim.keymap.set("n", "<leader><C-^>", "<cmd>Sess last<cr>", { desc = "Load the pr
 Command completion:
 
 - `:Sess <Tab>` completes subcommands.
-- `:Sess load|pin|delete <Tab>` completes session names.
+- `:Sess load|pin|rename|delete <Tab>` completes session names.
 - `:Sess create <Tab>` completes directories.
 
 ## Status line
@@ -163,7 +163,7 @@ require("telescope").setup({
 ## Troubleshooting
 
 <details>
-<summary>If you set 'before_load.auto_save_files = true' and you use conform.nvim</summary>
+<summary>If you set `before_load.auto_save_files = true` and you use conform.nvim</summary>
 
 ```lua
 require("conform").setup({
@@ -183,9 +183,7 @@ Or just set `before_load.auto_save_files = false`
 
 ## TODO
 
-- [X] Improve switching between sessions
-- [ ] MRU
-- [ ] Refactor
+- [ ] Pin session from Telescope
 - [ ] Move by directories with Telescope ('~', '/', './', '../')
 - [ ] Open remote session from Telescope ('/ssh:<login>/')
 - [ ] Remote sessions (with `ssh`)

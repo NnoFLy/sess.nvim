@@ -1,25 +1,45 @@
+local log = require("sess.log")
+local session = require("sess.session")
+local state = require("sess.state")
+
 ---@return boolean
 return function()
-    local session = require("sess.session")
-    local logger = require("sess.logger")
-    local state = require("sess.state")
-
-    local current_session = state.get_current_session()
-    if current_session == nil then
-        current_session = session.get.by_path(vim.fn.getcwd())
+    local current = state.get_current_session()
+    if current then
+        local ok, err = session.save(current.id)
+        if not ok then
+            log.error("Failed to save session: " .. tostring(err))
+            return false
+        end
+        local updated = session.get(current.id)
+        if updated then
+            state.set_current_session(updated)
+        end
+        return true
     end
-    local session_name = current_session and current_session.name or nil
 
-    local s = session.new(session_name)
-    if not session.save(s) then
-        logger.error("Failed to save session")
+    local existing, err = session.get_by_path(vim.fn.getcwd())
+    if err then
+        log.error("Failed to find session: " .. tostring(err))
         return false
     end
 
-    if state.get_current_session() == nil then
-        state.set_current_session(s)
-        vim.g.sess_current_session = s.name
+    if existing then
+        local ok, save_err = session.save(existing.id)
+        if not ok then
+            log.error("Failed to save session: " .. tostring(save_err))
+            return false
+        end
+        state.set_current_session(session.get(existing.id))
+        return true
     end
 
+    local created, create_err = session.create({ cwd = vim.fn.getcwd() })
+    if not created then
+        log.error("Failed to create session: " .. tostring(create_err))
+        return false
+    end
+
+    state.set_current_session(created)
     return true
 end

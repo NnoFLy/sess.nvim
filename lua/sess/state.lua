@@ -3,11 +3,9 @@ local M = {}
 ---@class Sess.State
 ---@field prev_session Sess.Session | nil
 ---@field current_session Sess.Session | nil
----@field terminals table<string, sess.Terminal[]>
 M._state = {
     prev_session = nil,
     current_session = nil,
-    terminals = {},
 }
 
 ---@param session Sess.Session
@@ -25,6 +23,7 @@ end
 ---@return nil
 function M.set_current_session(session)
     M._state.current_session = session
+    vim.g.sess_current_session = session and session.metadata.name or nil
 end
 
 ---@return Sess.Session | nil

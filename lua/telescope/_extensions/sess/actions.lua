@@ -4,24 +4,25 @@ local actions = require("telescope.actions")
 local action_state = require("telescope.actions.state")
 
 local commands = require("sess.commands")
-local logger = require("sess.logger")
+local log = require("sess.log")
 
 ---@param prompt_bufnr number
 ---@return nil
 function M.enter(prompt_bufnr)
     actions.close(prompt_bufnr)
 
-    local opts = require("sess").get_opts()
-
-    ---@type Sess.Session
-    local selected_session = action_state.get_selected_entry().value
-
-    if selected_session.last_used == 0 then
-        commands.create(selected_session.name)
+    local selected = action_state.get_selected_entry()
+    if not selected then
         return
     end
 
-    commands.load(selected_session, opts.before_load, opts.after_load)
+    local value = selected.value
+    if value.metadata == nil then
+        commands.create(value.path)
+        return
+    end
+
+    commands.load(value)
 end
 
 ---@param prompt_bufnr number
@@ -29,11 +30,13 @@ end
 function M.delete_session(prompt_bufnr)
     actions.close(prompt_bufnr)
 
-    ---@type Sess.Session
-    local selected_session = action_state.get_selected_entry().value
+    local selected = action_state.get_selected_entry()
+    if not selected or not selected.value.metadata then
+        return
+    end
 
-    if not commands.delete(selected_session) then
-        logger.error("Failed to delete session")
+    if not commands.delete(selected.value) then
+        log.error("Failed to delete session")
     end
 
     commands.list()
@@ -44,10 +47,13 @@ end
 function M.rename_session(prompt_bufnr)
     actions.close(prompt_bufnr)
 
-    ---@type Sess.Session
-    local selected_session = action_state.get_selected_entry().value
+    local selected = action_state.get_selected_entry()
+    if not selected or not selected.value.metadata then
+        return
+    end
 
-    commands.pin(selected_session)
+    commands.rename(selected.value)
+    commands.list()
 end
 
 return M

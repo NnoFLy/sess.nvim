@@ -1,43 +1,45 @@
-local logger = require("sess.logger")
+local log = require("sess.log")
 local state = require("sess.state")
 local session = require("sess.session")
 
----@param s Sess.Session
+---@param s Sess.Session | Sess.SessionId
 ---@param on_unload Sess.OnUnloadOpts | nil
 ---@return boolean
 return function(s, on_unload)
     local opts = require("sess").get_opts()
 
     if not s then
-        logger.error("Session is not provided")
+        log.error("Session was not provided")
         return false
     end
 
-    if s.last_used == 0 then
-        logger.error("Session was not used: " .. s.name)
-        return false
+    if type(s) == "string" then
+        local resolved, err = session.get(s)
+        if not resolved then
+            log.error(err or "Session was not found")
+            return false
+        end
+        s = resolved
     end
 
-    if not session.get.by_path(s.path) then
-        logger.error("Session was not found: " .. s.name)
-        return false
-    end
-
-    local user_input = vim.fn.input("Are you sure you want to delete session " .. s.name .. "? (y/N): ")
-    if user_input ~= "y" then
+    local choice = vim.fn.confirm(
+        "Delete session " .. s.metadata.name .. "?",
+        "&Yes\n&No",
+        2
+    )
+    if choice ~= 1 then
         return true
     end
 
-    local ok = require("sess.session").delete(s)
+    local ok, err = session.delete(s.id)
     if not ok then
-        logger.error("Failed to delete session")
+        log.error(err or "Failed to delete session")
         return false
     end
 
     local current_session = state.get_current_session()
-    if current_session and s.path == current_session.path then
+    if current_session and s.id == current_session.id then
         state.set_current_session(nil)
-        vim.g.sess_current_session = nil
     end
 
     on_unload = vim.tbl_deep_extend("force", opts.on_unload, on_unload or {})
@@ -45,7 +47,6 @@ return function(s, on_unload)
         on_unload.custom()
     end
 
-    logger.info("Session deleted: " .. s.name)
-
+    log.info("Session deleted: " .. s.metadata.name)
     return true
 end
