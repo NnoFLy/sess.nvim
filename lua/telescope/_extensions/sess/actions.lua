@@ -5,24 +5,45 @@ local action_state = require("telescope.actions.state")
 
 local commands = require("sess.commands")
 local log = require("sess.log")
+local consts = require("sess.consts")
+
+---@param telescope_entry Sess.TelescopSessionEntry
+---@return Sess.Session
+local function to_session(telescope_entry)
+    return {
+        id = telescope_entry.id,
+        metadata = {
+            version = consts.get_version(),
+            name = telescope_entry.metadata.name,
+            cwd = telescope_entry.metadata.cwd,
+            created_at = telescope_entry.metadata.created_at,
+            last_used_at = telescope_entry.metadata.last_used_at,
+            pinned = telescope_entry.metadata.pinned,
+        }
+    }
+end
 
 ---@param prompt_bufnr number
 ---@return nil
 function M.enter(prompt_bufnr)
     actions.close(prompt_bufnr)
 
+    ---@type Sess.TelescopFinderReturn
     local selected = action_state.get_selected_entry()
     if not selected then
         return
     end
 
     local value = selected.value
-    if value.metadata == nil then
-        commands.create(value.path)
+    if value.id == nil then
+        commands.create(value.metadata.cwd)
         return
     end
 
-    commands.load(value)
+    local ok, err = commands.load(to_session(value))
+    if not ok then
+        log.error(err)
+    end
 end
 
 ---@param prompt_bufnr number
@@ -30,13 +51,34 @@ end
 function M.delete_session(prompt_bufnr)
     actions.close(prompt_bufnr)
 
+    ---@type Sess.TelescopFinderReturn
     local selected = action_state.get_selected_entry()
-    if not selected or not selected.value.metadata then
+    if not selected or not selected.value.id then
         return
     end
 
-    if not commands.delete(selected.value) then
-        log.error("Failed to delete session")
+    local ok, err = commands.delete(to_session(selected.value))
+    if not ok then
+        log.error(err)
+    end
+
+    commands.list()
+end
+
+---@param prompt_bufnr number
+---@return nil
+function M.toggle_pin_session(prompt_bufnr)
+    actions.close(prompt_bufnr)
+
+    ---@type Sess.TelescopFinderReturn
+    local selected = action_state.get_selected_entry()
+    if not selected or not selected.value.id then
+        return
+    end
+
+    local ok, err = commands.pin(to_session(selected.value))
+    if not ok then
+        log.error(err)
     end
 
     commands.list()
@@ -47,12 +89,17 @@ end
 function M.rename_session(prompt_bufnr)
     actions.close(prompt_bufnr)
 
+    ---@type Sess.TelescopFinderReturn
     local selected = action_state.get_selected_entry()
-    if not selected or not selected.value.metadata then
+    if not selected or not selected.value.id then
         return
     end
 
-    commands.rename(selected.value)
+    local ok, err = commands.rename(to_session(selected.value))
+    if not ok then
+        log.error(err)
+    end
+
     commands.list()
 end
 

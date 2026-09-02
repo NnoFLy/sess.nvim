@@ -95,5 +95,7 @@ return function(s, before_load_opts, after_load_opts)
 
     log.info("Current session: " .. s.metadata.name)
 
+    state.add_active_session(loaded_session)
+
     return true
 end

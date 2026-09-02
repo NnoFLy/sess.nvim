@@ -2,11 +2,17 @@ local pickers = require("telescope.pickers")
 
 local config = require("telescope._extensions.sess.config")
 local finders = require("telescope._extensions.sess.finders")
+local state = require("sess.state")
 
 return function(opts)
     opts = opts or {}
 
     local picker_opts = vim.deepcopy(config.values)
+
+    local current_session = state.get_current_session()
+    if current_session then
+        picker_opts.prompt_title = picker_opts.prompt_title .. " | " .. current_session.metadata.name
+    end
 
     if picker_opts.theme and type(picker_opts.theme) == "table" then
         local theme_opts = picker_opts.theme

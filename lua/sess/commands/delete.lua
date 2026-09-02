@@ -40,6 +40,7 @@ return function(s, on_unload)
     local current_session = state.get_current_session()
     if current_session and s.id == current_session.id then
         state.set_current_session(nil)
+        state.remove_active_session(current_session.id)
     end
 
     on_unload = vim.tbl_deep_extend("force", opts.on_unload, on_unload or {})

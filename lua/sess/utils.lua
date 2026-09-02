@@ -42,7 +42,7 @@ end
 ---@class Sess.DirectoryItem
 ---@field name string
 ---@field path string
----@field last_used_at integer
+---@field last_used_at Sess.Timestamp
 ---@field pinned boolean
 
 ---@return (Sess.Session|Sess.DirectoryItem)[]

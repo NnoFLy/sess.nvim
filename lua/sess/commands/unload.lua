@@ -20,5 +20,7 @@ return function(on_unload)
         on_unload.custom()
     end
 
+    state.remove_active_session(current_session.id)
+
     log.info("Session " .. current_session.metadata.name .. " unloaded")
 end

@@ -1,6 +1,7 @@
 local M = {}
 
 local log = require("sess.log")
+local consts = require("sess.consts")
 
 ---@class Sess.Index
 ---@field version Sess.Version
@@ -23,8 +24,6 @@ local TRASH_DIR = "trash"
 local METADATA_FILE = "metadata.json"
 local SESSION_FILE = "session.vim"
 local INDEX_FILE = "index.json"
-
-local CURRENT_VERSION = 1
 
 -- Internal helpers
 
@@ -415,7 +414,7 @@ function M.read_metadata(id)
         end
     end
 
-    if data.version ~= CURRENT_VERSION then
+    if data.version ~= consts.get_version() then
         return nil, "unsupported session metadata version: " .. tostring(data.version)
     end
 
@@ -430,7 +429,7 @@ function M.write_metadata(id, metadata)
         return false, "session does not exist: " .. id
     end
 
-    metadata.version = metadata.version or CURRENT_VERSION
+    metadata.version = metadata.version or consts.get_version()
 
     return write_json(session_paths(id).metadata, metadata)
 end
@@ -503,7 +502,7 @@ function M.read_index()
 
     if not file_exists(path) then
         return {
-            version = CURRENT_VERSION,
+            version = consts.get_version(),
             sessions = {},
         }
     end
@@ -520,7 +519,7 @@ end
 ---@param index Sess.Index
 ---@return boolean, string?
 function M.write_index(index)
-    index.version = index.version or CURRENT_VERSION
+    index.version = index.version or consts.get_version()
 
     return write_json(index_path(), index)
 end
@@ -531,14 +530,14 @@ function M.rebuild_index()
 
     if err then
         return {
-            version = CURRENT_VERSION,
+            version = consts.get_version(),
             sessions = {},
         }, err
     end
 
     ---@type Sess.Index
     local index = {
-        version = CURRENT_VERSION,
+        version = consts.get_version(),
         sessions = {},
     }
 

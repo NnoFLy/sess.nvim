@@ -4,17 +4,19 @@ local conf = require("telescope.config").values
 local config = {}
 
 config.values = {
-    prompt_title = "🗃️ All sessions",
+    prompt_title = "All sessions",
     sorter = conf.generic_sorter(),
     mappings = {
         ["i"] = {
             ["<C-d>"] = actions.delete_session,
+            ["<Tab>"] = actions.toggle_pin_session,
             ["<C-r>"] = actions.rename_session,
             ["<CR>"] = actions.enter,
         },
         ["n"] = {
             ["dd"] = actions.delete_session,
             ["rr"] = actions.rename_session,
+            ["<Tab>"] = actions.toggle_pin_session,
             ["<CR>"] = actions.enter,
         },
     },
