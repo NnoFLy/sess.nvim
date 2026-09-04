@@ -2,8 +2,15 @@ local M = {}
 
 ---@param a Sess.Session
 ---@param b Sess.Session
+---@param active_ids table<Sess.SessionId, boolean>
 ---@return boolean
-local function compare_sessions(a, b)
+local function compare_sessions(a, b, active_ids)
+    local a_active = active_ids[a.id]
+    local b_active = active_ids[b.id]
+    if a_active ~= b_active then
+        return a_active
+    end
+
     if a.metadata.pinned ~= b.metadata.pinned then
         return a.metadata.pinned
     end
@@ -54,6 +61,11 @@ function M.get_items()
     local all_sessions = session.list()
     local current_session = state.get_current_session()
 
+    local active_ids = {}
+    for _, s in ipairs(state.get_active_sessions()) do
+        active_ids[s.id] = true
+    end
+
     ---@type (Sess.Session|Sess.DirectoryItem)[]
     local items = {}
     local paths = {}
@@ -97,7 +109,7 @@ function M.get_items()
         local a_is_session = a.metadata ~= nil
         local b_is_session = b.metadata ~= nil
         if a_is_session and b_is_session then
-            return compare_sessions(a, b)
+            return compare_sessions(a, b, active_ids)
         end
         if a_is_session ~= b_is_session then
             return a_is_session
