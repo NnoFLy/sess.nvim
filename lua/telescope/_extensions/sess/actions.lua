@@ -6,6 +6,7 @@ local action_state = require("telescope.actions.state")
 local commands = require("sess.commands")
 local log = require("sess.log")
 local consts = require("sess.consts")
+local finders = require("telescope._extensions.sess.finders")
 
 ---@param telescope_entry Sess.TelescopSessionEntry
 ---@return Sess.Session
@@ -21,6 +22,13 @@ local function to_session(telescope_entry)
             pinned = telescope_entry.metadata.pinned,
         }
     }
+end
+
+---@param prompt_bufnr number
+---@return nil
+local function refresh(prompt_bufnr)
+    local current_picker = action_state.get_current_picker(prompt_bufnr)
+    current_picker:refresh(finders.generate_new_finder(), { reset_prompt = true })
 end
 
 ---@param prompt_bufnr number
@@ -49,8 +57,6 @@ end
 ---@param prompt_bufnr number
 ---@return nil
 function M.delete_session(prompt_bufnr)
-    actions.close(prompt_bufnr)
-
     ---@type Sess.TelescopFinderReturn
     local selected = action_state.get_selected_entry()
     if not selected or not selected.value.id then
@@ -62,17 +68,15 @@ function M.delete_session(prompt_bufnr)
         log.error(err)
     end
 
-    commands.list()
+    refresh(prompt_bufnr)
 end
 
 ---@param prompt_bufnr number
 ---@return nil
 function M.toggle_pin_session(prompt_bufnr)
-    actions.close(prompt_bufnr)
-
     ---@type Sess.TelescopFinderReturn
     local selected = action_state.get_selected_entry()
-    if not selected or not selected.value.id then
+    if not selected then
         return
     end
 
@@ -81,17 +85,15 @@ function M.toggle_pin_session(prompt_bufnr)
         log.error(err)
     end
 
-    commands.list()
+    refresh(prompt_bufnr)
 end
 
 ---@param prompt_bufnr number
 ---@return nil
 function M.rename_session(prompt_bufnr)
-    actions.close(prompt_bufnr)
-
     ---@type Sess.TelescopFinderReturn
     local selected = action_state.get_selected_entry()
-    if not selected or not selected.value.id then
+    if not selected then
         return
     end
 
@@ -100,7 +102,7 @@ function M.rename_session(prompt_bufnr)
         log.error(err)
     end
 
-    commands.list()
+    refresh(prompt_bufnr)
 end
 
 return M

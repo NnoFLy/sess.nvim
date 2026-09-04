@@ -183,7 +183,6 @@ Or just set `before_load.auto_save_files = false`
 
 ## TODO
 
-- [ ] Pin session from Telescope
 - [ ] Move by directories with Telescope ('~', '/', './', '../')
 - [ ] Open remote session from Telescope ('/ssh:<login>/')
 - [ ] Remote sessions (with `ssh`)

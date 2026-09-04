@@ -95,7 +95,7 @@ local subcommands = {
     last = commands.last,
 }
 
-local session_subs = {
+local session_subcommands_with_args = {
     load = true,
     pin = true,
     rename = true,
@@ -170,7 +170,7 @@ local function sess_complete(arg_lead, cmdline, cursorpos)
         return filter_by_pattern(keys(subcommands), first)
     end
 
-    if session_subs[first] then
+    if session_subcommands_with_args[first] then
         return filter_by_pattern(session_names(), rest or "")
     end
 
