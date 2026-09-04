@@ -1,31 +1,25 @@
 local M = {}
 
 local storage = require("sess.storage")
-local log = require("sess.log")
+local consts = require("sess.consts")
 
-local VERSION = 1
-
----@return Sess.Timestamp
 local function now()
     return os.time()
 end
 
----@return Sess.Cwd
 local function current_cwd()
     return vim.fs.normalize(vim.fn.fnamemodify(vim.fn.getcwd(), ":p"))
 end
 
----@param cwd string
----@return Sess.Cwd
 local function normalize_cwd(cwd)
+    if type(cwd) ~= "string" or vim.trim(cwd) == "" then
+        return nil
+    end
     return vim.fs.normalize(vim.fn.fnamemodify(cwd, ":p"))
 end
 
----@param cwd string
----@return string
 local function default_name(cwd)
     cwd = vim.fs.normalize(cwd)
-
     if cwd == "/" then
         return "root"
     end
@@ -34,21 +28,37 @@ local function default_name(cwd)
     return name ~= "" and name or "session"
 end
 
----@param name string
----@return string
 local function normalize_name(name)
+    if type(name) ~= "string" then
+        return nil
+    end
+
     name = vim.trim(name)
-    return name ~= "" and name or "session"
+    return name ~= "" and name or nil
 end
 
----@param name string
----@return string
-local function unique_name(name)
-    local normalized = normalize_name(name)
-    local lower = normalized:lower()
+local function read_session(id)
+    local metadata, err = storage.read_metadata(id)
+    if not metadata then
+        return nil, err
+    end
 
+    return {
+        id = id,
+        metadata = metadata,
+    }
+end
+
+local function unique_name(name)
+    local normalized = normalize_name(name) or "session"
+    local lower = normalized:lower()
     local used = {}
-    local sessions = M.list() or {}
+
+    local sessions, err = M.list()
+    if err then
+        return nil, err
+    end
+
     for _, existing in ipairs(sessions) do
         used[existing.metadata.name:lower()] = true
     end
@@ -65,24 +75,13 @@ local function unique_name(name)
     return normalized .. " (" .. suffix .. ")"
 end
 
----@param id Sess.SessionId
----@return Sess.Session?, string?
-local function read_session(id)
-    local metadata, err = storage.read_metadata(id)
-    if not metadata then
-        return nil, err
-    end
-
-    return {
-        id = id,
-        metadata = metadata,
-    }
-end
-
 ---@param cwd Sess.Cwd
 ---@return Sess.Session?, string?
 function M.get_by_path(cwd)
     cwd = normalize_cwd(cwd)
+    if not cwd then
+        return nil, "working directory is required"
+    end
 
     local sessions, err = M.list()
     if err then
@@ -101,13 +100,19 @@ end
 ---@param name string
 ---@return Sess.Session?, string?
 function M.get_by_name(name)
+    name = normalize_name(name)
+    if not name then
+        return nil, "session name cannot be empty"
+    end
+
     local sessions, err = M.list()
     if err then
         return nil, err
     end
 
+    local normalized = name:lower()
     for _, session in ipairs(sessions) do
-        if session.metadata.name:lower() == vim.trim(name):lower() then
+        if session.metadata.name:lower() == normalized then
             return session
         end
     end
@@ -121,31 +126,56 @@ function M.create(opts)
     opts = opts or {}
 
     local cwd = normalize_cwd(opts.cwd or current_cwd())
+    if not cwd then
+        return nil, "working directory is required"
+    end
     if vim.fn.isdirectory(cwd) == 0 then
         return nil, "directory does not exist: " .. cwd
     end
 
-    local explicit_name = opts.name ~= nil
-    local name = explicit_name and normalize_name(opts.name) or unique_name(default_name(cwd))
-
-    if M.get_by_path(cwd) then
+    local existing, err = M.get_by_path(cwd)
+    if err then
+        return nil, err
+    end
+    if existing then
         return nil, "session already exists for directory: " .. cwd
     end
 
+    local explicit_name = opts.name ~= nil
+    local name
     if explicit_name then
-        local existing = M.get_by_name(name)
-        if existing then
+        name = normalize_name(opts.name)
+        if not name then
+            return nil, "session name cannot be empty"
+        end
+    else
+        name, err = unique_name(default_name(cwd))
+        if not name then
+            return nil, err
+        end
+    end
+
+    if explicit_name then
+        local by_name, name_err = M.get_by_name(name)
+        if name_err then
+            return nil, name_err
+        end
+        if by_name then
             return nil, "session name already exists: " .. name
         end
     end
 
-    local id = opts.id or vim.fn.sha256(
-        cwd .. "\0" .. tostring(now()) .. "\0" .. tostring(math.random())
-    ):sub(1, 16)
+    local id = opts.id
+    if id == nil then
+        id = vim.fn.sha256(
+            cwd .. "\0" .. tostring(now()) .. "\0" .. tostring(vim.uv.hrtime())
+        ):sub(1, 16)
+    elseif type(id) ~= "string" or vim.trim(id) == "" then
+        return nil, "session id cannot be empty"
+    end
 
-    ---@type Sess.SessionMetadata
     local metadata = {
-        version = VERSION,
+        version = consts.get_version(),
         name = name,
         cwd = cwd,
         created_at = now(),
@@ -153,14 +183,9 @@ function M.create(opts)
         pinned = false,
     }
 
-    local ok, err = storage.create_with_metadata(id, metadata)
+    local ok, create_err = storage.create_with_metadata(id, metadata)
     if not ok then
-        return nil, err
-    end
-
-    local index_ok, index_err = storage.sync_index()
-    if not index_ok then
-        log.warn("failed to update session index: " .. tostring(index_err))
+        return nil, create_err
     end
 
     return {
@@ -172,6 +197,9 @@ end
 ---@param id Sess.SessionId
 ---@return Sess.Session?, string?
 function M.get(id)
+    if type(id) ~= "string" or vim.trim(id) == "" then
+        return nil, "session id is required"
+    end
     return read_session(id)
 end
 
@@ -182,17 +210,14 @@ function M.list()
         return {}, err
     end
 
-    ---@type Sess.Session[]
     local sessions = {}
-
+    local first_error
     for _, id in ipairs(ids) do
-        local session, session_err = read_session(id)
-        if session then
-            table.insert(sessions, session)
-        else
-            log.warn(
-                "failed to load session " .. id .. ": " .. tostring(session_err)
-            )
+        local item, item_err = read_session(id)
+        if item then
+            table.insert(sessions, item)
+        elseif not first_error then
+            first_error = "failed to load session " .. id .. ": " .. tostring(item_err)
         end
     end
 
@@ -205,143 +230,98 @@ function M.list()
         return a.id < b.id
     end)
 
-    return sessions
-end
-
----@param name string
----@return Sess.Session?, string?
-function M.find_by_name(name)
-    return M.get_by_name(name)
-end
-
----@param cwd Sess.Cwd
----@return Sess.Session?, string?
-function M.find_by_cwd(cwd)
-    return M.get_by_path(cwd)
-end
-
----@param id Sess.SessionId
----@param predicate fun(session: Sess.Session): boolean
----@return Sess.Session?
-function M.find(id, predicate)
-    local session = read_session(id)
-    if session and predicate(session) then
-        return session
-    end
-    return nil
+    return sessions, first_error
 end
 
 ---@param id Sess.SessionId
 ---@param name string
 ---@return Sess.Session?, string?
 function M.rename(id, name)
-    local session, err = read_session(id)
-    if not session then
+    name = normalize_name(name)
+    if not name then
+        return nil, "session name cannot be empty"
+    end
+
+    local item, err = read_session(id)
+    if not item then
         return nil, err
     end
 
-    name = normalize_name(name)
-
-    local existing = M.get_by_name(name)
+    local existing, name_err = M.get_by_name(name)
+    if name_err then
+        return nil, name_err
+    end
     if existing and existing.id ~= id then
         return nil, "session name already exists: " .. name
     end
 
-    session.metadata.name = name
-
-    local ok, save_err = storage.write_metadata(id, session.metadata)
+    item.metadata.name = name
+    local ok, save_err = storage.write_metadata(id, item.metadata)
     if not ok then
         return nil, save_err
     end
 
-    local index_ok, index_err = storage.sync_index()
-    if not index_ok then
-        log.warn("failed to update session index: " .. tostring(index_err))
-    end
-
-    return session
+    return item
 end
 
 ---@param id Sess.SessionId
 ---@param pinned boolean
 ---@return Sess.Session?, string?
 function M.set_pinned(id, pinned)
-    local session, err = read_session(id)
-    if not session then
+    local item, err = read_session(id)
+    if not item then
         return nil, err
     end
 
-    session.metadata.pinned = pinned
-
-    local ok, save_err = storage.write_metadata(id, session.metadata)
+    item.metadata.pinned = pinned
+    local ok, save_err = storage.write_metadata(id, item.metadata)
     if not ok then
         return nil, save_err
     end
 
-    local index_ok, index_err = storage.sync_index()
-    if not index_ok then
-        log.warn("failed to update session index: " .. tostring(index_err))
-    end
-
-    return session
+    return item
 end
 
 ---@param id Sess.SessionId
 ---@return Sess.Session?, string?
 function M.toggle_pinned(id)
-    local session, err = read_session(id)
-    if not session then
+    local item, err = read_session(id)
+    if not item then
         return nil, err
     end
 
-    return M.set_pinned(id, not session.metadata.pinned)
+    return M.set_pinned(id, not item.metadata.pinned)
 end
 
 ---@param id Sess.SessionId
 ---@return Sess.Session?, string?
 function M.touch(id)
-    local session, err = read_session(id)
-    if not session then
+    local item, err = read_session(id)
+    if not item then
         return nil, err
     end
 
-    session.metadata.last_used_at = now()
-
-    local ok, save_err = storage.write_metadata(id, session.metadata)
+    item.metadata.last_used_at = now()
+    local ok, save_err = storage.write_metadata(id, item.metadata)
     if not ok then
         return nil, save_err
     end
 
-    local index_ok, index_err = storage.sync_index()
-    if not index_ok then
-        log.warn("failed to update session index: " .. tostring(index_err))
-    end
-
-    return session
+    return item
 end
 
 ---@param id Sess.SessionId
 ---@param permanent boolean?
 ---@return boolean, string?
 function M.delete(id, permanent)
-    local ok, err = storage.delete(id, permanent)
-    if not ok then
-        return false, err
-    end
-
-    local index_ok, index_err = storage.sync_index()
-    if not index_ok then
-        log.warn("failed to update session index: " .. tostring(index_err))
-    end
-
-    return true
+    return storage.delete(id, permanent)
 end
 
 ---@param id Sess.SessionId
 ---@return boolean, string?
 function M.save(id)
-    local session, err = read_session(id)
-    if not session then
+    local item, err = read_session(id)
+    if not item then
         return false, err
     end
 
@@ -370,55 +350,31 @@ function M.load_session(id)
         return false, "session file does not exist: " .. session_path
     end
 
-    local ok, source_err = pcall(function()
-        vim.cmd({ cmd = "source", args = { session_path } })
-    end)
+    local ok, source_err = pcall(vim.cmd, { cmd = "source", args = { session_path } })
     if not ok then
         return false, tostring(source_err)
     end
 
-    local _, touch_err = M.touch(id)
-    if touch_err then
-        log.warn("failed to update session usage time: " .. tostring(touch_err))
-    end
-
+    -- The session is already loaded successfully; failure to update metadata
+    -- must not turn a successful load into a reported load failure.
+    M.touch(id)
     return true
-end
-
----@return Sess.Session?, string?
-function M.latest()
-    local sessions, err = M.list()
-    if err then
-        return nil, err
-    end
-
-    local latest
-    for _, session in ipairs(sessions) do
-        if not latest or session.metadata.last_used_at > latest.metadata.last_used_at then
-            latest = session
-        end
-    end
-
-    return latest
 end
 
 ---@return Sess.Session[], string?
 function M.pinned()
     local sessions, err = M.list()
-    if err then
-        return {}, err
-    end
-
     local result = {}
-    for _, session in ipairs(sessions) do
-        if session.metadata.pinned then
-            table.insert(result, session)
+    for _, item in ipairs(sessions) do
+        if item.metadata.pinned then
+            table.insert(result, item)
         end
     end
-
-    return result
+    return result, err
 end
 
+M.find_by_name = M.get_by_name
+M.find_by_cwd = M.get_by_path
 M.get_all = M.list
 
 return M

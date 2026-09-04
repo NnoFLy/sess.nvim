@@ -160,6 +160,26 @@ require("telescope").setup({
 
 ```
 
+## Lua API
+
+The programmatic API is prompt-free and does not emit notifications. UI concerns stay in `:Sess` and Telescope.
+
+```lua
+local api = require("sess.api")
+
+local ok, err, session = api.session.load("my-project")
+if not ok then
+    vim.notify(err, vim.log.levels.ERROR)
+end
+
+local current = api.state.current()
+local ok, err, sessions = api.session.list()
+```
+
+`api.session` uses `(ok, err, ...)` returns. Targets can be a session table, session id, session name, path, or `nil` where the operation defines a current-session default. Use `api.state` for current/previous/active state, `api.items.get_items()` for Telescope-style lists, and `api.opts` for configuration.
+
+For the complete API reference, see [`:help sess-api`](doc/sessionizer.txt).
+
 ## Troubleshooting
 
 <details>

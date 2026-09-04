@@ -1,3 +1,7 @@
+local session = require("sess.session")
+local state = require("sess.api.state")
+local opts = require("sess.api.opts")
+
 local M = {}
 
 ---@param a Sess.Session
@@ -5,8 +9,8 @@ local M = {}
 ---@param active_ids table<Sess.SessionId, boolean>
 ---@return boolean
 local function compare_sessions(a, b, active_ids)
-    local a_active = active_ids[a.id]
-    local b_active = active_ids[b.id]
+    local a_active = active_ids[a.id] == true
+    local b_active = active_ids[b.id] == true
     if a_active ~= b_active then
         return a_active
     end
@@ -37,7 +41,7 @@ local function get_user_paths(path)
 
     local home = os.getenv("HOME") or "~"
     local dirs = {}
-    local patterns = vim.fn.glob(path:gsub("~", home), false, true)
+    local patterns = vim.fn.glob(path:gsub("^~", home), false, true)
     for _, dir in ipairs(patterns) do
         if vim.fn.isdirectory(dir) == 1 then
             table.insert(dirs, vim.fs.normalize(dir))
@@ -54,15 +58,11 @@ end
 
 ---@return (Sess.Session|Sess.DirectoryItem)[]
 function M.get_items()
-    local session = require("sess.session")
-    local state = require("sess.state")
-    local opts = require("sess").get_opts()
-
     local all_sessions = session.list()
-    local current_session = state.get_current_session()
+    local current_session = state.current()
 
     local active_ids = {}
-    for _, s in ipairs(state.get_active_sessions()) do
+    for _, s in ipairs(state.active()) do
         active_ids[s.id] = true
     end
 
@@ -82,7 +82,8 @@ function M.get_items()
         end
     end
 
-    local user_paths = type(opts.paths) == "table" and opts.paths or {}
+    local configured = opts.get()
+    local user_paths = type(configured.paths) == "table" and configured.paths or {}
     for _, pattern in ipairs(user_paths) do
         for _, dir in ipairs(get_user_paths(pattern)) do
             local exists = false
@@ -114,7 +115,18 @@ function M.get_items()
         if a_is_session ~= b_is_session then
             return a_is_session
         end
-        return a.name:lower() < b.name:lower()
+
+        local an = a_is_session and a.metadata.name or a.name
+        local bn = b_is_session and b.metadata.name or b.name
+        an = an:lower()
+        bn = bn:lower()
+        if an ~= bn then
+            return an < bn
+        end
+
+        local apath = a_is_session and a.metadata.cwd or a.path
+        local bpath = b_is_session and b.metadata.cwd or b.path
+        return apath < bpath
     end)
 
     if current_session then

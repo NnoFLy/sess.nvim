@@ -1,11 +1,6 @@
 local M = {}
 
-local log = require("sess.log")
 local consts = require("sess.consts")
-
----@class Sess.Index
----@field version Sess.Version
----@field sessions table<Sess.SessionId, Sess.IndexEntry>
 
 ---@class Sess.SessionFiles
 ---@field metadata string
@@ -23,7 +18,6 @@ local TRASH_DIR = "trash"
 
 local METADATA_FILE = "metadata.json"
 local SESSION_FILE = "session.vim"
-local INDEX_FILE = "index.json"
 
 -- Internal helpers
 
@@ -49,12 +43,6 @@ end
 local function trash_path()
     assert_initialized()
     return join(root_path, TRASH_DIR)
-end
-
----@return string
-local function index_path()
-    assert_initialized()
-    return join(root_path, INDEX_FILE)
 end
 
 ---@param id Sess.SessionId
@@ -102,7 +90,7 @@ end
 ---@param content string
 ---@return boolean, string?
 local function write_file_atomic(path, content)
-    local tmp_path = path .. ".tmp"
+    local tmp_path = path .. ".tmp-" .. tostring(vim.uv.hrtime())
 
     local file, err = io.open(tmp_path, "w")
     if not file then
@@ -117,8 +105,12 @@ local function write_file_atomic(path, content)
         return false, write_err
     end
 
-    file:flush()
+    local flush_ok, flush_err = file:flush()
     file:close()
+    if not flush_ok then
+        vim.uv.fs_unlink(tmp_path)
+        return false, flush_err
+    end
 
     local rename_ok, rename_err = vim.uv.fs_rename(tmp_path, path)
 
@@ -168,16 +160,15 @@ end
 ---@param id Sess.SessionId
 ---@return boolean, string?
 local function validate_id(id)
+    if type(id) ~= "string" then
+        return false, "session id must be a string"
+    end
     if id == "" then
         return false, "session id cannot be empty"
     end
 
-    -- Prevent escaping sessions/<id>.
-    if id:find("/", 1, true)
-        or id:find("\\", 1, true)
-        or id == "."
-        or id == ".."
-    then
+    -- Session ids become directory names; keep them deliberately portable.
+    if not id:match("^[%w_-]+$") then
         return false, "invalid session id: " .. id
     end
 
@@ -205,6 +196,10 @@ end
 ---@param path string
 ---@return boolean, string?
 function M.init(path)
+    if type(path) ~= "string" or vim.trim(path) == "" then
+        return false, "storage path must be a non-empty string"
+    end
+
     root_path = vim.fs.normalize(vim.fn.fnamemodify(path, ":p"))
 
     vim.fn.mkdir(root_path, "p")
@@ -213,13 +208,12 @@ function M.init(path)
         return false, "storage path is not a directory: " .. root_path
     end
 
-    local ok, err = pcall(function()
-        vim.fn.mkdir(sessions_path(), "p")
-        vim.fn.mkdir(trash_path(), "p")
-    end)
+    if vim.fn.mkdir(sessions_path(), "p") ~= 1 and not dir_exists(sessions_path()) then
+        return false, "failed to create sessions directory: " .. sessions_path()
+    end
 
-    if not ok then
-        return false, tostring(err)
+    if vim.fn.mkdir(trash_path(), "p") ~= 1 and not dir_exists(trash_path()) then
+        return false, "failed to create trash directory: " .. trash_path()
     end
 
     return true
@@ -231,7 +225,10 @@ end
 function M.list()
     assert_initialized()
 
-    local entries = vim.fn.readdir(sessions_path())
+    local ok, entries = pcall(vim.fn.readdir, sessions_path())
+    if not ok then
+        return {}, tostring(entries)
+    end
 
     ---@type Sess.SessionId[]
     local result = {}
@@ -310,31 +307,16 @@ function M.delete(id, hard)
     local paths = session_paths(id)
 
     if hard then
-        local ok, err = vim.uv.fs_unlink(paths.metadata)
-
-        if not ok and file_exists(paths.metadata) then
-            return false, err
+        if vim.fn.delete(paths.dir, "rf") ~= 0 then
+            return false, "failed to permanently delete session: " .. id
         end
-
-        ok, err = vim.uv.fs_unlink(paths.session)
-
-        if not ok and file_exists(paths.session) then
-            return false, err
-        end
-
-        local dir_ok, dir_err = vim.uv.fs_rmdir(paths.dir)
-
-        if not dir_ok then
-            return false, dir_err
-        end
-
         return true
     end
 
     -- Move the entire session into trash.
     local destination = join(
         trash_path(),
-        id .. "-" .. tostring(os.time())
+        id .. "-" .. tostring(os.time()) .. "-" .. tostring(vim.uv.hrtime())
     )
 
     local ok, err = vim.uv.fs_rename(paths.dir, destination)
@@ -492,87 +474,6 @@ function M.write_session(id, content)
     end
 
     return write_file_atomic(session_paths(id).session, content)
-end
-
--- Index
-
----@return Sess.Index?, string?
-function M.read_index()
-    local path = index_path()
-
-    if not file_exists(path) then
-        return {
-            version = consts.get_version(),
-            sessions = {},
-        }
-    end
-
-    local data, err = read_json(path)
-
-    if not data then
-        return nil, err
-    end
-
-    return data --[[@as Sess.Index]]
-end
-
----@param index Sess.Index
----@return boolean, string?
-function M.write_index(index)
-    index.version = index.version or consts.get_version()
-
-    return write_json(index_path(), index)
-end
-
----@return Sess.Index, string?
-function M.rebuild_index()
-    local ids, err = M.list()
-
-    if err then
-        return {
-            version = consts.get_version(),
-            sessions = {},
-        }, err
-    end
-
-    ---@type Sess.Index
-    local index = {
-        version = consts.get_version(),
-        sessions = {},
-    }
-
-    for _, id in ipairs(ids) do
-        local metadata, metadata_err = M.read_metadata(id)
-
-        if metadata then
-            index.sessions[id] = {
-                name = metadata.name,
-                cwd = metadata.cwd,
-                last_used_at = metadata.last_used_at,
-                pinned = metadata.pinned,
-            }
-        else
-            log.warn(
-                "failed to read metadata for session "
-                    .. id
-                    .. ": "
-                    .. tostring(metadata_err)
-            )
-        end
-    end
-
-    return index
-end
-
----@return boolean, string?
-function M.sync_index()
-    local index, err = M.rebuild_index()
-
-    if err then
-        return false, err
-    end
-
-    return M.write_index(index)
 end
 
 return M

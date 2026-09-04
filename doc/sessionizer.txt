@@ -154,15 +154,15 @@ KEYMAPS                                                   *sess-keymaps*
 
 Example mappings:
 >
-  vim.keymap.set("n", "<leader>ss", "<cmd>Sess save<cr>",
+  vim.keymap.set("n", "<M-s>s", "<cmd>Sess save<cr>",
     { desc = "Save session" })
-  vim.keymap.set("n", "<leader>sc", "<cmd>Sess pin<cr>",
+  vim.keymap.set("n", "<M-s>c", "<cmd>Sess pin<cr>",
     { desc = "Pin session" })
-  vim.keymap.set("n", "<leader>sa", "<cmd>Sess load<cr>",
+  vim.keymap.set("n", "<M-s>a", "<cmd>Sess load<cr>",
     { desc = "Load session" })
-  vim.keymap.set("n", "<leader>su", "<cmd>Sess unload<cr>",
+  vim.keymap.set("n", "<M-s>u", "<cmd>Sess unload<cr>",
     { desc = "Unload session" })
-  vim.keymap.set("n", "<leader>sl", "<cmd>Sess list<cr>",
+  vim.keymap.set("n", "<M-s>l", "<cmd>Sess list<cr>",
     { desc = "List sessions" })
   vim.keymap.set("n", "<leader><C-^>", "<cmd>Sess last<cr>",
     { desc = "Load the previous session" })
@@ -179,10 +179,8 @@ Show current session in your statusline:
       log_level = "error",
       after_load = {
           custom = function()
-              local session = vim.g.sess_current_session or ""
-              if session ~= "" then
-                  session = "[" .. session .. "] "
-              end
+              local session = ("[" .. vim.g.sess_current_session .. "] ")
+                              or ""
               vim.o.statusline = session .. statusline
           end
       },
@@ -210,17 +208,19 @@ Default config:
   require("telescope").setup({
       extensions = {
           sess = {
-              prompt_title = "🗃️ All sessions",
+              prompt_title = "All sessions",
               mappings = {
                   ["i"] = {
-                      ["<C-d>"] = sess_actions.delete_session,
-                      ["<C-r>"] = sess_actions.rename_session,
-                      ["<CR>"] = sess_actions.enter,
+                      ["<C-d>"] = actions.delete_session,
+                      ["<Tab>"] = actions.toggle_pin_session,
+                      ["<C-r>"] = actions.rename_session,
+                      ["<CR>"] = actions.enter,
                   },
                   ["n"] = {
-                      ["dd"] = sess_actions.delete_session,
-                      ["rr"] = sess_actions.rename_session,
-                      ["<CR>"] = sess_actions.enter,
+                      ["dd"] = actions.delete_session,
+                      ["rr"] = actions.rename_session,
+                      ["<Tab>"] = actions.toggle_pin_session,
+                      ["<CR>"] = actions.enter,
                   },
               },
           }
@@ -231,77 +231,118 @@ Default config:
 ==============================================================================
 LUA API                                                      *sess-api*
 
-Use the Lua API for programmatic control.
+The programmatic API lives in lua/sess/api/ and is pure logic (no prompts, no
+logging). It is exposed as:                          *sess-api.modules*
 >
-  local commands = require("sess.api").commands
-  local get = require("sess.api").get
+  local api = require("sess.api")
+  -- api.session - pure operations
+  -- api.state   - current / prev / active getters
+  -- api.items   - get_items() for lists
+  -- api.opts    - setup() / get()
 <
-commands.save()
-  Save current session.
-  Return: ~
-      boolean
+All api.session functions return (ok, err, ...). Session/state objects
+returned from the API are defensive copies; mutating them does not mutate
+internal plugin state.
 
-commands.pin(<session>)
+api.session.create({cwd}?, {opts}?)              *sess-api.session.create*
+  Validate the directory, save the current session, chdir + hide buffers +
+  `edit .`, create the session, and wire current/prev/active state. The
+  working directory is restored when creation fails.
+  Return: ~
+      boolean, string?, sess.Session
+
+api.session.save({target}?)                      *sess-api.session.save*
+  nil = current session. A string resolves as id/name/path first; an existing
+  target is saved from its recorded cwd. If the string is a directory without
+  a session, a session is created for that directory. Temporary chdir changes
+  are restored before returning.
+  Return: ~
+      boolean, string?, sess.Session
+
+api.session.load({target}?, {opts}?)             *sess-api.session.load*
+  nil = resolve by current cwd. Merges before_load/after_load defaults,
+  errors on unsaved buffers when auto_save_files=false, saves the current
+  session before switching. Hook failures are returned as errors. {opts} may
+  carry per-call {before_load}/{after_load} overrides. Implemented as
+  {prepare} + {commit} so UI layers can prompt in between.
+  Return: ~
+      boolean, string?, sess.Session, boolean (already-loaded)
+
+api.session.prepare({target}?, {opts}?)          *sess-api.session.prepare*
+  Resolve the target and run the pre-load guard: merge before_load/after_load
+  defaults, modified-buffer check, {wall}, and {before_load.custom}. Returns
+  the merged before_load/after_load options for later {commit}.
+  Return: ~
+      boolean, string?, sess.Session, table, table
+
+api.session.commit({session}, {opts}?)           *sess-api.session.commit*
+  Run the switch itself: hide buffers, apply the session, wire current/prev
+  state, run {after_load.custom}. Assumes the current session was already
+  saved by the caller (use {M.load} or save + prompt in the UI layer).
+  Return: ~
+      boolean, string?, sess.Session, boolean (already-loaded)
+
+api.session.unload({opts}?)                     *sess-api.session.unload*
+  Unload the current session. Returns (false, "no current session") when
+  nothing is loaded. {opts} may carry an {on_unload} override. Hook failures
+  are returned after state has been cleared.
+  Return: ~
+      boolean, string?
+
+api.session.delete({target}, {opts}?)           *sess-api.session.delete*
+  Delete a session. No confirm prompt. Clears state if the deleted session
+  is current, runs merged on_unload. {opts} may carry an {on_unload}
+  override.
+  Return: ~
+      boolean, string?, sess.Session
+
+api.session.rename({target}, {name})            *sess-api.session.rename*
+  Rename a session. {name} is required (no input() prompt).
+  Return: ~
+      boolean, string?, sess.Session
+
+api.session.toggle_pin({target})                *sess-api.session.toggle_pin*
   Toggle the pinned state of a session.
   Return: ~
-      boolean
+      boolean, string?, sess.Session
 
-commands.rename(<session>, <name>)
-  Rename a session. If <name> is omitted, you will be prompted.
+api.session.resolve({target})                   *sess-api.session.resolve*
+  Shared target resolution:
+    - nil          -> the current session
+    - table        -> used as-is (session or picker entry with id + metadata)
+    - string       -> try id, then name, then path
   Return: ~
-      boolean
+      boolean, string?, sess.Session
 
-commands.load(<session>, <before_load_opts>, <after_load_opts>)
-  Load a session.
-  If <session> is omitted, loads the session based on current cwd.
+Queries                                      *sess-api.session.queries*
+  Query functions also use `(ok, err, ...)`. `list()` may return a partial
+  session list together with an error when one stored session is corrupted.
+>
+  local ok, err, sessions = api.session.list()
+  local ok, err, s = api.session.get_by_id(id)
+  local ok, err, s = api.session.get_by_name(name)
+  local ok, err, s = api.session.get_by_path(cwd)
+<
   Return: ~
-      boolean
+      boolean, string?, sess.Session[] | sess.Session | nil
 
-commands.unload(<on_unload>)
-  Unload current session.
-  Return: ~
-      nil
+api.state                                          *sess-api.state*
+>
+  local current = api.state.current()   -- sess.Session | nil
+  local prev    = api.state.prev()      -- sess.Session | nil
+  local active  = api.state.active()    -- sess.Session[]
+<
 
-commands.delete(<session>, <on_unload>)
-  Delete a session.
-  If <session> is omitted, deletes the current session.
-  Return: ~
-      boolean
+api.items                                         *sess-api.items*
+>
+  local items = api.items.get_items()   -- (Session | DirectoryItem)[]
+<
 
-commands.last(<before_load_opts>, <after_load_opts>)
-  Load the previous session.
-  Return: ~
-      boolean
-
-commands.list({opts})
-  List sessions (telescope).
-  Return: ~
-      nil
-
-get.current()
-  Get current session.
-  Return: ~
-      sess.Session
-
-get.prev()
-  Get previous session.
-  Return: ~
-      sess.Session|nil
-
-get.all()
-  Get all sessions.
-  Return: ~
-      sess.Session[]
-
-get.by_name(<name>)
-  Get session by name.
-  Return: ~
-      sess.Session|nil
-
-get.by_path(<path>)
-  Get session by path.
-  Return: ~
-      sess.Session|nil
+api.opts                                           *sess-api.opts*
+>
+  api.opts.setup({opts})   -- equivalent to require("sess").setup({opts})
+  local opts = api.opts.get()
+<
 
 ==============================================================================
 TROUBLESHOOTING                                          *sess-troubleshooting*

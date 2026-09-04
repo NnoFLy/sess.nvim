@@ -1,22 +1,23 @@
----@class Sess.TelescopSessionMetadataEntry
+---@class Sess.TelescopeSessionMetadataEntry
 ---@field name string
 ---@field cwd Sess.Cwd
 ---@field pinned boolean
 ---@field last_used_at Sess.Timestamp
 ---@field created_at Sess.Timestamp
 
----@class Sess.TelescopSessionEntry
+---@class Sess.TelescopeSessionEntry
 ---@field id Sess.SessionId | nil
----@field metadata Sess.TelescopSessionMetadataEntry
+---@field metadata Sess.TelescopeSessionMetadataEntry
 
----@class Sess.TelescopFinderReturn
----@field value Sess.TelescopSessionEntry
+---@class Sess.TelescopeFinderReturn
+---@field value Sess.TelescopeSessionEntry
 ---@field display string
 ---@field ordinal string
 
 local finders = require("telescope.finders")
-local utils = require("sess.utils")
-local state = require("sess.state")
+local api = require("sess.api")
+local items = api.items
+local state = api.state
 
 local M = {}
 
@@ -27,14 +28,14 @@ end
 ---@return table
 function M.generate_new_finder()
     return finders.new_table({
-        results = utils.get_items(),
+        results = items.get_items(),
 
         ---@param entry Sess.Session | Sess.DirectoryItem
-        ---@return Sess.TelescopFinderReturn
+        ---@return Sess.TelescopeFinderReturn
         entry_maker = function(entry)
             local is_session = entry.metadata ~= nil
 
-            ---@type Sess.TelescopSessionEntry
+            ---@type Sess.TelescopeSessionEntry
             local session
             if is_session then
                 session = {
@@ -65,23 +66,23 @@ function M.generate_new_finder()
                 display = replace_char(display, 1, "P")
             end
 
-            for _, s in pairs(state.get_active_sessions()) do
+            for _, s in pairs(state.active()) do
                 if s.id == session.id then
                     display = replace_char(display, 2, "A")
                 end
             end
 
-            local previous_session = state.get_prev_session()
+            local previous_session = state.prev()
             if previous_session and session.id == previous_session.id then
                 display = replace_char(display, 3, "L")
             end
 
-            local current_session = state.get_current_session()
+            local current_session = state.current()
             if current_session and session.id == current_session.id then
-                return {}
+                return nil
             end
 
-            ---@type Sess.TelescopFinderReturn
+            ---@type Sess.TelescopeFinderReturn
             return {
                 value = session,
                 display = display,

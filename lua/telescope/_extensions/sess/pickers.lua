@@ -2,14 +2,14 @@ local pickers = require("telescope.pickers")
 
 local config = require("telescope._extensions.sess.config")
 local finders = require("telescope._extensions.sess.finders")
-local state = require("sess.state")
+local state = require("sess.api").state
 
 return function(opts)
     opts = opts or {}
 
     local picker_opts = vim.deepcopy(config.values)
 
-    local current_session = state.get_current_session()
+    local current_session = state.current()
     if current_session then
         picker_opts.prompt_title = picker_opts.prompt_title .. " | " .. current_session.metadata.name
     end
