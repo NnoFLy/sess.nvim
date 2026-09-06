@@ -18,7 +18,7 @@ Plugin for managing sessions in Neovim.
 
 ```lua
 return {
-    "i0i-i0i/sess.nvim",
+    "NnoFLy/sess.nvim",
     lazy = false,
 
 --- OPTIONAL (only for 'Sess list') ---
@@ -41,7 +41,7 @@ vim.pack.add({ "https://github.com/nvim-lua/plenary.nvim" })
 vim.pack.add({ "https://github.com/nvim-telescope/telescope.nvim" })
 --- OPTIONAL (only for 'Sess list') ---
 
-vim.pack.add({ "https://github.com/i0i-i0i/sess.nvim" })
+vim.pack.add({ "https://github.com/NnoFLy/sess.nvim" })
 ```
 
 </details>

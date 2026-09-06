@@ -17,8 +17,6 @@ function M.active()
     return state.get_active_sessions()
 end
 
--- Internal setters used by `api/session.lua`.
-
 ---@param session Sess.Session | nil
 function M.set_current(session)
     state.set_current_session(session)

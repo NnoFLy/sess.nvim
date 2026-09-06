@@ -32,7 +32,7 @@ INSTALLATION                                                *sess-install*
 lazy.nvim:
 >
   return {
-      "i0i-i0i/sess.nvim",
+      "NnoFLy/sess.nvim",
       lazy = false,
 
       -- OPTIONAL (only for 'Sess list') --
@@ -51,7 +51,7 @@ Native (vim.pack):
   vim.pack.add({ "https://github.com/nvim-lua/plenary.nvim" })
   -- OPTIONAL (only for 'Sess list') --
 
-  vim.pack.add({ "https://github.com/i0i-i0i/sess.nvim" })
+  vim.pack.add({ "https://github.com/NnoFLy/sess.nvim" })
 <
 
 ==============================================================================
