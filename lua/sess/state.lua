@@ -12,6 +12,10 @@ function M.set_view(id, view)
     views[id] = view and vim.deepcopy(view) or nil
 end
 
+function M.get_views()
+    return vim.deepcopy(views)
+end
+
 function M.add_active_session(session)
     for i, active in ipairs(state.active_sessions) do
         if active.id == session.id then

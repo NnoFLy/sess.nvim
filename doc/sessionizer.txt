@@ -6,8 +6,8 @@ versions and nightly are unsupported. Telescope/plenary are optional.
 
 Quick start: >
     require("sess").setup()
-    vim.keymap.set("n", "<leader>ss", "<cmd>Sess save<cr>")
-    vim.keymap.set("n", "<leader>sl", "<cmd>Sess list<cr>")
+    vim.keymap.set("n", "<M-s>s", "<cmd>Sess save<cr>")
+    vim.keymap.set("n", "<M-s>l", "<cmd>Sess list<cr>")
 <
 ==============================================================================
 CONFIGURATION                                      *sess-setup* *sess.setup*
@@ -30,23 +30,35 @@ filetype is excluded. Neither option writes modified files to disk.
 ==============================================================================
 COMMANDS                                                     *sess-commands*
 
-:Sess create [path]                                           *:Sess-create*
+:Sess create [path]                                          *:Sess-create*
     Create and enter a session. If one exists for the path, load it instead.
     With no path, use current cwd.
-:Sess load [target]                                           *:Sess-load*
+
+:Sess load [target]                                          *:Sess-load*
     Load by id/name/path. With no target, look up current cwd.
+
 :Sess save                                                   *:Sess-save*
     Snapshot only the current session. No arguments; no implicit creation.
+
 :Sess last                                                   *:Sess-last*
     Load the previous session.
-:Sess unload                                                 *:Sess-unload*
-    Save and hide current session; detach it, retaining its live view.
-:Sess pin [target]                                            *:Sess-pin*
+
+:Sess unload [target]                                        *:Sess-unload*
+    Unload by id/name/path; default current. Close exclusive buffers and their
+    terminal jobs, forget the live view, and remove from active sessions.
+    Ask Save/Discard/Cancel for unsaved buffers, then Stop/Cancel for live jobs.
+    Cancel either prompt to abort before writes or teardown. Shared buffers and
+    unrelated jobs stay alive. Retain the snapshot. Inactive targets are a no-op.
+
+:Sess pin [target]                                           *:Sess-pin*
     Toggle pin. Default target is current.
-:Sess rename [target] [name]                                  *:Sess-rename*
+
+:Sess rename [target] [name]                                 *:Sess-rename*
     Rename the target (default current); prompt for a missing name.
+
 :Sess delete [target]                                        *:Sess-delete*
     Confirm deletion (default current). Buffers/jobs are never deleted/stopped.
+
 :Sess list                                                   *:Sess-list*
     Open the Telescope picker.
 
@@ -57,11 +69,11 @@ BUFFER AND CWD POLICY                                         *sess-buffers*
 
 Switching saves the outgoing session, then hides its buffers. Named, unnamed,
 modified, hidden and non-file buffers remain loaded. Terminal jobs keep running.
-No automatic writing, discarding or buffer deletion occurs. This includes
-buffers with bufhidden=wipe/delete/unload: those options are temporarily
+Switching never writes buffer contents, discards edits or deletes buffers.
+This includes buffers with bufhidden=wipe/delete/unload: those options are
 protected during transitions, then restored.
 
-Returning to a session visited in this process restores its live buffer IDs,
+Returning to a still-active session restores its live buffer IDs,
 layout, cursor positions, listing and cwd scopes rather than sourcing Vimscript
 and restarting its terminals. This is not full workspace isolation: buffers are
 shared; the same file in two sessions generally uses the same buffer. Window
@@ -74,8 +86,23 @@ cannot be recovered from it. Buffers present before the first session are
 hidden but remain manually accessible.
 
 Active records track visited sessions except those explicitly unloaded/deleted.
-Unloading retains a live view for a later return. Deleting forgets that view,
-without deleting its buffers.
+Unloading wipes buffers owned only by the target session, stops their terminal
+jobs and forgets the live view. Buffers shared with another session (or the
+current editor) are retained. Ownership follows live views, not file paths.
+Reloading an unloaded session sources its snapshot; terminal commands may start
+again according to 'sessionoptions'. Deleting forgets the live view without
+closing buffers/jobs; its SessUnloaded event is only a detachment notification.
+
+Commands and Telescope offer Save/Discard/Cancel for modified exclusive buffers,
+then Stop/Cancel for running terminal jobs, including idle shells. Cancel is the
+default. Save asks for filenames for unnamed buffers; non-writable/plugin buffers
+may refuse writes, aborting unload. No writes or teardown occur until both
+confirmations are accepted. Unrelated background/plugin jobs are not tracked or
+stopped: their session ownership cannot be reliably inferred.
+
+Current unload snapshots the layout before closing it. Hidden-session unload
+keeps the last snapshot without switching the current editor. Saving a newly
+named hidden buffer writes its file, but does not add it to that old snapshot.
 
 All saves use actual editor cwd scopes, without temporary chdir. Metadata cwd
 remains the project's lookup identity. Live views preserve global, tab-local
@@ -98,23 +125,47 @@ api.session.create(cwd?, opts?)                  *sess-api.session.create*
     Save outgoing session, hide buffers, enter a fresh session for cwd.
     opts: { name?, id?, hooks? }. Duplicate paths/names/ids fail before editor
     changes. Commands additionally load an existing session for the same path.
+
 api.session.load(target?, opts?)                *sess-api.session.load*
     Default: lookup current cwd. opts: { hooks? }. Validate target, run pre-hook,
     revalidate, save outgoing session, restore destination, publish state.
     Same-session load succeeds without save/hooks/events; result four is {}.
+
 api.session.save()                              *sess-api.session.save*
     Snapshot only the current session. Arguments, including nil, are rejected.
-api.session.unload(opts?)                        *sess-api.session.unload*
-    opts: { hooks? }. Save, hide and detach current session. Set previous to
-    that session and remove it from active. No current session is an error.
+
+api.session.unload(target?, opts?)               *sess-api.session.unload*
+    Default: current. opts: { hooks?, confirm? }. Close exclusive buffers/jobs
+    and forget the live view. For current, snapshot before teardown, clear
+    current and set previous to that session. For non-current, keep the last
+    snapshot and leave current/previous/layout/cwd unchanged.
+    Already inactive targets succeed without hooks/events. Missing targets fail;
+    no current session is an error only when target is omitted.
+    The older unload({ hooks = ... }) form still targets current.
+
+    Without confirm, unsaved buffers or live terminal jobs cause an error before
+    teardown. confirm(request) is called inside the mutation guard, with copies:
+      request = { kind = "buffers"|"jobs", session, buffers }
+      buffers contain { buf, name, modified, changedtick, terminal, job? }.
+    For kind="buffers", return "save" or "discard". "save" may return a second
+    value, { [bufnr] = filename }, required for modified unnamed buffers.
+    For kind="jobs", return "stop". Any other result cancels the entire unload.
+    Only exclusive resources needing consent appear in these requests. The
+    buffers request precedes the jobs request. Both precede file writes.
+    Commands and Telescope inject this callback; the core never prompts itself.
+    Cancelling returns false, "unload cancelled". Write failures abort teardown.
+
 api.session.delete(target?, opts?)               *sess-api.session.delete*
     Default: current. opts: { hooks? }. Move persisted files to trash. Current
     deletion hides buffers and emits unload then delete. Non-current deletion
     does not perform an unload. No API confirmation prompt.
+
 api.session.rename(target?, name)               *sess-api.session.rename*
     Rename; default target is current. name is required.
+
 api.session.toggle_pin(target?)                 *sess-api.session.toggle_pin*
     Toggle pin; default target is current.
+
 api.session.resolve(target?)                    *sess-api.session.resolve*
     Read-only identity lookup; nil means current. Returns
     (ok, err, session, reason). Failure reasons may distinguish invalid-target,
@@ -219,6 +270,14 @@ Arbitrary Vimscript/autocommands cannot be rolled back: sourcing failures may
 leave partial editor changes. Post-save/load metadata failures are diagnostics
 if the snapshot/editor change has already completed.
 
+Unload rechecks buffer identity, modified text and live job IDs after consent
+and before each deletion. New resources or edits abort and require a retry.
+Terminal output alone does not invalidate consent. File writes, wiped buffers
+and stopped processes cannot be rolled back. A failed write can leave earlier
+files saved; a teardown failure can leave some buffers/jobs already closed.
+Remaining editor state is restored where possible; failure does not emit
+SessUnloaded or remove the session from active records.
+
 :checkhealth sess                                             *sess-health*
     Inspect setup, storage access, corruption, unsupported metadata versions
     and missing snapshots. Read-only: never sources, writes probes, repairs
@@ -231,18 +290,11 @@ Install telescope.nvim and plenary.nvim, then: >
     require("telescope").load_extension("sess")
 <
 Enter loads/creates. Ctrl-d (insert)/dd (normal) deletes with confirmation.
-Ctrl-r (insert)/rr (normal) renames. All adapters share the Lua lifecycle policy.
-
-==============================================================================
-BREAKING CHANGES                                             *sess-breaking*
-
-save(target) and implicit create-on-save are removed. Use save() for current.
-Public prepare/commit and state mutation methods are removed. Legacy catalog
-aliases and sess.nvim/sess.usecase/sess.buffers modules are removed.
-before_load/after_load/on_unload, auto_save_files and auto_hide_buffers are
-removed. Use hooks/User events; hiding without writing/discarding is mandatory.
-The fourth successful mutation result is diagnostics, not an already-loaded flag.
-Unload saves/hides. Post-hook failures no longer mark completed operations failed.
+Ctrl-r (insert)/rr (normal) renames. Ctrl-u (insert)/uu (normal) unloads the
+selected session, using the same Save/Discard/Cancel then Stop/Cancel prompts
+as :Sess unload. Unloading current closes the picker before prompting/saving
+(so cancelling leaves the session open, but closes the picker). Unloading another
+session refreshes the picker. All adapters share the Lua lifecycle policy.
 
 ==============================================================================
 DEVELOPMENT                                                *sess-development*

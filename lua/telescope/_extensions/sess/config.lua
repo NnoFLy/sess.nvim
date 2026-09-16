@@ -9,12 +9,14 @@ config.values = {
     mappings = {
         ["i"] = {
             ["<C-d>"] = actions.delete_session,
+            ["<C-u>"] = actions.unload_session,
             ["<Tab>"] = actions.toggle_pin_session,
             ["<C-r>"] = actions.rename_session,
             ["<CR>"] = actions.enter,
         },
         ["n"] = {
             ["dd"] = actions.delete_session,
+            ["uu"] = actions.unload_session,
             ["rr"] = actions.rename_session,
             ["<Tab>"] = actions.toggle_pin_session,
             ["<CR>"] = actions.enter,

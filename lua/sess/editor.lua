@@ -270,8 +270,9 @@ function M.load(item, view)
     if view then
         M.restore(view)
     else
-        M.hide()
-        command("cd", item.metadata.cwd)
+        -- An empty snapshot may not replace the current buffer. Start with a
+        -- normal buffer rather than leaving the internal parking buffer visible.
+        M.empty(item.metadata.cwd)
         command("source", assert(storage.get_session_path(item.id)))
     end
 end

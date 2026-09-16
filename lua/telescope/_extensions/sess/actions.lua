@@ -82,6 +82,36 @@ end
 
 ---@param prompt_bufnr number
 ---@return nil
+function M.unload_session(prompt_bufnr)
+    local value = selected_value()
+    if not value or not value.id then
+        return
+    end
+
+    local current = api.state.current()
+    local unloading_current = current and current.id == value.id
+
+    -- Close before capturing the current session so picker windows aren't saved.
+    if unloading_current then
+        actions.close(prompt_bufnr)
+    end
+
+    local ok, err, _, diagnostics = require("sess.ui.unload")(value.id)
+    if ok then
+        log.diagnostics(diagnostics)
+    elseif err == "unload cancelled" then
+        log.info("Unload cancelled")
+    else
+        log.error(err)
+    end
+
+    if not unloading_current then
+        refresh(prompt_bufnr)
+    end
+end
+
+---@param prompt_bufnr number
+---@return nil
 function M.toggle_pin_session(prompt_bufnr)
     local value = selected_value()
     if not value or not value.id then

@@ -29,6 +29,24 @@
 ---@class Sess.OperationOpts
 ---@field hooks Sess.Hooks?
 
+---@class Sess.UnloadBuffer
+---@field buf integer
+---@field name string
+---@field modified boolean
+---@field changedtick integer
+---@field terminal boolean
+---@field job integer? Live terminal job ID, if any.
+
+---@class Sess.UnloadConfirmation
+---@field kind "buffers"|"jobs"
+---@field session Sess.Session
+---@field buffers Sess.UnloadBuffer[] Only exclusive resources needing consent.
+
+---Return save/discard for buffers, stop for jobs; anything else cancels.
+---The optional second result supplies unnamed-buffer save paths.
+---@class Sess.UnloadOpts: Sess.OperationOpts
+---@field confirm? fun(request: Sess.UnloadConfirmation): string, table<integer, string>?
+
 ---@class Sess.CreateOpts: Sess.OperationOpts
 ---@field name string?
 ---@field cwd string? Internal catalog only; public create accepts cwd as its first argument.

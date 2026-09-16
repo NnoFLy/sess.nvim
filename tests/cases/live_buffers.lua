@@ -68,8 +68,17 @@ assert(vim.bo[named].modified and vim.bo[unnamed].modified)
 assert(api.session.load(b))
 assert(api.session.load(a))
 fixture.equal(terminal, vim.api.nvim_get_current_buf())
-assert(api.session.unload())
-fixture.equal(-1, vim.fn.jobwait({ job }, 0)[1])
-assert(api.session.load(a))
-fixture.equal(terminal, vim.api.nvim_get_current_buf())
-vim.fn.jobstop(job)
+assert(api.session.unload(nil, {
+    confirm = function(request)
+        return request.kind == "buffers" and "discard" or "stop"
+    end,
+}))
+for _, buf in ipairs(buffers) do
+    assert(not vim.api.nvim_buf_is_valid(buf), "buffer survived unload: " .. buf)
+end
+assert(not vim.api.nvim_buf_is_valid(floating))
+assert(vim.fn.jobwait({ job }, 3000)[1] ~= -1)
+fixture.equal(nil, require("sess.state").get_view(a.id))
+fixture.equal(false, vim.o.hidden)
+fixture.equal(true, vim.o.autowrite)
+fixture.equal(true, vim.o.autowriteall)

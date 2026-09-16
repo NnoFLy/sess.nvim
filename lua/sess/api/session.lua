@@ -2,6 +2,7 @@ local catalog = require("sess.session")
 local editor = require("sess.editor")
 local state = require("sess.state")
 local opts = require("sess.api.opts")
+local unload = require("sess.unload")
 
 local M = {}
 
@@ -18,7 +19,7 @@ local function resolve(target)
     return catalog.resolve(target)
 end
 
-local function hooks(overrides)
+local function hooks(overrides, extra_options)
     if overrides == nil then
         return opts.get().hooks
     end
@@ -28,7 +29,7 @@ local function hooks(overrides)
     end
 
     for key in pairs(overrides) do
-        if key ~= "hooks" then
+        if key ~= "hooks" and not (extra_options and extra_options[key]) then
             return nil, "unknown operation option: " .. tostring(key)
         end
     end
@@ -342,15 +343,46 @@ function M.save(...)
     return save_current(opts.get().hooks)
 end
 
-function M.unload(options)
-    local callbacks, hook_err = hooks(options)
+---@param target string|Sess.Session|Sess.UnloadOpts?
+---@param options Sess.UnloadOpts?
+function M.unload(target, options)
+    -- Preserve unload({ hooks = ... }) for callers of the current-only API.
+    if
+        type(target) == "table"
+        and target.id == nil
+        and target.metadata == nil
+        and options == nil
+    then
+        options, target = target, nil
+    end
+
+    local callbacks, hook_err = hooks(options, { confirm = true })
     if not callbacks then
         return false, hook_err
     end
+    if options and options.confirm ~= nil and type(options.confirm) ~= "function" then
+        return false, "unload confirm must be a function"
+    end
 
-    local item, err = resolve()
+    local item, err = resolve(target)
     if not item then
         return false, err
+    end
+
+    local current = state.get_current_session()
+    local is_current = current and current.id == item.id
+    if not is_current then
+        local active = false
+        for _, session in ipairs(state.get_active_sessions()) do
+            if session.id == item.id then
+                active = true
+                break
+            end
+        end
+
+        if not active then
+            return true, nil, item, {}
+        end
     end
 
     local ready, pre_err = before("unload", item, callbacks)
@@ -358,23 +390,71 @@ function M.unload(options)
         return false, pre_err
     end
 
-    local saved, save_err, updated, diagnostics = outgoing(callbacks)
+    item, err = resolve(item)
+    if not item then
+        return false, err
+    end
+
+    local plan, plan_err = unload.prepare(item, options and options.confirm)
+    if not plan then
+        return false, plan_err
+    end
+
+    item, err = resolve(item)
+    if not item then
+        return false, err
+    end
+
+    local saved, save_err = unload.save_buffers(plan)
     if not saved then
         return false, save_err
     end
 
-    local changed, change_err = change(function()
-        editor.empty(vim.fn.getcwd())
-    end)
+    -- Only the current session can be snapshotted from the editor. Hidden
+    -- sessions retain the snapshot written when switching away from them.
+    local diagnostics = {}
+    if is_current then
+        saved, save_err, item, diagnostics = outgoing(callbacks)
+        if not saved then
+            return false, save_err
+        end
+    end
+
+    local valid, validation_err = unload.validate(plan)
+    if not valid then
+        return false, validation_err
+    end
+
+    local function close()
+        if is_current then
+            editor.empty(vim.fn.getcwd())
+        end
+        local closed, close_err = unload.close(plan)
+        if not closed then
+            error(close_err)
+        end
+    end
+
+    -- Restore remaining editor state on failure, but deleted buffers and
+    -- stopped jobs are irreversible. Runtime records commit only on success.
+    local changed, change_err
+    if is_current then
+        changed, change_err = change(close)
+    else
+        changed, change_err = editor.protected(close)
+    end
     if not changed then
         return false, change_err
     end
 
-    state.set_prev_session(updated)
-    state.set_current_session(nil)
+    if is_current then
+        state.set_prev_session(item)
+        state.set_current_session(nil)
+    end
     state.remove_active_session(item.id)
+    state.set_view(item.id, nil)
 
-    return finish("unload", updated, callbacks, diagnostics)
+    return finish("unload", item, callbacks, diagnostics)
 end
 
 function M.delete(target, options)

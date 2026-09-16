@@ -13,7 +13,7 @@ local specs = {
     pin = { handler = commands.pin, max_args = 1, completion = "session" },
     rename = { handler = commands.rename, max_args = 2, completion = { kind = "session", arg = 1 } },
     save = { handler = commands.save, max_args = 0 },
-    unload = { handler = commands.unload, max_args = 0 },
+    unload = { handler = commands.unload, max_args = 1, completion = "session" },
 }
 
 local function keys(t)
@@ -111,14 +111,16 @@ local function complete(arg_lead, cmdline, cursorpos)
         or spec.completion
     local completion_arg = type(spec.completion) == "table" and spec.completion.arg or 1
     if completion_kind == "session" then
-        local completed_args = {}
-
-        for argument in rest:gmatch("%S+") do
-            completed_args[#completed_args + 1] = argument
+        -- Count finished arguments, not the partial argument being completed.
+        -- Escaped spaces belong to a session name rather than a new argument.
+        local arguments = rest:gsub("\\.", "_")
+        local _, completed_args = arguments:gsub("%S+", "")
+        if completed_args > 0 and not arguments:match("%s$") then
+            completed_args = completed_args - 1
         end
 
-        if #completed_args < completion_arg then
-            return filter_by_pattern(session_names(), rest)
+        if completed_args + 1 == completion_arg then
+            return filter_by_pattern(session_names(), arg_lead:gsub("\\(.)", "%1"))
         end
 
         return {}

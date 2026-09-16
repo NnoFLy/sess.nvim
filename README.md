@@ -53,7 +53,7 @@ require("sess").setup({
 | `:Sess load [name/id/path]` | Switch sessions; defaults to current cwd |
 | `:Sess save` | Save the current session |
 | `:Sess last` | Return to the previous session |
-| `:Sess unload` | Save, hide and detach the current session |
+| `:Sess unload [name/id/path]` | Close a session's buffers and terminal jobs; defaults to current |
 | `:Sess pin [target]` | Toggle pin; defaults to current session |
 | `:Sess rename [target] [name]` | Rename; prompts for a missing name |
 | `:Sess delete [target]` | Confirm deletion; defaults to current session |
@@ -67,7 +67,7 @@ vim.keymap.set("n", "<leader><C-^>", "<cmd>Sess last<cr>")
 
 ### Switching and saving
 
-Switching saves the outgoing snapshot and hides its buffers. Modified named/unnamed buffers, non-file buffers and terminal jobs stay alive. Returning restores buffer identities, layout, cursor positions, buffer listing and cwd scopes without reloading the snapshot.
+Switching saves the outgoing snapshot and hides its buffers. Modified named/unnamed buffers, non-file buffers and terminal jobs stay alive. Returning to a still-active session restores buffer identities, layout, cursor positions, buffer listing and cwd scopes without reloading the snapshot.
 
 Sessions share buffers: opening the same file generally reuses its buffer. Window IDs may change, and some plugin/window-local settings can't be restored. User autocommands or trusted code can still delete buffers or stop jobs. Buffers opened before the first session are hidden but remain manually accessible.
 
@@ -83,6 +83,7 @@ elseif #diagnostics > 0 then
 end
 
 api.session.save() -- current session only
+api.session.unload("my-project") -- omit target for current; refuses unconfirmed edits/jobs
 local current = api.state.current()
 local previous = api.state.prev()
 local active = api.state.active()
@@ -93,7 +94,7 @@ Mutations return `(ok, err, session, diagnostics)`, with diagnostic strings on s
 
 Listing returns `false` for store-wide failures; corrupt records are skipped with diagnostics, never repaired or deleted automatically. Create/rename refuse to claim uniqueness with damaged metadata. `api.items.get_items()` returns `(items, err, diagnostics)`; UI adapters report diagnostics.
 
-See [`:help sess-api`](doc/sessionizer.txt) for signatures and failure behavior.
+See [`:help sess-api`](doc/sessionizer.txt) for its contract and failure behavior.
 
 ## Hooks and events
 
@@ -134,7 +135,7 @@ Install telescope.nvim and plenary.nvim, then:
 require("telescope").load_extension("sess")
 ```
 
-Enter loads/creates. Ctrl-d (insert) or `dd` (normal) deletes with confirmation. Ctrl-r (insert) or `rr` (normal) renames. Commands, Telescope and autocommands use the same lifecycle.
+Enter loads/creates. Ctrl-d (insert) or `dd` (normal) deletes with confirmation. Ctrl-r (insert) or `rr` (normal) renames. Ctrl-u (insert) or `uu` (normal) unloads the selected session. Commands, Telescope and autocommands use the same lifecycle.
 
 ## Persistence and safety
 
