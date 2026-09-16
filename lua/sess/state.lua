@@ -1,64 +1,71 @@
 local M = {}
 
----@class Sess.State
----@field active_sessions Sess.Session[]
----@field prev_session Sess.Session | nil
----@field current_session Sess.Session | nil
-M._state = {
-    active_sessions = {},
-    prev_session = nil,
-    current_session = nil,
-}
+-- This module alone owns mutable runtime records. All reads and writes copy.
+local state = { active_sessions = {} }
+local views = {}
 
----@param session Sess.Session
----@return nil
+function M.get_view(id)
+    return views[id] and vim.deepcopy(views[id]) or nil
+end
+
+function M.set_view(id, view)
+    views[id] = view and vim.deepcopy(view) or nil
+end
+
 function M.add_active_session(session)
-    for i, active in ipairs(M._state.active_sessions) do
+    for i, active in ipairs(state.active_sessions) do
         if active.id == session.id then
-            M._state.active_sessions[i] = vim.deepcopy(session)
+            state.active_sessions[i] = vim.deepcopy(session)
             return
         end
     end
 
-    table.insert(M._state.active_sessions, vim.deepcopy(session))
+    table.insert(state.active_sessions, vim.deepcopy(session))
 end
 
----@param session_id Sess.SessionId
----@return nil
-function M.remove_active_session(session_id)
-    for i = #M._state.active_sessions, 1, -1 do
-        if M._state.active_sessions[i].id == session_id then
-            table.remove(M._state.active_sessions, i)
+function M.remove_active_session(id)
+    for i = #state.active_sessions, 1, -1 do
+        if state.active_sessions[i].id == id then
+            table.remove(state.active_sessions, i)
         end
     end
 end
 
----@param session Sess.Session | nil
----@return nil
 function M.set_prev_session(session)
-    M._state.prev_session = session and vim.deepcopy(session) or nil
+    state.prev_session = session and vim.deepcopy(session) or nil
 end
 
----@return Sess.Session | nil
 function M.get_prev_session()
-    return M._state.prev_session and vim.deepcopy(M._state.prev_session) or nil
+    return state.prev_session and vim.deepcopy(state.prev_session) or nil
 end
 
----@param session Sess.Session | nil
----@return nil
 function M.set_current_session(session)
-    M._state.current_session = session and vim.deepcopy(session) or nil
+    state.current_session = session and vim.deepcopy(session) or nil
     vim.g.sess_current_session = session and session.metadata.name or nil
 end
 
----@return Sess.Session | nil
 function M.get_current_session()
-    return M._state.current_session and vim.deepcopy(M._state.current_session) or nil
+    return state.current_session and vim.deepcopy(state.current_session) or nil
 end
 
----@return Sess.Session[]
 function M.get_active_sessions()
-    return vim.deepcopy(M._state.active_sessions)
+    return vim.deepcopy(state.active_sessions)
+end
+
+function M.replace(session)
+    if state.current_session and state.current_session.id == session.id then
+        M.set_current_session(session)
+    end
+
+    if state.prev_session and state.prev_session.id == session.id then
+        M.set_prev_session(session)
+    end
+
+    for i, active in ipairs(state.active_sessions) do
+        if active.id == session.id then
+            state.active_sessions[i] = vim.deepcopy(session)
+        end
+    end
 end
 
 return M

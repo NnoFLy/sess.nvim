@@ -27,22 +27,24 @@ end
 ---@param prompt_bufnr number
 ---@return nil
 function M.enter(prompt_bufnr)
-    actions.close(prompt_bufnr)
-
     local value = selected_value()
     if not value then
         return
     end
 
-    local ok, err
+    actions.close(prompt_bufnr)
+
+    local ok, err, _, diagnostics
     if value.id == nil then
-        ok, err = api.session.create(value.metadata.cwd)
+        ok, err, _, diagnostics = api.session.create(value.metadata.cwd)
     else
-        ok, err = api.session.load(value.id)
+        ok, err, _, diagnostics = api.session.load(value.id)
     end
 
     if not ok then
         log.error(err)
+    else
+        log.diagnostics(diagnostics)
     end
 end
 
@@ -54,12 +56,28 @@ function M.delete_session(prompt_bufnr)
         return
     end
 
-    local ok, err = api.session.delete(value.id)
-    if not ok then
-        log.error(err)
+    if vim.fn.confirm("Delete session " .. value.metadata.name .. "?", "&Yes\n&No", 2) ~= 1 then
+        return
     end
 
-    refresh(prompt_bufnr)
+    local current = api.state.current()
+    local deleting_current = current and current.id == value.id
+
+    -- A current-session deletion replaces the layout, including picker windows.
+    if deleting_current then
+        actions.close(prompt_bufnr)
+    end
+
+    local ok, err, _, diagnostics = api.session.delete(value.id)
+    if not ok then
+        log.error(err)
+    else
+        log.diagnostics(diagnostics)
+    end
+
+    if not deleting_current then
+        refresh(prompt_bufnr)
+    end
 end
 
 ---@param prompt_bufnr number
@@ -70,9 +88,11 @@ function M.toggle_pin_session(prompt_bufnr)
         return
     end
 
-    local ok, err = api.session.toggle_pin(value.id)
+    local ok, err, _, diagnostics = api.session.toggle_pin(value.id)
     if not ok then
         log.error(err)
+    else
+        log.diagnostics(diagnostics)
     end
 
     refresh(prompt_bufnr)
@@ -99,9 +119,11 @@ function M.rename_session(prompt_bufnr)
             return
         end
 
-        local ok, err = api.session.rename(value.id, name)
+        local ok, err, _, diagnostics = api.session.rename(value.id, name)
         if not ok then
             log.error(err)
+        else
+            log.diagnostics(diagnostics)
         end
 
         refresh(prompt_bufnr)

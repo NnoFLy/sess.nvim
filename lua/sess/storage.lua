@@ -20,6 +20,7 @@ local METADATA_FILE = "metadata.json"
 local SESSION_FILE = "session.vim"
 
 -- Internal helpers
+local validate_id
 
 ---@param ...string
 ---@return string
@@ -36,12 +37,14 @@ end
 ---@return string
 local function sessions_path()
     assert_initialized()
+
     return join(root_path, SESSIONS_DIR)
 end
 
 ---@return string
 local function trash_path()
     assert_initialized()
+
     return join(root_path, TRASH_DIR)
 end
 
@@ -49,6 +52,11 @@ end
 ---@return Sess.SessionPaths
 local function session_paths(id)
     assert_initialized()
+
+    local valid, err = validate_id(id)
+    if not valid then
+        error(err)
+    end
 
     local dir = join(sessions_path(), id)
 
@@ -69,6 +77,7 @@ end
 ---@return boolean
 local function dir_exists(path)
     local stat = vim.uv.fs_stat(path)
+
     return stat ~= nil and stat.type == "directory"
 end
 
@@ -80,10 +89,10 @@ local function read_file(path)
         return nil, err
     end
 
-    local content = file:read("*a")
+    local content, read_err = file:read("*a")
     file:close()
 
-    return content
+    return content, read_err
 end
 
 ---@param path string
@@ -102,20 +111,23 @@ local function write_file_atomic(path, content)
     if not ok then
         file:close()
         vim.uv.fs_unlink(tmp_path)
+
         return false, write_err
     end
 
     local flush_ok, flush_err = file:flush()
-    file:close()
-    if not flush_ok then
+    local close_ok, close_err = file:close()
+    if not flush_ok or not close_ok then
         vim.uv.fs_unlink(tmp_path)
-        return false, flush_err
+
+        return false, flush_err or close_err
     end
 
     local rename_ok, rename_err = vim.uv.fs_rename(tmp_path, path)
 
     if not rename_ok then
         vim.uv.fs_unlink(tmp_path)
+
         return false, rename_err
     end
 
@@ -159,10 +171,11 @@ end
 
 ---@param id Sess.SessionId
 ---@return boolean, string?
-local function validate_id(id)
+validate_id = function(id)
     if type(id) ~= "string" then
         return false, "session id must be a string"
     end
+
     if id == "" then
         return false, "session id cannot be empty"
     end
@@ -176,18 +189,29 @@ local function validate_id(id)
 end
 
 ---@param id Sess.SessionId
-local function create_session(id)
+function M.replace_snapshot(id, generate)
     local path = session_paths(id).session
-    local ok, err = pcall(function()
-        vim.cmd({
-            cmd = "mksession",
-            bang = true,
-            args = { path },
-        })
-    end)
+    local fd, temporary = vim.uv.fs_mkstemp(path .. ".tmp-XXXXXX")
+    if not fd then
+        return false, temporary
+    end
+
+    vim.uv.fs_close(fd)
+
+    local ok, err = pcall(generate, temporary)
     if not ok then
+        vim.uv.fs_unlink(temporary)
+
         return false, tostring(err)
     end
+
+    local renamed, rename_err = vim.uv.fs_rename(temporary, path)
+    if not renamed then
+        vim.uv.fs_unlink(temporary)
+
+        return false, rename_err
+    end
+
     return true
 end
 
@@ -217,6 +241,10 @@ function M.init(path)
     end
 
     return true
+end
+
+function M.root()
+    return root_path
 end
 
 -- Session discovery
@@ -253,7 +281,20 @@ function M.exists(id)
         return false
     end
 
-    return dir_exists(session_paths(id).dir)
+    local stat, err, code = vim.uv.fs_stat(session_paths(id).dir)
+    if not stat then
+        if code == "ENOENT" then
+            return false
+        end
+
+        return false, err
+    end
+
+    if stat.type ~= "directory" then
+        return false, "session path is not a directory: " .. id
+    end
+
+    return true
 end
 
 -- Session creation / deletion
@@ -284,16 +325,6 @@ function M.create(id)
     return true
 end
 
----@param id string
----@return boolean, string?
-function M.update(id)
-    local ok, err = create_session(id)
-    if not ok then
-        return false, err
-    end
-    return true
-end
-
 ---@param id Sess.SessionId
 ---@param hard boolean?
 ---@return boolean, string?
@@ -310,14 +341,13 @@ function M.delete(id, hard)
         if vim.fn.delete(paths.dir, "rf") ~= 0 then
             return false, "failed to permanently delete session: " .. id
         end
+
         return true
     end
 
     -- Move the entire session into trash.
-    local destination = join(
-        trash_path(),
-        id .. "-" .. tostring(os.time()) .. "-" .. tostring(vim.uv.hrtime())
-    )
+    local destination =
+        join(trash_path(), id .. "-" .. tostring(os.time()) .. "-" .. tostring(vim.uv.hrtime()))
 
     local ok, err = vim.uv.fs_rename(paths.dir, destination)
 
@@ -388,11 +418,8 @@ function M.read_metadata(id)
 
     for field, expected_type in pairs(fields) do
         if type(data[field]) ~= expected_type then
-            return nil, string.format(
-                "invalid session metadata: field %s must be %s",
-                field,
-                expected_type
-            )
+            return nil,
+                string.format("invalid session metadata: field %s must be %s", field, expected_type)
         end
     end
 
@@ -429,12 +456,7 @@ function M.create_with_metadata(id, metadata)
     ok, err = M.write_metadata(id, metadata)
     if not ok then
         M.delete(id, true)
-        return false, err
-    end
 
-    ok, err = create_session(id)
-    if not ok then
-        M.delete(id, true)
         return false, err
     end
 
@@ -474,6 +496,37 @@ function M.write_session(id, content)
     end
 
     return write_file_atomic(session_paths(id).session, content)
+end
+
+-- Validate IDs before any path construction, even on less common entry points.
+M.validate_id = validate_id
+
+for _, name in ipairs({
+    "exists",
+    "create",
+    "replace_snapshot",
+    "delete",
+    "rename",
+    "read_metadata",
+    "write_metadata",
+    "create_with_metadata",
+    "get_session_path",
+    "read_session",
+    "write_session",
+}) do
+    local operation = M[name]
+    M[name] = function(id, ...)
+        local valid, err = validate_id(id)
+        if not valid then
+            if name == "read_metadata" or name == "get_session_path" or name == "read_session" then
+                return nil, err
+            end
+
+            return false, err
+        end
+
+        return operation(id, ...)
+    end
 end
 
 return M

@@ -1,210 +1,152 @@
 # Sess.nvim
 
-Plugin for managing sessions in Neovim.
-
-## Features
-
-- Save and load sessions
-- Pin sessions
-- Delete sessions
-- Rename sessions
-- List sessions (with telescope.nvim)
-- Switch to last session
+Save and switch Neovim sessions.
 
 ## Installation
 
-<details>
-<summary>lazy.nvim</summary>
+Telescope and plenary.nvim are only needed for the picker.
 
 ```lua
-return {
+-- lazy.nvim
+{
     "NnoFLy/sess.nvim",
     lazy = false,
-
---- OPTIONAL (only for 'Sess list') ---
-    dependencies = {
-        "nvim-lua/plenary.nvim",
-        "nvim-telescope/telescope.nvim",
-    },
---- OPTIONAL (only for 'Sess list') ---
+    config = function()
+        require("sess").setup()
+    end,
+    -- Optional, only for the session picker:
+    dependencies = { "nvim-lua/plenary.nvim", "nvim-telescope/telescope.nvim" },
 }
 ```
 
-</details>
-
-<details>
-<summary>Native (with vim.pack)</summary>
+Or with native packages:
 
 ```lua
---- OPTIONAL (only for 'Sess list') ---
-vim.pack.add({ "https://github.com/nvim-lua/plenary.nvim" })
-vim.pack.add({ "https://github.com/nvim-telescope/telescope.nvim" })
---- OPTIONAL (only for 'Sess list') ---
-
-vim.pack.add({ "https://github.com/NnoFLy/sess.nvim" })
+vim.pack.add({
+    "https://github.com/NnoFLy/sess.nvim",
+    -- Optional, only for the session picker:
+    "https://github.com/nvim-lua/plenary.nvim",
+    "https://github.com/nvim-telescope/telescope.nvim",
+})
+require("sess").setup()
 ```
 
-</details>
-
-## Config
-
-Default config:
+## Configuration
 
 ```lua
 require("sess").setup({
-    paths = {
-        "path/to/your/projects/*",  -- will add all folders in this path to the sessions list
-        "path/to/your/project",  -- will add this folder to the sessions list
-    },
-    smart_auto_load = true,  -- smart auto load session on enter to neovim
-                             -- if you open a file (like 'nvim file.txt' or 'nvim .'),
-                             -- then session won't be loaded,
-                             -- but if you run neovim like 'nvim', then it will be loaded
-    auto_save = true,  -- auto save session on exit from neovim
-                       -- works only if session is loaded
-    exclude_filetypes = { "gitcommit" },  -- exclude from auto save
-    log_level = "info", -- debug|info|warn|error
+    paths = {}, -- project directories or glob patterns shown in the picker
+    smart_auto_load = true, -- load/create for cwd when starting without arguments
+    auto_save = true, -- save the current snapshot on exit
+    exclude_filetypes = { "gitcommit" }, -- skip exit saves for these filetypes
+    log_level = "info", -- debug | info | warn | error
     store_path = vim.fn.stdpath("data") .. "/sess.nvim",
-    before_load = {
-        auto_save_files = false,     -- auto save files before switch to another session
-        auto_hide_buffers = true,  -- auto remove buffers before switch to another session
-        custom = function() end,
-    },
-    after_load = {
-        custom = function() end
-    },
-    on_unload = { -- runs after session is unloaded or deleted (Sess delete|unload)
-        custom = function() end
-    }
+    hooks = {}, -- optional before_transition and after_operation callbacks
 })
 ```
 
 ## Usage
 
-Example keybindings:
+| Command | Behavior |
+| --- | --- |
+| `:Sess create [path]` | Create a session, or load the existing one for that path |
+| `:Sess load [name/id/path]` | Switch sessions; defaults to current cwd |
+| `:Sess save` | Save the current session |
+| `:Sess last` | Return to the previous session |
+| `:Sess unload` | Save, hide and detach the current session |
+| `:Sess pin [target]` | Toggle pin; defaults to current session |
+| `:Sess rename [target] [name]` | Rename; prompts for a missing name |
+| `:Sess delete [target]` | Confirm deletion; defaults to current session |
+| `:Sess list` | Open Telescope |
 
 ```lua
-vim.keymap.set("n", "<M-s>s", "<cmd>Sess save<cr>", { desc = "Save session" })
-vim.keymap.set("n", "<M-s>p", "<cmd>Sess pin<cr>", { desc = "Pin session" })
-vim.keymap.set("n", "<M-s>c", ":Sess create ", { desc = "Create session" })
-vim.keymap.set("n", "<M-s>l", "<cmd>Sess load<cr>", { desc = "Load session" })
-vim.keymap.set("n", "<M-s>u", "<cmd>Sess unload<cr>", { desc = "Unload session" })
-vim.keymap.set("n", "<C-s>", "<cmd>Sess list<cr>", { desc = "List sessions" }) -- only if you have telescope.nvim
-vim.keymap.set("n", "<leader><C-^>", "<cmd>Sess last<cr>", { desc = "Load the previous session" })
+vim.keymap.set("n", "<M-s>s", "<cmd>Sess save<cr>")
+vim.keymap.set("n", "<M-s>l", "<cmd>Sess list<cr>")
+vim.keymap.set("n", "<leader><C-^>", "<cmd>Sess last<cr>")
 ```
 
-Command completion:
+### Switching and saving
 
-- `:Sess <Tab>` completes subcommands.
-- `:Sess load|pin|rename|delete <Tab>` completes session names.
-- `:Sess create <Tab>` completes directories.
+Switching saves the outgoing snapshot and hides its buffers. Modified named/unnamed buffers, non-file buffers and terminal jobs stay alive. Returning restores buffer identities, layout, cursor positions, buffer listing and cwd scopes without reloading the snapshot.
 
-## Status line
+Sessions share buffers: opening the same file generally reuses its buffer. Window IDs may change, and some plugin/window-local settings can't be restored. User autocommands or trusted code can still delete buffers or stop jobs. Buffers opened before the first session are hidden but remain manually accessible.
 
-Show current session in statusline:
+## Lua API
 
 ```lua
-local statusline = vim.o.statusline
+local api = require("sess.api")
+local ok, err, item, diagnostics = api.session.load("my-project")
+if not ok then
+    -- Operation failed. The core does not prompt or notify.
+elseif #diagnostics > 0 then
+    -- Operation succeeded, but metadata updates or observers reported errors.
+end
 
+api.session.save() -- current session only
+local current = api.state.current()
+local previous = api.state.prev()
+local active = api.state.active()
+local ok, err, sessions, diagnostics = api.session.list()
+```
+
+Mutations return `(ok, err, session, diagnostics)`, with diagnostic strings on success. Loading the current session succeeds without saves, hooks or events. State getters return defensive copies.
+
+Listing returns `false` for store-wide failures; corrupt records are skipped with diagnostics, never repaired or deleted automatically. Create/rename refuse to claim uniqueness with damaged metadata. `api.items.get_items()` returns `(items, err, diagnostics)`; UI adapters report diagnostics.
+
+See [`:help sess-api`](doc/sessionizer.txt) for signatures and failure behavior.
+
+## Hooks and events
+
+```lua
 require("sess").setup({
-    ...
-    log_level = "error",
-    after_load = {
-        custom = function()
-            local session = vim.g.sess_current_session or ""
-            if session ~= "" then
-                session = "[" .. session .. "] "
-            end
-            vim.o.statusline = session .. statusline
-        end
+    hooks = {
+        before_transition = function(context)
+            -- context: { operation, session, current }
+            -- Throw to abort create/load/unload/current-session deletion.
+        end,
+        after_operation = function(context)
+            -- State is committed. Throwing only adds a diagnostic.
+        end,
     },
-    on_unload = {
-        custom = function()
-            vim.o.statusline = statusline
-        end
-    }
+})
+
+vim.api.nvim_create_autocmd("User", {
+    pattern = { "SessLoaded", "SessCreated", "SessUnloaded", "SessRenamed" },
+    callback = function(event)
+        local current = event.data.current
+        -- Also available: event.data.operation and event.data.session.
+        -- For a statusline, read vim.g.sess_current_session.
+    end,
 })
 ```
 
+Events: `SessCreated`, `SessLoaded`, `SessSaved`, `SessUnloaded`, `SessDeleted`, `SessRenamed`, `SessPinned`.
+
+State commits before `after_operation`, then the event fires. Outgoing saves emit `SessSaved` first. Create emits only `SessCreated`; switching doesn't emit `SessUnloaded`. Explicit unload does, as does current-session deletion before `SessDeleted`. Other deletions emit only `SessDeleted`.
+
+Payloads are defensive `{ operation, session, current }` records; `current` may be nil. Hooks/events allow queries but reject recursive mutations. Post-hook/subscriber errors don't undo success. Subscriber execution follows Neovim's autocmd rules: Neovim may display errors, and those exposed through its API or `v:errmsg` become diagnostics.
+
 ## Telescope
+
+Install telescope.nvim and plenary.nvim, then:
 
 ```lua
 require("telescope").load_extension("sess")
 ```
 
-### Default config
+Enter loads/creates. Ctrl-d (insert) or `dd` (normal) deletes with confirmation. Ctrl-r (insert) or `rr` (normal) renames. Commands, Telescope and autocommands use the same lifecycle.
 
-```lua
-local sess_actions = require("telescope._extensions.sess.actions")
+## Persistence and safety
 
-require("telescope").setup({
-    extensions = {
-        -- Defaults:
-        sess = {
-            prompt_title = "🗃️ All sessions",
-            mappings = {
-                ["i"] = {
-                    ["<C-d>"] = sess_actions.delete_session,
-                    ["<C-r>"] = sess_actions.rename_session,
-                    ["<CR>"] = sess_actions.enter,
-                },
-                ["n"] = {
-                    ["dd"] = sess_actions.delete_session,
-                    ["rr"] = sess_actions.rename_session,
-                    ["<CR>"] = sess_actions.enter,
-                },
-            },
-        }
-    }
-})
+`:checkhealth sess` checks setup, storage access, corrupt/version-incompatible metadata and missing snapshots. It never sources snapshots, writes probes or repairs/deletes data.
 
+## Development
+
+```sh
+sh tests/run.sh
+NVIM_BIN=/path/to/latest-stable/nvim sh tests/run.sh
 ```
 
-## Lua API
+Tests run in fresh Neovim processes with temporary HOME/XDG/storage/fixtures, cleaned up on exit. User config, plugins, ShaDa and swap files are disabled. Telescope isn't required. CI tests latest stable only.
 
-The programmatic API is prompt-free and does not emit notifications. UI concerns stay in `:Sess` and Telescope.
-
-```lua
-local api = require("sess.api")
-
-local ok, err, session = api.session.load("my-project")
-if not ok then
-    vim.notify(err, vim.log.levels.ERROR)
-end
-
-local current = api.state.current()
-local ok, err, sessions = api.session.list()
-```
-
-`api.session` uses `(ok, err, ...)` returns. Targets can be a session table, session id, session name, path, or `nil` where the operation defines a current-session default. Use `api.state` for current/previous/active state, `api.items.get_items()` for Telescope-style lists, and `api.opts` for configuration.
-
-For the complete API reference, see [`:help sess-api`](doc/sessionizer.txt).
-
-## Troubleshooting
-
-<details>
-<summary>If you set `before_load.auto_save_files = true` and you use conform.nvim</summary>
-
-```lua
-require("conform").setup({
-    formatters_by_ft = { ... },
-
-    -- Remove format_after_save
-    format_after_save = { lsp_format = "fallback", timeout_ms = 500, async = true },
-
-    -- use format_on_save instead
-    format_on_save = { timeout_ms = 500, lsp_format = "fallback" },
-})
-```
-
-Or just set `before_load.auto_save_files = false`
-
-</details>
-
-## TODO
-
-- [ ] Move by directories with Telescope ('~', '/', './', '../')
-- [ ] Open remote session from Telescope ('/ssh:<login>/')
-- [ ] Remote sessions (with `ssh`)
-- [ ] Keymaps for remote session, via callback
-- [ ] sshfs
+Format changed Lua files with `stylua path/to/file.lua`; `.stylua.toml` defines the shared style. Use `stylua --check path/to/file.lua` to check without modifying files.

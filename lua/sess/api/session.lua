@@ -1,501 +1,544 @@
-local session = require("sess.session")
-local buffers = require("sess.buffers")
-local state = require("sess.api.state")
-local api_opts = require("sess.api.opts")
+local catalog = require("sess.session")
+local editor = require("sess.editor")
+local state = require("sess.state")
+local opts = require("sess.api.opts")
 
 local M = {}
 
-local function merge_opts(overrides)
-    overrides = overrides or {}
-    return {
-        before_load = vim.tbl_deep_extend("force", api_opts.get().before_load, overrides.before_load or {}),
-        after_load = vim.tbl_deep_extend("force", api_opts.get().after_load, overrides.after_load or {}),
-        on_unload = vim.tbl_deep_extend("force", api_opts.get().on_unload, overrides.on_unload or {}),
-    }
-end
+local busy = false
 
-local function modified_buffers()
-    local modified = {}
-    for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
-        if vim.api.nvim_buf_is_loaded(bufnr)
-            and vim.api.nvim_buf_get_name(bufnr) ~= ""
-            and vim.api.nvim_get_option_value("modifiable", { buf = bufnr })
-            and vim.api.nvim_get_option_value("modified", { buf = bufnr })
-        then
-            table.insert(modified, vim.api.nvim_buf_get_name(bufnr))
+local function resolve(target)
+    if target == nil then
+        target = state.get_current_session()
+        if not target then
+            return nil, "no current session"
         end
     end
-    return modified
+
+    return catalog.resolve(target)
 end
 
-local function save_session(item)
-    local ok, err = session.save(item.id)
-    if not ok then
+local function hooks(overrides)
+    if overrides == nil then
+        return opts.get().hooks
+    end
+
+    if type(overrides) ~= "table" then
+        return nil, "options must be a table"
+    end
+
+    for key in pairs(overrides) do
+        if key ~= "hooks" then
+            return nil, "unknown operation option: " .. tostring(key)
+        end
+    end
+
+    if overrides.hooks ~= nil then
+        local valid, err = opts.validate_hooks(overrides.hooks)
+        if not valid then
+            return nil, err
+        end
+    end
+
+    return vim.tbl_extend("force", opts.get().hooks, overrides.hooks or {})
+end
+
+local function before(operation, item, callbacks)
+    if not callbacks.before_transition then
+        return true
+    end
+
+    local ok, err = pcall(callbacks.before_transition, {
+        operation = operation,
+        session = vim.deepcopy(item),
+        current = state.get_current_session(),
+    })
+
+    return ok, not ok and ("before_transition failed: " .. tostring(err)) or nil
+end
+
+local events = {
+    create = "SessCreated",
+    load = "SessLoaded",
+    save = "SessSaved",
+    unload = "SessUnloaded",
+    delete = "SessDeleted",
+    rename = "SessRenamed",
+    pin = "SessPinned",
+}
+
+-- State is committed before observers run. Their failures are diagnostics, not
+-- failed operations. The guard remains held through both hooks and User events.
+local function finish(operation, item, callbacks, diagnostics)
+    diagnostics = diagnostics or {}
+
+    local payload = {
+        operation = operation,
+        session = vim.deepcopy(item),
+        current = state.get_current_session(),
+    }
+
+    if callbacks.after_operation then
+        local ok, err = pcall(callbacks.after_operation, vim.deepcopy(payload))
+        if not ok then
+            table.insert(diagnostics, "after_operation failed: " .. tostring(err))
+        end
+    end
+
+    -- Neovim reports Lua autocmd errors itself rather than always throwing them
+    -- through nvim_exec_autocmds. Preserve the caller's errmsg and collect both.
+    local previous_error = vim.v.errmsg
+    vim.v.errmsg = ""
+
+    local ok, err = pcall(
+        vim.api.nvim_exec_autocmds,
+        "User",
+        { pattern = events[operation], data = payload, modeline = false }
+    )
+
+    local subscriber_error = not ok and tostring(err) or vim.v.errmsg
+    vim.v.errmsg = previous_error
+
+    if subscriber_error ~= "" then
+        table.insert(diagnostics, events[operation] .. " subscriber failed: " .. subscriber_error)
+    end
+
+    return true, nil, item, diagnostics
+end
+
+local function touch(item, diagnostics)
+    local called, updated, err = pcall(catalog.touch, item.id)
+    if not called then
+        err, updated = updated, nil
+    end
+
+    if err then
+        table.insert(diagnostics, "metadata update failed: " .. tostring(err))
+    end
+
+    return updated or item
+end
+
+local function save_current(callbacks)
+    local item, err = resolve()
+    if not item then
         return false, err
     end
 
-    local updated, get_err = session.get(item.id)
-    if not updated then
-        return false, get_err or "failed to reload session after save"
-    end
-
-    state.replace(updated)
-    return true, nil, updated
-end
-
-local function save_session_in_its_cwd(item)
-    local previous = vim.fn.getcwd()
-    local target_cwd = vim.fs.normalize(item.metadata.cwd)
-    if previous == target_cwd then
-        return save_session(item)
-    end
-
-    local changed, change_err = pcall(vim.fn.chdir, target_cwd)
-    if not changed then
-        return false, tostring(change_err)
-    end
-
-    local call_ok, save_ok, save_err, updated = pcall(save_session, item)
-    local restored, restore_err = pcall(vim.fn.chdir, previous)
-    if not restored then
-        return false, "failed to restore working directory: " .. tostring(restore_err)
-    end
-    if not call_ok then
-        return false, tostring(save_ok)
-    end
-    if not save_ok then
+    local view = editor.capture()
+    local ok, save_err = editor.snapshot(item)
+    if not ok then
         return false, save_err
     end
-    return true, nil, updated
+
+    view.this_session = vim.v.this_session
+    state.set_view(item.id, view)
+
+    local diagnostics = {}
+    item = touch(item, diagnostics)
+    state.replace(item)
+
+    return finish("save", item, callbacks, diagnostics)
 end
 
----@param target Sess.Session | string | nil
----@return boolean, string?, Sess.Session?
-function M.resolve(target)
-    if target == nil then
-        local current = state.current()
-        if current then
-            return true, nil, current
-        end
-        return false, "no current session"
-    end
-
-    if type(target) == "table" and target.id and target.metadata then
-        local fresh, err = session.get(target.id)
-        if not fresh then
-            return false, err or ("session not found: " .. target.id)
-        end
-        return true, nil, fresh
-    end
-
-    if type(target) ~= "string" then
-        return false, "invalid session target: " .. type(target)
-    end
-
-    target = vim.trim(target)
-    if target == "" then
-        return false, "session target cannot be empty"
-    end
-
-    local item, err = session.get(target)
-
-    if err and not item then
-        -- A malformed id should not prevent name/path fallback.
-    end
-
-    if item then
-        return true, nil, item
-    end
-
-    item, err = session.get_by_name(target)
-    if err then
-        return false, err
-    end
-    if item then
-        return true, nil, item
-    end
-
-    item, err = session.get_by_path(target)
-    if err then
-        return false, err
-    end
-    if item then
-        return true, nil, item
-    end
-
-    return false, "session not found: " .. target
-end
-
----@param cwd string?
----@param create_opts Sess.CreateOpts?
----@return boolean, string?, Sess.Session?
-function M.create(cwd, create_opts)
-    cwd = cwd or vim.fn.getcwd()
-    cwd = vim.fs.normalize(vim.fn.fnamemodify(cwd, ":p"))
-    if create_opts ~= nil and type(create_opts) ~= "table" then
-        return false, "create options must be a table"
-    end
-    create_opts = create_opts or {}
-
-    if vim.fn.isdirectory(cwd) == 0 then
-        return false, "directory does not exist: " .. cwd
-    end
-
-    local existing, lookup_err = session.get_by_path(cwd)
-    if lookup_err then
-        return false, lookup_err
-    end
-    if existing then
-        return false, "session already exists for directory: " .. cwd
-    end
-
-    local previous_cwd = vim.fn.getcwd()
-    local current = state.current()
-    if current then
-        local ok, err, updated = save_session(current)
-        if not ok then
-            return false, "failed to save current session: " .. tostring(err)
-        end
-        current = updated
-    end
-
-    local changed, change_err = pcall(vim.fn.chdir, cwd)
-    if not changed then
-        return false, tostring(change_err)
-    end
-
-    local hidden, hide_err = true, nil
-    hidden, hide_err = buffers.hide_all_buffers()
-    if not hidden then
-        pcall(vim.fn.chdir, previous_cwd)
-        return false, hide_err
-    end
-
-    local edited, edit_err = pcall(vim.cmd, "edit .")
-    if not edited then
-        pcall(vim.fn.chdir, previous_cwd)
-        return false, tostring(edit_err)
-    end
-
-    local item, create_err = session.create({
-        cwd = cwd,
-        name = create_opts.name,
-        id = create_opts.id,
-    })
-    if not item then
-        pcall(vim.fn.chdir, previous_cwd)
-        return false, create_err or "failed to create session"
-    end
-
-    if current then
-        state.set_prev(current)
-    end
-    state.set_current(item)
-    state.add_active(item)
-
-    return true, nil, item
-end
-
----@param target Sess.Session | Sess.SessionId | string | nil
----@return boolean, string?, Sess.Session?
-function M.save(target)
-    local item
-    if target == nil then
-        item = state.current()
-        if not item then
-            return false, "no current session"
-        end
-    elseif type(target) == "table" and target.id and target.metadata then
-        local ok, err, resolved = M.resolve(target)
-        if not ok then
-            return false, err
-        end
-        item = resolved
-    elseif type(target) == "string" then
-        local resolved = session.get(target)
-        if not resolved then
-            resolved = session.get_by_name(target)
-        end
-        if not resolved then
-            resolved = session.get_by_path(target)
-        end
-        if resolved then
-            item = resolved
-        else
-            local cwd = vim.fs.normalize(vim.fn.fnamemodify(target, ":p"))
-            if vim.fn.isdirectory(cwd) == 0 then
-                return false, "directory does not exist: " .. cwd
-            end
-
-            local previous = vim.fn.getcwd()
-            local changed, chdir_err = pcall(vim.fn.chdir, cwd)
-            if not changed then
-                return false, tostring(chdir_err)
-            end
-
-            local created, create_err = session.create({ cwd = cwd })
-            local restored, restore_err = pcall(vim.fn.chdir, previous)
-            if not restored then
-                return false, "failed to restore working directory: " .. tostring(restore_err)
-            end
-            if not created then
-                return false, create_err or "failed to create session"
-            end
-            return true, nil, created
-        end
-    else
-        return false, "invalid save target: " .. type(target)
-    end
-
-    local ok, err, updated = save_session_in_its_cwd(item)
+-- Recover the reversible editor state if any editor action or filesystem step
+-- throws. This does not undo arbitrary sourced Vimscript or user autocommands.
+local function change(action)
+    local original = editor.capture()
+    local ok, err = editor.protected(action)
     if not ok then
-        return false, err
-    end
-    return true, nil, updated
-end
+        local restored, restore_err = editor.protected(function()
+            editor.restore(original, true)
+        end)
 
----@param target Sess.Session | string | nil
----@param opts Sess.MergedLoadOpts?
----@return boolean, string?, Sess.Session?, Sess.BeforeLoadOpts?, Sess.AfterLoadOpts?
-function M.prepare(target, opts)
-    local merged = merge_opts(opts)
-    local item
-
-    if target == nil then
-        local lookup_err
-        item, lookup_err = session.get_by_path(vim.fn.getcwd())
-        if lookup_err then
-            return false, lookup_err, nil, nil, nil
-        end
-        if not item then
-            return false, "no session for current working directory: " .. vim.fn.getcwd(), nil, nil, nil
-        end
-    else
-        local ok, err, resolved = M.resolve(target)
-        if not ok then
-            return false, err, nil, nil, nil
-        end
-        item = resolved
-    end
-
-    local modified = modified_buffers()
-    if #modified > 0 then
-        if not merged.before_load.auto_save_files then
-            return false, "unsaved changes in buffers: " .. table.concat(modified, ", ")
-                .. " (set before_load.auto_save_files to save them automatically)", nil, nil, nil
-        end
-
-        local ok, err = pcall(vim.cmd, "wall")
-        if not ok then
-            return false, tostring(err), nil, nil, nil
-        end
-    end
-
-    local hook_ok, hook_err = pcall(merged.before_load.custom)
-    if not hook_ok then
-        return false, "before_load.custom failed: " .. tostring(hook_err), nil, nil, nil
-    end
-
-    return true, nil, item, merged.before_load, merged.after_load
-end
-
----@param item Sess.Session
----@param opts Sess.MergedLoadOpts?
----@return boolean, string?, Sess.Session?, boolean
-function M.commit(item, opts)
-    local before_load = (opts or {}).before_load or {}
-    local after_load = (opts or {}).after_load or {}
-    local current = state.current()
-
-    if current and current.id == item.id then
-        return true, nil, current, true
-    end
-
-    if before_load.auto_hide_buffers then
-        local ok, err = buffers.hide_all_buffers()
-        if not ok then
-            return false, err, nil, false
-        end
-    end
-
-    local loaded, load_err = session.load_session(item.id)
-    if not loaded then
-        return false, load_err, nil, false
-    end
-
-    if current and current.id ~= item.id then
-        state.set_prev(current)
-    end
-
-    local loaded_item = session.get(item.id) or item
-    state.set_current(loaded_item)
-    state.add_active(loaded_item)
-
-    local hook_ok, hook_err = pcall(after_load.custom or function() end)
-    if not hook_ok then
-        return false, "after_load.custom failed: " .. tostring(hook_err), loaded_item, false
-    end
-
-    return true, nil, loaded_item, false
-end
-
----@param target Sess.Session | string | nil
----@param opts Sess.MergedLoadOpts?
----@return boolean, string?, Sess.Session?, boolean
-function M.load(target, opts)
-    local ok, err, item, before_load, after_load = M.prepare(target, opts)
-    if not ok then
-        return false, err, nil, false
-    end
-
-    local current = state.current()
-    if current and current.id == item.id then
-        return true, nil, current, true
-    end
-
-    if current then
-        local saved, save_err = save_session(current)
-        if not saved then
-            return false, "failed to save current session: " .. tostring(save_err), nil, false
-        end
-    end
-
-    return M.commit(item, {
-        before_load = before_load,
-        after_load = after_load,
-    })
-end
-
----@param opts Sess.MergedUnloadOpts?
----@return boolean, string?
-function M.unload(opts)
-    local current = state.current()
-    if not current then
-        return false, "no current session"
-    end
-
-    local merged = merge_opts(opts)
-    state.set_prev(current)
-    state.set_current(nil)
-    state.remove_active(current.id)
-
-    local hook_ok, hook_err = pcall(merged.on_unload.custom)
-    if not hook_ok then
-        return false, "on_unload.custom failed: " .. tostring(hook_err)
+        return false,
+            tostring(err) .. (restored and "" or ("; rollback failed: " .. tostring(restore_err)))
     end
 
     return true
 end
 
----@param target Sess.Session | string | nil
----@param opts Sess.MergedUnloadOpts?
----@return boolean, string?, Sess.Session?
-function M.delete(target, opts)
-    local ok, err, item = M.resolve(target)
+local function outgoing(callbacks)
+    if not state.get_current_session() then
+        return true, nil, nil, {}
+    end
+
+    local ok, err, item, diagnostics = save_current(callbacks)
     if not ok then
+        return false, "failed to save outgoing session: " .. tostring(err)
+    end
+
+    return true, nil, item, diagnostics
+end
+
+function M.create(cwd, options)
+    if cwd ~= nil and (type(cwd) ~= "string" or vim.trim(cwd) == "") then
+        return false, "working directory must be a non-empty string"
+    end
+
+    if options ~= nil and type(options) ~= "table" then
+        return false, "create options must be a table"
+    end
+
+    options = options or {}
+
+    for key in pairs(options) do
+        if key ~= "name" and key ~= "id" and key ~= "hooks" then
+            return false, "unknown create option: " .. tostring(key)
+        end
+    end
+
+    local callbacks, hook_err = hooks({ hooks = options.hooks })
+    if not callbacks then
+        return false, hook_err
+    end
+
+    local request = { cwd = cwd or vim.fn.getcwd(), name = options.name, id = options.id }
+    local item, err = catalog.prepare_create(request)
+    if not item then
         return false, err
     end
 
-    local deleted, delete_err = session.delete(item.id)
-    if not deleted then
-        return false, delete_err or "failed to delete session"
+    local ready, pre_err = before("create", item, callbacks)
+    if not ready then
+        return false, pre_err
     end
 
-    local current = state.current()
-    if current and current.id == item.id then
-        state.set_current(nil)
-    end
-    local previous = state.prev()
-    if previous and previous.id == item.id then
-        state.set_prev(nil)
-    end
-    state.remove_active(item.id)
-
-    local merged = merge_opts(opts)
-    local hook_ok, hook_err = pcall(merged.on_unload.custom)
-    if not hook_ok then
-        return false, "on_unload.custom failed: " .. tostring(hook_err), item
+    -- Hooks may remove directories or introduce conflicts. Revalidate before
+    -- saving the outgoing session or changing its visibility.
+    request.cwd, request.id = item.metadata.cwd, item.id
+    item, err = catalog.prepare_create(request)
+    if not item then
+        return false, err
     end
 
-    return true, nil, item
+    local saved, save_err, current, diagnostics = outgoing(callbacks)
+    if not saved then
+        return false, save_err
+    end
+
+    item, err = catalog.prepare_create(request)
+    if not item then
+        return false, err
+    end
+
+    local created
+    local changed, change_err = change(function()
+        editor.empty(item.metadata.cwd)
+
+        local create_err
+        created, create_err = catalog.create(request)
+        if not created then
+            error(create_err)
+        end
+
+        local ok, snapshot_err = editor.snapshot(created)
+        if not ok then
+            error(snapshot_err)
+        end
+    end)
+    if not changed then
+        if created then
+            local removed, remove_err = catalog.delete(created.id, true)
+            if not removed then
+                change_err = change_err .. "; cleanup failed: " .. tostring(remove_err)
+            end
+        end
+
+        return false, change_err
+    end
+
+    if current then
+        state.set_prev_session(current)
+    end
+
+    state.set_current_session(created)
+    state.add_active_session(created)
+
+    return finish("create", created, callbacks, diagnostics)
 end
 
----@param target Sess.Session | string | nil
----@param name string
----@return boolean, string?, Sess.Session?
+function M.load(target, options)
+    local callbacks, hook_err = hooks(options)
+    if not callbacks then
+        return false, hook_err
+    end
+
+    local item, err
+    if target == nil then
+        item, err = catalog.get_by_path(vim.fn.getcwd())
+    else
+        item, err = resolve(target)
+    end
+
+    if not item then
+        return false, err or "no session for current working directory"
+    end
+
+    local valid, validation_err = editor.validate(item)
+    if not valid then
+        return false, validation_err
+    end
+
+    local current = state.get_current_session()
+    if current and current.id == item.id then
+        return true, nil, current, {}
+    end
+
+    local ready, pre_err = before("load", item, callbacks)
+    if not ready then
+        return false, pre_err
+    end
+
+    item, err = catalog.resolve(item)
+    if not item then
+        return false, err
+    end
+
+    valid, validation_err = editor.validate(item)
+    if not valid then
+        return false, validation_err
+    end
+
+    local saved, save_err, outgoing_item, diagnostics = outgoing(callbacks)
+    if not saved then
+        return false, save_err
+    end
+
+    -- Outgoing save observers can invalidate the target as well.
+    item, err = catalog.resolve(item)
+    if not item then
+        return false, err
+    end
+
+    valid, validation_err = editor.validate(item)
+    if not valid then
+        return false, validation_err
+    end
+
+    local changed, change_err = change(function()
+        editor.load(item, state.get_view(item.id))
+    end)
+    if not changed then
+        return false, change_err
+    end
+
+    item = touch(item, diagnostics)
+    if outgoing_item then
+        state.set_prev_session(outgoing_item)
+    end
+
+    state.set_current_session(item)
+    state.add_active_session(item)
+
+    return finish("load", item, callbacks, diagnostics)
+end
+
+function M.save(...)
+    if select("#", ...) > 0 then
+        return false, "save() takes no arguments and saves only the current session"
+    end
+
+    return save_current(opts.get().hooks)
+end
+
+function M.unload(options)
+    local callbacks, hook_err = hooks(options)
+    if not callbacks then
+        return false, hook_err
+    end
+
+    local item, err = resolve()
+    if not item then
+        return false, err
+    end
+
+    local ready, pre_err = before("unload", item, callbacks)
+    if not ready then
+        return false, pre_err
+    end
+
+    local saved, save_err, updated, diagnostics = outgoing(callbacks)
+    if not saved then
+        return false, save_err
+    end
+
+    local changed, change_err = change(function()
+        editor.empty(vim.fn.getcwd())
+    end)
+    if not changed then
+        return false, change_err
+    end
+
+    state.set_prev_session(updated)
+    state.set_current_session(nil)
+    state.remove_active_session(item.id)
+
+    return finish("unload", updated, callbacks, diagnostics)
+end
+
+function M.delete(target, options)
+    local callbacks, hook_err = hooks(options)
+    if not callbacks then
+        return false, hook_err
+    end
+
+    local item, err = resolve(target)
+    if not item then
+        return false, err
+    end
+
+    local current = state.get_current_session()
+    local is_current = current and current.id == item.id
+    if is_current then
+        local ready, pre_err = before("delete", item, callbacks)
+        if not ready then
+            return false, pre_err
+        end
+
+        item, err = resolve(item)
+        if not item then
+            return false, err
+        end
+    end
+
+    local changed, change_err
+    if is_current then
+        changed, change_err = change(function()
+            editor.empty(vim.fn.getcwd())
+
+            local ok, delete_err = catalog.delete(item.id)
+            if not ok then
+                error(delete_err)
+            end
+        end)
+    else
+        changed, change_err = catalog.delete(item.id)
+    end
+
+    if not changed then
+        return false, change_err
+    end
+
+    if is_current then
+        state.set_current_session(nil)
+    end
+
+    local previous = state.get_prev_session()
+    if previous and previous.id == item.id then
+        state.set_prev_session(nil)
+    end
+
+    state.remove_active_session(item.id)
+    state.set_view(item.id, nil)
+
+    local diagnostics = {}
+    if is_current then
+        local _, _, _, unload_diagnostics = finish("unload", item, callbacks)
+        diagnostics = unload_diagnostics
+    end
+
+    return finish("delete", item, callbacks, diagnostics)
+end
+
 function M.rename(target, name)
     if type(name) ~= "string" or vim.trim(name) == "" then
         return false, "session name cannot be empty"
     end
 
-    local ok, err, item = M.resolve(target)
-    if not ok then
+    local item, err = resolve(target)
+    if not item then
         return false, err
     end
 
-    local renamed, rename_err = session.rename(item.id, name)
+    local renamed, rename_err = catalog.rename(item.id, name)
     if not renamed then
-        return false, rename_err or "failed to rename session"
+        return false, rename_err
     end
 
     state.replace(renamed)
-    return true, nil, renamed
+
+    return finish("rename", renamed, opts.get().hooks)
 end
 
----@param target Sess.Session | string | nil
----@return boolean, string?, Sess.Session?
 function M.toggle_pin(target)
-    local ok, err, item = M.resolve(target)
-    if not ok then
+    local item, err = resolve(target)
+    if not item then
         return false, err
     end
 
-    local updated, pin_err = session.toggle_pinned(item.id)
+    local updated, pin_err = catalog.toggle_pinned(item.id)
     if not updated then
-        return false, pin_err or "failed to toggle session pin"
+        return false, pin_err
     end
 
     state.replace(updated)
-    return true, nil, updated
+
+    return finish("pin", updated, opts.get().hooks)
 end
 
----@return boolean, string?, Sess.Session[]
+function M.resolve(target)
+    local item, err, reason = resolve(target)
+
+    return item ~= nil, err, item, reason
+end
+
 function M.list()
-    local sessions, err = session.list()
-    if err then
-        return false, err, sessions
-    end
-    return true, nil, sessions
+    local items, err, diagnostics = catalog.list()
+
+    return err == nil, err, items, diagnostics
 end
 
----@param name string
----@return boolean, string?, Sess.Session?
-function M.get_by_name(name)
-    local item, err = session.get_by_name(name)
-    if err then
-        return false, err
+for name, query in pairs({
+    get_by_id = catalog.get,
+    get_by_name = catalog.get_by_name,
+    get_by_path = catalog.get_by_path,
+}) do
+    M[name] = function(value)
+        local item, err = query(value)
+
+        return err == nil, err, item
     end
-    return true, nil, item
 end
 
----@param cwd string
----@return boolean, string?, Sess.Session?
-function M.get_by_path(cwd)
-    local item, err = session.get_by_path(cwd)
-    if err then
-        return false, err
-    end
-    return true, nil, item
-end
+local mutations = {
+    create = true,
+    load = true,
+    save = true,
+    unload = true,
+    delete = true,
+    rename = true,
+    toggle_pin = true,
+}
 
----@param id Sess.SessionId
----@return boolean, string?, Sess.Session?
-function M.get_by_id(id)
-    local item, err = session.get(id)
-    if err then
-        return false, err
+for name, operation in pairs(M) do
+    M[name] = function(...)
+        if not opts.is_setup() then
+            return false, "sess.nvim is not initialized; call setup() first"
+        end
+
+        if mutations[name] and busy then
+            return false, "session transition already in progress"
+        end
+
+        if mutations[name] then
+            busy = true
+        end
+
+        local args, count = { ... }, select("#", ...)
+        local called, ok, err, item, diagnostics = xpcall(function()
+            return operation(unpack(args, 1, count))
+        end, debug.traceback)
+        if mutations[name] then
+            busy = false
+        end
+
+        if not called then
+            return false, tostring(ok)
+        end
+
+        return ok, err, item, diagnostics
     end
-    return true, nil, item
 end
 
 return M

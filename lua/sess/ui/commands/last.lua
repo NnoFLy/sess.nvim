@@ -7,14 +7,18 @@ return function(ctx)
     local previous = api.state.prev()
     if not previous then
         log.error("No previous session")
+
         return false
     end
 
-    local ok, err = api.session.load(previous)
+    local ok, err, _, diagnostics = api.session.load(previous)
     if not ok then
         log.error(err or "Can't load previous session")
+
         return false
     end
+
+    log.diagnostics(diagnostics)
 
     return true
 end

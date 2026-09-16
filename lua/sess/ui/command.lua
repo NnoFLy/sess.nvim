@@ -12,16 +12,19 @@ local specs = {
     load = { handler = commands.load, max_args = 1, completion = "session" },
     pin = { handler = commands.pin, max_args = 1, completion = "session" },
     rename = { handler = commands.rename, max_args = 2, completion = { kind = "session", arg = 1 } },
-    save = { handler = commands.save, max_args = 1 },
+    save = { handler = commands.save, max_args = 0 },
     unload = { handler = commands.unload, max_args = 0 },
 }
 
 local function keys(t)
     local result = {}
+
     for key in pairs(t) do
         result[#result + 1] = key
     end
+
     table.sort(result)
+
     return result
 end
 
@@ -43,6 +46,7 @@ local function filter_by_pattern(list, pattern)
 
     local escaped = pattern:gsub("([%^%$%(%)%%%.%+%-%[%]])", "%%%1")
     escaped = escaped:gsub("%*", ".*"):gsub("%?", ".")
+
     local lua_pattern = "^" .. escaped .. "$"
 
     return vim.tbl_filter(function(item)
@@ -55,21 +59,31 @@ local function session_names()
         return {}
     end
 
-    local ok, _, sessions = api.session.list()
+    local ok, err, sessions, diagnostics = api.session.list()
     if not ok then
+        log.error(err)
+
         return {}
     end
 
+    for _, diagnostic in ipairs(diagnostics or {}) do
+        log.warn(diagnostic)
+    end
+
     local names = {}
+
     for _, item in ipairs(sessions or {}) do
         names[#names + 1] = item.metadata.name
     end
+
     table.sort(names)
+
     return names
 end
 
 local function path_dirs(arg_lead)
     local ok, matches = pcall(vim.fn.getcompletion, arg_lead or "", "dir")
+
     return ok and type(matches) == "table" and matches or {}
 end
 
@@ -93,16 +107,20 @@ local function complete(arg_lead, cmdline, cursorpos)
         return {}
     end
 
-    local completion_kind = type(spec.completion) == "table" and spec.completion.kind or spec.completion
+    local completion_kind = type(spec.completion) == "table" and spec.completion.kind
+        or spec.completion
     local completion_arg = type(spec.completion) == "table" and spec.completion.arg or 1
     if completion_kind == "session" then
         local completed_args = {}
+
         for argument in rest:gmatch("%S+") do
             completed_args[#completed_args + 1] = argument
         end
+
         if #completed_args < completion_arg then
             return filter_by_pattern(session_names(), rest)
         end
+
         return {}
     end
 
@@ -139,27 +157,33 @@ function M.execute(args)
     local command = args.fargs[1]
     if not command or command == "" then
         log.error("Missing subcommand; use :Sess <Tab> to see available commands")
+
         return false
     end
 
     local spec = specs[command]
     if not spec then
         log.error("Unknown subcommand: " .. command)
+
         return false
     end
 
     local command_args = vim.list_slice(args.fargs, 2)
     if #command_args > spec.max_args then
-        log.error(("Too many arguments for %s: expected at most %d argument%s"):format(
-            command,
-            spec.max_args,
-            spec.max_args == 1 and "" or "s"
-        ))
+        log.error(
+            ("Too many arguments for %s: expected at most %d argument%s"):format(
+                command,
+                spec.max_args,
+                spec.max_args == 1 and "" or "s"
+            )
+        )
+
         return false
     end
 
     if not api.opts.is_setup() then
-        log.error("sess.nvim is not configured; call require(\"sess\").setup() first")
+        log.error('sess.nvim is not configured; call require("sess").setup() first')
+
         return false
     end
 

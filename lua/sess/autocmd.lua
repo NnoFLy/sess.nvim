@@ -4,7 +4,7 @@ local GROUP = "SessNvim"
 
 local autocmds = {
     ---@param group integer
-    smart_auto_load = function (group)
+    smart_auto_load = function(group)
         vim.api.nvim_create_autocmd("VimEnter", {
             group = group,
             callback = function()
@@ -15,6 +15,7 @@ local autocmds = {
 
                     local api = require("sess.api")
                     local log = require("sess.log")
+
                     local cwd = vim.fs.normalize(vim.fn.getcwd())
                     local found, lookup_err, item = api.session.get_by_path(cwd)
                     if not found then
@@ -22,15 +23,17 @@ local autocmds = {
                         return
                     end
 
-                    local ok, err
+                    local ok, err, _, diagnostics
                     if item then
-                        ok, err = api.session.load(item)
+                        ok, err, _, diagnostics = api.session.load(item)
                     else
-                        ok, err = api.session.create(cwd)
+                        ok, err, _, diagnostics = api.session.create(cwd)
                     end
 
                     if not ok then
                         log.error(err or "Failed to initialize session for current directory")
+                    else
+                        log.diagnostics(diagnostics)
                     end
                 end)
             end,
@@ -39,7 +42,7 @@ local autocmds = {
 
     ---@param group integer
     ---@param opts Sess.Opts
-    auto_save = function (group, opts)
+    auto_save = function(group, opts)
         vim.api.nvim_create_autocmd("VimLeavePre", {
             group = group,
             callback = function()
@@ -53,9 +56,12 @@ local autocmds = {
                     return
                 end
 
-                local ok, err = require("sess.api").session.save()
+                local ok, err, _, diagnostics = require("sess.api").session.save()
+                local log = require("sess.log")
                 if not ok then
-                    require("sess.log").error(err or "Failed to auto save session")
+                    log.error(err or "Failed to auto save session")
+                else
+                    log.diagnostics(diagnostics)
                 end
             end,
         })

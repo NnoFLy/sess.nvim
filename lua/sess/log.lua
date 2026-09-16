@@ -42,4 +42,10 @@ function M.error(msg)
     notify(msg, "error")
 end
 
+function M.diagnostics(diagnostics)
+    for _, message in ipairs(diagnostics or {}) do
+        M.warn(message)
+    end
+end
+
 return M

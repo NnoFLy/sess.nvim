@@ -1,4 +1,4 @@
-local session = require("sess.session")
+local session = require("sess.api.session")
 local state = require("sess.api.state")
 local opts = require("sess.api.opts")
 
@@ -42,11 +42,13 @@ local function get_user_paths(path)
     local home = os.getenv("HOME") or "~"
     local dirs = {}
     local patterns = vim.fn.glob(path:gsub("^~", home), false, true)
+
     for _, dir in ipairs(patterns) do
         if vim.fn.isdirectory(dir) == 1 then
             table.insert(dirs, vim.fs.normalize(dir))
         end
     end
+
     return dirs
 end
 
@@ -58,10 +60,15 @@ end
 
 ---@return (Sess.Session|Sess.DirectoryItem)[]
 function M.get_items()
-    local all_sessions = session.list()
+    local ok, err, all_sessions, diagnostics = session.list()
+    if not ok then
+        return {}, err, diagnostics or {}
+    end
+
     local current_session = state.current()
 
     local active_ids = {}
+
     for _, s in ipairs(state.active()) do
         active_ids[s.id] = true
     end
@@ -76,7 +83,11 @@ function M.get_items()
     end
 
     for _, s in ipairs(all_sessions) do
-        if not current_session or vim.fs.normalize(current_session.metadata.cwd) ~= vim.fs.normalize(s.metadata.cwd) then
+        if
+            not current_session
+            or vim.fs.normalize(current_session.metadata.cwd)
+                ~= vim.fs.normalize(s.metadata.cwd)
+        then
             table.insert(items, s)
             table.insert(paths, s.metadata.cwd)
         end
@@ -84,9 +95,11 @@ function M.get_items()
 
     local configured = opts.get()
     local user_paths = type(configured.paths) == "table" and configured.paths or {}
+
     for _, pattern in ipairs(user_paths) do
         for _, dir in ipairs(get_user_paths(pattern)) do
             local exists = false
+
             for _, path in ipairs(paths) do
                 if vim.fs.normalize(path) == dir then
                     exists = true
@@ -101,6 +114,7 @@ function M.get_items()
                     last_used_at = 0,
                     pinned = false,
                 })
+
                 table.insert(paths, dir)
             end
         end
@@ -112,6 +126,7 @@ function M.get_items()
         if a_is_session and b_is_session then
             return compare_sessions(a, b, active_ids)
         end
+
         if a_is_session ~= b_is_session then
             return a_is_session
         end
@@ -126,6 +141,7 @@ function M.get_items()
 
         local apath = a_is_session and a.metadata.cwd or a.path
         local bpath = b_is_session and b.metadata.cwd or b.path
+
         return apath < bpath
     end)
 
@@ -136,10 +152,11 @@ function M.get_items()
                 break
             end
         end
+
         table.insert(items, 1, current_session)
     end
 
-    return items
+    return items, nil, diagnostics
 end
 
 return M

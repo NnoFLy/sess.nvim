@@ -1,0 +1,31 @@
+fixture.setup()
+
+local api = require("sess.api")
+
+local ok, err, a = api.session.create(fixture.directory("a"), { name = "a" })
+assert(ok, err)
+assert(api.session.save())
+
+local b
+ok, err, b = api.session.create(fixture.directory("b"), { name = "b" })
+assert(ok, err)
+fixture.equal(b.id, api.state.current().id)
+fixture.equal(a.id, api.state.prev().id)
+fixture.equal(2, #api.state.active())
+assert(api.session.load(a))
+fixture.equal(a.id, api.state.current().id)
+fixture.equal(b.id, api.state.prev().id)
+assert(api.session.toggle_pin(a))
+assert(api.session.get_by_id(a.id))
+assert(api.session.rename(a, "new-a"))
+assert(api.session.unload())
+fixture.equal(nil, api.state.current())
+fixture.equal(a.id, api.state.prev().id)
+fixture.equal(1, #api.state.active())
+assert(api.session.delete(a))
+fixture.equal(nil, api.state.prev())
+
+local listed, list_err, sessions = api.session.list()
+assert(listed, list_err)
+fixture.equal(1, #sessions)
+fixture.equal(b.id, sessions[1].id)

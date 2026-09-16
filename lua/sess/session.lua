@@ -15,6 +15,7 @@ local function normalize_cwd(cwd)
     if type(cwd) ~= "string" or vim.trim(cwd) == "" then
         return nil
     end
+
     return vim.fs.normalize(vim.fn.fnamemodify(cwd, ":p"))
 end
 
@@ -25,6 +26,7 @@ local function default_name(cwd)
     end
 
     local name = vim.fn.fnamemodify(cwd, ":t")
+
     return name ~= "" and name or "session"
 end
 
@@ -34,6 +36,7 @@ local function normalize_name(name)
     end
 
     name = vim.trim(name)
+
     return name ~= "" and name or nil
 end
 
@@ -49,15 +52,10 @@ local function read_session(id)
     }
 end
 
-local function unique_name(name)
+local function unique_name(name, sessions)
     local normalized = normalize_name(name) or "session"
     local lower = normalized:lower()
     local used = {}
-
-    local sessions, err = M.list()
-    if err then
-        return nil, err
-    end
 
     for _, existing in ipairs(sessions) do
         used[existing.metadata.name:lower()] = true
@@ -68,6 +66,7 @@ local function unique_name(name)
     end
 
     local suffix = 2
+
     while used[(normalized .. " (" .. suffix .. ")"):lower()] do
         suffix = suffix + 1
     end
@@ -111,6 +110,7 @@ function M.get_by_name(name)
     end
 
     local normalized = name:lower()
+
     for _, session in ipairs(sessions) do
         if session.metadata.name:lower() == normalized then
             return session
@@ -122,56 +122,63 @@ end
 
 ---@param opts Sess.CreateOpts?
 ---@return Sess.Session?, string?
-function M.create(opts)
+function M.prepare_create(opts)
     opts = opts or {}
+    if type(opts) ~= "table" then
+        return nil, "create options must be a table"
+    end
+
+    local sessions, scan_err, diagnostics = M.list()
+    if scan_err or #diagnostics > 0 then
+        return nil, scan_err or ("cannot verify uniqueness: " .. table.concat(diagnostics, "; "))
+    end
+
+    if opts.id ~= nil then
+        local valid, id_err = storage.validate_id(opts.id)
+        if not valid then
+            return nil, id_err
+        end
+
+        if storage.exists(opts.id) then
+            return nil, "session already exists: " .. opts.id
+        end
+    end
 
     local cwd = normalize_cwd(opts.cwd or current_cwd())
     if not cwd then
         return nil, "working directory is required"
     end
+
     if vim.fn.isdirectory(cwd) == 0 then
         return nil, "directory does not exist: " .. cwd
     end
 
-    local existing, err = M.get_by_path(cwd)
-    if err then
-        return nil, err
-    end
-    if existing then
-        return nil, "session already exists for directory: " .. cwd
+    for _, existing in ipairs(sessions) do
+        if vim.fs.normalize(existing.metadata.cwd) == cwd then
+            return nil, "session already exists for directory: " .. cwd
+        end
     end
 
-    local explicit_name = opts.name ~= nil
     local name
-    if explicit_name then
+    if opts.name ~= nil then
         name = normalize_name(opts.name)
         if not name then
             return nil, "session name cannot be empty"
         end
-    else
-        name, err = unique_name(default_name(cwd))
-        if not name then
-            return nil, err
-        end
-    end
 
-    if explicit_name then
-        local by_name, name_err = M.get_by_name(name)
-        if name_err then
-            return nil, name_err
+        for _, existing in ipairs(sessions) do
+            if existing.metadata.name:lower() == name:lower() then
+                return nil, "session name already exists: " .. name
+            end
         end
-        if by_name then
-            return nil, "session name already exists: " .. name
-        end
+    else
+        name = unique_name(default_name(cwd), sessions)
     end
 
     local id = opts.id
     if id == nil then
-        id = vim.fn.sha256(
-            cwd .. "\0" .. tostring(now()) .. "\0" .. tostring(vim.uv.hrtime())
-        ):sub(1, 16)
-    elseif type(id) ~= "string" or vim.trim(id) == "" then
-        return nil, "session id cannot be empty"
+        local seed = cwd .. "\0" .. tostring(now()) .. "\0" .. tostring(vim.uv.hrtime())
+        id = vim.fn.sha256(seed):sub(1, 16)
     end
 
     local metadata = {
@@ -183,15 +190,21 @@ function M.create(opts)
         pinned = false,
     }
 
-    local ok, create_err = storage.create_with_metadata(id, metadata)
+    return { id = id, metadata = metadata }
+end
+
+function M.create(opts)
+    local item, err = M.prepare_create(opts)
+    if not item then
+        return nil, err
+    end
+
+    local ok, create_err = storage.create_with_metadata(item.id, item.metadata)
     if not ok then
         return nil, create_err
     end
 
-    return {
-        id = id,
-        metadata = metadata,
-    }
+    return item
 end
 
 ---@param id Sess.SessionId
@@ -200,24 +213,40 @@ function M.get(id)
     if type(id) ~= "string" or vim.trim(id) == "" then
         return nil, "session id is required"
     end
+
+    local valid, err = storage.validate_id(id)
+    if not valid then
+        return nil, err, "invalid-target"
+    end
+
+    local exists, exists_err = storage.exists(id)
+    if exists_err then
+        return nil, exists_err, "storage"
+    end
+
+    if not exists then
+        return nil, nil, "not-found"
+    end
+
     return read_session(id)
 end
 
----@return Sess.Session[], string?
+---@return Sess.Session[], string?, string[]
 function M.list()
     local ids, err = storage.list()
     if err then
-        return {}, err
+        return {}, err, {}
     end
 
     local sessions = {}
-    local first_error
+    local diagnostics = {}
+
     for _, id in ipairs(ids) do
         local item, item_err = read_session(id)
         if item then
             table.insert(sessions, item)
-        elseif not first_error then
-            first_error = "failed to load session " .. id .. ": " .. tostring(item_err)
+        else
+            table.insert(diagnostics, "failed to load session " .. id .. ": " .. tostring(item_err))
         end
     end
 
@@ -227,16 +256,22 @@ function M.list()
         if an ~= bn then
             return an < bn
         end
+
         return a.id < b.id
     end)
 
-    return sessions, first_error
+    return sessions, nil, diagnostics
 end
 
 ---@param id Sess.SessionId
 ---@param name string
 ---@return Sess.Session?, string?
 function M.rename(id, name)
+    local sessions, scan_err, diagnostics = M.list()
+    if scan_err or #diagnostics > 0 then
+        return nil, scan_err or ("cannot verify uniqueness: " .. table.concat(diagnostics, "; "))
+    end
+
     name = normalize_name(name)
     if not name then
         return nil, "session name cannot be empty"
@@ -247,15 +282,14 @@ function M.rename(id, name)
         return nil, err
     end
 
-    local existing, name_err = M.get_by_name(name)
-    if name_err then
-        return nil, name_err
-    end
-    if existing and existing.id ~= id then
-        return nil, "session name already exists: " .. name
+    for _, existing in ipairs(sessions) do
+        if existing.metadata.name:lower() == name:lower() and existing.id ~= id then
+            return nil, "session name already exists: " .. name
+        end
     end
 
     item.metadata.name = name
+
     local ok, save_err = storage.write_metadata(id, item.metadata)
     if not ok then
         return nil, save_err
@@ -274,6 +308,7 @@ function M.set_pinned(id, pinned)
     end
 
     item.metadata.pinned = pinned
+
     local ok, save_err = storage.write_metadata(id, item.metadata)
     if not ok then
         return nil, save_err
@@ -302,6 +337,7 @@ function M.touch(id)
     end
 
     item.metadata.last_used_at = now()
+
     local ok, save_err = storage.write_metadata(id, item.metadata)
     if not ok then
         return nil, save_err
@@ -317,64 +353,78 @@ function M.delete(id, permanent)
     return storage.delete(id, permanent)
 end
 
----@param id Sess.SessionId
----@return boolean, string?
-function M.save(id)
-    local item, err = read_session(id)
-    if not item then
-        return false, err
+-- Resolve identity without editor side effects. Never trust caller metadata.
+function M.resolve(target)
+    if type(target) == "table" then
+        local valid, err = storage.validate_id(target.id)
+        if not valid or type(target.metadata) ~= "table" then
+            return nil, err or "session target must include metadata", "invalid-target"
+        end
+
+        local item, get_err = M.get(target.id)
+
+        return item,
+            get_err or (not item and ("session not found: " .. target.id) or nil),
+            get_err and "storage" or (not item and "not-found" or nil)
     end
 
-    local ok, save_err = storage.update(id)
-    if not ok then
-        return false, save_err
+    if type(target) ~= "string" or vim.trim(target) == "" then
+        return nil, "invalid session target", "invalid-target"
     end
 
-    local touched, touch_err = M.touch(id)
-    if not touched then
-        return false, touch_err
+    target = vim.trim(target)
+
+    local items, err, diagnostics = M.list()
+    if err then
+        return nil, err, "storage"
     end
 
-    return true
-end
+    if storage.validate_id(target) then
+        local item, get_err = M.get(target)
+        if item then
+            return item
+        end
 
----@param id Sess.SessionId
----@return boolean, string?
-function M.load_session(id)
-    local session_path, err = storage.get_session_path(id)
-    if not session_path then
-        return false, err
+        if get_err then
+            return nil, get_err, "storage"
+        end
     end
 
-    if not vim.uv.fs_stat(session_path) then
-        return false, "session file does not exist: " .. session_path
+    for _, item in ipairs(items) do
+        if item.metadata.name:lower() == target:lower() then
+            return item
+        end
     end
 
-    local ok, source_err = pcall(vim.cmd, { cmd = "source", args = { session_path } })
-    if not ok then
-        return false, tostring(source_err)
+    local cwd = normalize_cwd(target)
+
+    for _, item in ipairs(items) do
+        if vim.fs.normalize(item.metadata.cwd) == cwd then
+            return item
+        end
     end
 
-    -- The session is already loaded successfully; failure to update metadata
-    -- must not turn a successful load into a reported load failure.
-    M.touch(id)
-    return true
+    if #diagnostics > 0 then
+        return nil,
+            "cannot resolve target in damaged store: " .. table.concat(diagnostics, "; "),
+            "storage"
+    end
+
+    return nil, "session not found: " .. target, "not-found"
 end
 
 ---@return Sess.Session[], string?
 function M.pinned()
-    local sessions, err = M.list()
+    local sessions, err, diagnostics = M.list()
     local result = {}
+
     for _, item in ipairs(sessions) do
         if item.metadata.pinned then
             table.insert(result, item)
         end
     end
-    return result, err
-end
 
-M.find_by_name = M.get_by_name
-M.find_by_cwd = M.get_by_path
-M.get_all = M.list
+    return result, err, diagnostics
+end
 
 return M

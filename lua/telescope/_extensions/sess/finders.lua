@@ -16,6 +16,7 @@
 
 local finders = require("telescope.finders")
 local api = require("sess.api")
+
 local items = api.items
 local state = api.state
 
@@ -27,8 +28,18 @@ end
 
 ---@return table
 function M.generate_new_finder()
+    local results, err, diagnostics = items.get_items()
+    local log = require("sess.log")
+    if err then
+        log.error(err)
+    end
+
+    for _, diagnostic in ipairs(diagnostics or {}) do
+        log.warn(diagnostic)
+    end
+
     return finders.new_table({
-        results = items.get_items(),
+        results = results,
 
         ---@param entry Sess.Session | Sess.DirectoryItem
         ---@return Sess.TelescopeFinderReturn
@@ -45,8 +56,8 @@ function M.generate_new_finder()
                         cwd = entry.metadata.cwd,
                         pinned = entry.metadata.pinned,
                         last_used_at = entry.metadata.last_used_at,
-                        created_at = entry.metadata.created_at
-                    }
+                        created_at = entry.metadata.created_at,
+                    },
                 }
             else
                 session = {
@@ -56,8 +67,8 @@ function M.generate_new_finder()
                         cwd = entry.path,
                         pinned = entry.pinned,
                         last_used_at = 0,
-                        created_at = 0
-                    }
+                        created_at = 0,
+                    },
                 }
             end
 

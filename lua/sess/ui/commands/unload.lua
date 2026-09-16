@@ -7,15 +7,19 @@ return function(ctx)
     local current = api.state.current()
     if current == nil then
         log.info("Session is not loaded")
+
         return false
     end
 
-    local ok, err = api.session.unload()
+    local ok, err, _, diagnostics = api.session.unload()
     if not ok then
         log.error(err or "Failed to unload session")
+
         return false
     end
 
+    log.diagnostics(diagnostics)
     log.info("Session " .. current.metadata.name .. " unloaded")
+
     return true
 end
