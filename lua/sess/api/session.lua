@@ -260,7 +260,7 @@ function M.create(cwd, options)
     return finish("create", created, callbacks, diagnostics)
 end
 
-function M.load(target, options)
+local function load_session(target, options)
     local callbacks, hook_err = hooks(options)
     if not callbacks then
         return false, hook_err
@@ -334,6 +334,57 @@ function M.load(target, options)
     state.add_active_session(item)
 
     return finish("load", item, callbacks, diagnostics)
+end
+
+local function last(options)
+    local previous = state.get_prev_session()
+    if previous then
+        return load_session(previous, options)
+    end
+
+    local sessions, err, catalog_diagnostics = catalog.list()
+    if err then
+        return false, err
+    end
+
+    local current_session = state.get_current_session()
+    local target
+
+    local function is_preferred(candidate, existing)
+        if candidate.metadata.last_used_at ~= existing.metadata.last_used_at then
+            return candidate.metadata.last_used_at > existing.metadata.last_used_at
+        end
+
+        local candidate_name = candidate.metadata.name:lower()
+        local existing_name = existing.metadata.name:lower()
+        if candidate_name ~= existing_name then
+            return candidate_name < existing_name
+        end
+
+        return candidate.id < existing.id
+    end
+
+    for _, item in ipairs(sessions) do
+        if not current_session or item.id ~= current_session.id then
+            if not target or is_preferred(item, target) then
+                target = item
+            end
+        end
+    end
+
+    if not target then
+        return false, "no previous session"
+    end
+
+    local ok, load_err, loaded, load_diagnostics = load_session(target, options)
+    if not ok then
+        return false, load_err
+    end
+
+    local all_diagnostics = vim.deepcopy(catalog_diagnostics or {})
+    vim.list_extend(all_diagnostics, load_diagnostics or {})
+
+    return true, nil, loaded, all_diagnostics
 end
 
 function M.save(...)
@@ -636,9 +687,13 @@ for name, query in pairs({
     end
 end
 
+M.load = load_session
+M.last = last
+
 local mutations = {
     create = true,
     load = true,
+    last = true,
     save = true,
     unload = true,
     delete = true,

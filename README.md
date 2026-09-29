@@ -52,7 +52,7 @@ require("sess").setup({
 | `:Sess create [path]` | Create a session, or load the existing one for that path |
 | `:Sess load [name/id/path]` | Load or create a session for the target; defaults to current cwd |
 | `:Sess save` | Save the current session |
-| `:Sess last` | Return to the previous session |
+| `:Sess last` | Return to the previous session, or open the most recently used session after a fresh start |
 | `:Sess unload [name/id/path]` | Close a session's buffers and terminal jobs; defaults to current |
 | `:Sess pin [target]` | Toggle pin; defaults to current session |
 | `:Sess rename [target] [name]` | Rename; prompts for a missing name |
@@ -84,6 +84,7 @@ elseif #diagnostics > 0 then
 end
 
 api.session.save() -- current session only
+api.session.last() -- previous session, or most recently used after a fresh start
 api.session.unload("my-project") -- omit target for current; refuses unconfirmed edits/jobs
 local current = api.state.current()
 local previous = api.state.prev()

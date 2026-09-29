@@ -43,7 +43,9 @@ COMMANDS                                                     *sess-commands*
     Snapshot only the current session. No arguments; no implicit creation.
 
 :Sess last                                                   *:Sess-last*
-    Load the previous session.
+    Load the previous session. When no in-memory previous session exists,
+    such as after a fresh start, load the most recently used session other
+    than the current session.
 
 :Sess unload [target]                                        *:Sess-unload*
     Unload by id/name/path; default current. Close exclusive buffers and their
@@ -150,6 +152,12 @@ api.session.load(target?, opts?)                *sess-api.session.load*
     Default: lookup current cwd. opts: { hooks? }. Validate target, run pre-hook,
     revalidate, save outgoing session, restore destination, publish state.
     Same-session load succeeds without save/hooks/events; result four is {}.
+
+api.session.last(opts?)                         *sess-api.session.last*
+    Load the in-memory previous session. If none exists, load the most recently
+    used persisted session other than the current session. opts: { hooks? }.
+    The operation otherwise follows load(), including validation, hooks, saves,
+    events and diagnostics.
 
 api.session.save()                              *sess-api.session.save*
     Snapshot only the current session. Arguments, including nil, are rejected.

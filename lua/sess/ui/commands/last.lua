@@ -4,15 +4,12 @@ local log = require("sess.log")
 ---@param ctx Sess.CommandContext
 ---@return boolean
 return function(ctx)
-    local previous = api.state.prev()
-    if not previous then
-        log.error("No previous session")
-
-        return false
-    end
-
-    local ok, err, _, diagnostics = api.session.load(previous)
+    local ok, err, _, diagnostics = api.session.last()
     if not ok then
+        if err == "no previous session" then
+            err = "No previous session"
+        end
+
         log.error(err or "Can't load previous session")
 
         return false
