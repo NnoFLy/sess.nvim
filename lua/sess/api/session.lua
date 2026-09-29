@@ -410,13 +410,29 @@ function M.unload(target, options)
         return false, save_err
     end
 
-    -- Only the current session can be snapshotted from the editor. Hidden
-    -- sessions retain the snapshot written when switching away from them.
     local diagnostics = {}
     if is_current then
         saved, save_err, item, diagnostics = outgoing(callbacks)
         if not saved then
             return false, save_err
+        end
+    elseif plan.decision == "save" then
+        -- Saving can rename an unnamed buffer. Refresh the hidden session's
+        -- snapshot while its captured view still describes the live buffers.
+        local view = state.get_view(item.id)
+        if view then
+            local original = editor.capture()
+            local refreshed, refresh_err = change(function()
+                editor.restore(view)
+                local ok, err = editor.snapshot(item)
+                if not ok then
+                    error(err)
+                end
+                editor.restore(original)
+            end)
+            if not refreshed then
+                return false, "failed to refresh unloaded session: " .. tostring(refresh_err)
+            end
         end
     end
 

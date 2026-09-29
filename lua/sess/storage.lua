@@ -81,6 +81,19 @@ local function dir_exists(path)
     return stat ~= nil and stat.type == "directory"
 end
 
+local function ensure_private_dir(path, label)
+    if vim.fn.mkdir(path, "p") ~= 1 and not dir_exists(path) then
+        return false, "failed to create " .. label .. ": " .. path
+    end
+
+    local ok, err = vim.uv.fs_chmod(path, 448) -- 0700
+    if not ok then
+        return false, "failed to restrict " .. label .. ": " .. tostring(err)
+    end
+
+    return true
+end
+
 ---@param path string
 ---@return string?, string?
 local function read_file(path)
@@ -226,18 +239,19 @@ function M.init(path)
 
     root_path = vim.fs.normalize(vim.fn.fnamemodify(path, ":p"))
 
-    vim.fn.mkdir(root_path, "p")
-
-    if not dir_exists(root_path) then
-        return false, "storage path is not a directory: " .. root_path
+    local ok, err = ensure_private_dir(root_path, "storage directory")
+    if not ok then
+        return false, err
     end
 
-    if vim.fn.mkdir(sessions_path(), "p") ~= 1 and not dir_exists(sessions_path()) then
-        return false, "failed to create sessions directory: " .. sessions_path()
+    ok, err = ensure_private_dir(sessions_path(), "sessions directory")
+    if not ok then
+        return false, err
     end
 
-    if vim.fn.mkdir(trash_path(), "p") ~= 1 and not dir_exists(trash_path()) then
-        return false, "failed to create trash directory: " .. trash_path()
+    ok, err = ensure_private_dir(trash_path(), "trash directory")
+    if not ok then
+        return false, err
     end
 
     return true
@@ -425,6 +439,18 @@ function M.read_metadata(id)
 
     if data.version ~= consts.get_version() then
         return nil, "unsupported session metadata version: " .. tostring(data.version)
+    end
+
+    if vim.trim(data.name) == "" then
+        return nil, "invalid session metadata: field name cannot be empty"
+    end
+
+    if vim.trim(data.cwd) == "" or vim.fs.normalize(vim.fn.fnamemodify(data.cwd, ":p")) == "" then
+        return nil, "invalid session metadata: field cwd must be a non-empty path"
+    end
+
+    if data.created_at < 0 or data.last_used_at < 0 then
+        return nil, "invalid session metadata: timestamps cannot be negative"
     end
 
     return data --[[@as Sess.SessionMetadata]]
