@@ -8,7 +8,7 @@
 ---@class Sess.SessionMetadata
 ---@field version Sess.Version
 ---@field name string
----@field cwd Sess.Cwd Project identity; snapshots retain the actual editor cwd scopes.
+---@field cwd Sess.Cwd Absolute canonical project identity; snapshots retain the actual editor cwd scopes.
 ---@field created_at Sess.Timestamp
 ---@field last_used_at Sess.Timestamp
 ---@field pinned boolean

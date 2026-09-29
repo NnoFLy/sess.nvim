@@ -1,6 +1,7 @@
 local M = {}
 
 local consts = require("sess.consts")
+local path_utils = require("sess.path")
 
 ---@class Sess.SessionFiles
 ---@field metadata string
@@ -126,10 +127,22 @@ end
 ---@param content string
 ---@return boolean, string?
 local function write_file_atomic(path, content)
-    local tmp_path = path .. ".tmp-" .. tostring(vim.uv.hrtime())
+    local fd, tmp_path = vim.uv.fs_mkstemp(path .. ".tmp-XXXXXX")
+    if not fd then
+        return false, tmp_path
+    end
+
+    local closed, close_err = vim.uv.fs_close(fd)
+    if not closed then
+        vim.uv.fs_unlink(tmp_path)
+
+        return false, close_err
+    end
 
     local file, err = io.open(tmp_path, "w")
     if not file then
+        vim.uv.fs_unlink(tmp_path)
+
         return false, err
     end
 
@@ -186,6 +199,10 @@ end
 ---@param data table
 ---@return Sess.SessionMetadata?, string?
 local function validate_metadata(data)
+    if type(data) ~= "table" then
+        return nil, "invalid session metadata: expected an object"
+    end
+
     local fields = {
         version = "number",
         name = "string",
@@ -210,12 +227,25 @@ local function validate_metadata(data)
         return nil, "invalid session metadata: field name cannot be empty"
     end
 
-    if vim.trim(data.cwd) == "" or vim.fs.normalize(vim.fn.fnamemodify(data.cwd, ":p")) == "" then
+    if vim.trim(data.cwd) == "" then
         return nil, "invalid session metadata: field cwd must be a non-empty path"
     end
 
-    if data.created_at < 0 or data.last_used_at < 0 then
-        return nil, "invalid session metadata: timestamps cannot be negative"
+    local canonical_cwd = path_utils.canonical_absolute(data.cwd)
+    if not canonical_cwd or canonical_cwd ~= data.cwd then
+        return nil, "invalid session metadata: field cwd must be an absolute canonical path"
+    end
+
+    local timestamps = { data.created_at, data.last_used_at }
+    for _, timestamp in ipairs(timestamps) do
+        if
+            timestamp ~= timestamp
+            or timestamp < 0
+            or timestamp >= math.huge
+            or timestamp ~= math.floor(timestamp)
+        then
+            return nil, "invalid session metadata: timestamps must be non-negative integers"
+        end
     end
 
     return data --[[@as Sess.SessionMetadata]]
@@ -609,9 +639,25 @@ function M.write_metadata(id, metadata)
         return false, "session does not exist: " .. id
     end
 
-    metadata.version = metadata.version or consts.get_version()
+    if type(metadata) ~= "table" then
+        return false, "session metadata must be a table"
+    end
 
-    return write_json(session_paths(id).metadata, metadata)
+    local copied, copied_metadata = pcall(vim.deepcopy, metadata)
+    if not copied then
+        return false, "failed to copy session metadata: " .. tostring(copied_metadata)
+    end
+
+    if copied_metadata.version == nil then
+        copied_metadata.version = consts.get_version()
+    end
+
+    local validated_metadata, validation_err = validate_metadata(copied_metadata)
+    if not validated_metadata then
+        return false, validation_err
+    end
+
+    return write_json(session_paths(id).metadata, validated_metadata)
 end
 
 ---@param id Sess.SessionId

@@ -18,6 +18,7 @@ local finders = require("telescope.finders")
 local api = require("sess.api")
 local log = require("sess.log")
 local path = require("sess.ui.path")
+local path_utils = require("sess.path")
 
 local items = api.items
 local state = api.state
@@ -68,12 +69,13 @@ function M.generate_directory_finder(prompt)
 
     local by_path = {}
     for _, session in ipairs(sessions) do
-        by_path[vim.fs.normalize(session.metadata.cwd)] = session
+        by_path[path_utils.identity(session.metadata.cwd) or session.metadata.cwd] = session
     end
 
     local results = {}
     for _, candidate in ipairs(candidates) do
-        local session = by_path[candidate.path]
+        local candidate_path = path_utils.identity(candidate.path) or candidate.path
+        local session = by_path[candidate_path]
         local metadata = session and session.metadata or {
             name = candidate.name,
             cwd = candidate.path,

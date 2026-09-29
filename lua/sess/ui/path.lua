@@ -1,3 +1,5 @@
+local path_utils = require("sess.path")
+
 local M = {}
 
 local function unescape(value)
@@ -20,13 +22,21 @@ local function expand(value)
 end
 
 local function absolute(value)
-    return vim.fs.normalize(vim.fn.fnamemodify(expand(value), ":p"))
+    return path_utils.identity(expand(value))
 end
 
 ---@param value string
 ---@return boolean
 function M.is_path(value)
+    if type(value) ~= "string" then
+        return false
+    end
+
     value = unescape(value)
+    if value:find("\0", 1, true) then
+        return false
+    end
+
     return value:match("^~/") ~= nil
         or value:match("^/") ~= nil
         or value:match("^%./") ~= nil

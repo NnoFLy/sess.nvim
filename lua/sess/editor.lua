@@ -186,6 +186,7 @@ function M.restore(view, rollback)
     command("cd", view.cwd)
 
     local selected
+    local diagnostics = {}
 
     for index, tab in ipairs(view.tabs) do
         if index > 1 then
@@ -203,8 +204,29 @@ function M.restore(view, rollback)
         layout(tab.layout, tab.windows, vim.api.nvim_get_current_win(), mapping)
 
         for old, win in pairs(mapping) do
-            pcall(vim.api.nvim_win_set_width, win, tab.windows[old].width)
-            pcall(vim.api.nvim_win_set_height, win, tab.windows[old].height)
+            local width_ok, width_err = pcall(
+                vim.api.nvim_win_set_width,
+                win,
+                tab.windows[old].width
+            )
+            if not width_ok then
+                table.insert(
+                    diagnostics,
+                    string.format("failed to restore window %s width: %s", old, tostring(width_err))
+                )
+            end
+
+            local height_ok, height_err = pcall(
+                vim.api.nvim_win_set_height,
+                win,
+                tab.windows[old].height
+            )
+            if not height_ok then
+                table.insert(
+                    diagnostics,
+                    string.format("failed to restore window %s height: %s", old, tostring(height_err))
+                )
+            end
         end
 
         for _, float in ipairs(tab.floats) do
@@ -246,6 +268,8 @@ function M.restore(view, rollback)
     end
 
     vim.v.this_session = view.this_session
+
+    return diagnostics
 end
 
 function M.validate(item)
@@ -268,13 +292,15 @@ end
 
 function M.load(item, view)
     if view then
-        M.restore(view)
-    else
-        -- An empty snapshot may not replace the current buffer. Start with a
-        -- normal buffer rather than leaving the internal parking buffer visible.
-        M.empty(item.metadata.cwd)
-        command("source", assert(storage.get_session_path(item.id)))
+        return M.restore(view)
     end
+
+    -- An empty snapshot may not replace the current buffer. Start with a
+    -- normal buffer rather than leaving the internal parking buffer visible.
+    M.empty(item.metadata.cwd)
+    command("source", assert(storage.get_session_path(item.id)))
+
+    return {}
 end
 
 function M.snapshot(item)

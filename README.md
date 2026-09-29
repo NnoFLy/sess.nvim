@@ -45,6 +45,9 @@ require("sess").setup({
 })
 ```
 
+sess.nvim owns the reserved `SessNvimInternal` autocmd group. Use a different
+augroup for user autocmds.
+
 ## Usage
 
 | Command | Behavior |
@@ -80,7 +83,7 @@ local ok, err, item, diagnostics = api.session.load("my-project")
 if not ok then
     -- Operation failed. The core does not prompt or notify.
 elseif #diagnostics > 0 then
-    -- Operation succeeded, but metadata updates or observers reported errors.
+    -- Operation succeeded, but restoration, metadata updates or observers reported errors.
 end
 
 api.session.save() -- current session only
@@ -97,6 +100,8 @@ api.session.restore("name-or-id-or-trash-key")
 Mutations return `(ok, err, session, diagnostics)`, with diagnostic strings on success. Loading the current session succeeds without saves, hooks or events. State getters return defensive copies.
 
 Listing returns `false` for store-wide failures; corrupt records are skipped with diagnostics, never repaired or deleted automatically. Create/rename refuse to claim uniqueness with damaged metadata. `api.items.get_items()` returns `(items, err, diagnostics)`; UI adapters report diagnostics.
+
+`api.session.get_by_name()` and `get_by_path()` return `(ok, err, session, diagnostics)`. A unique healthy match remains usable when unrelated records are corrupt, while duplicate names or project paths fail with an ambiguity error. Lookup diagnostics are always returned.
 
 See [`:help sess-api`](doc/sessionizer.txt) for its contract and failure behavior.
 
@@ -141,7 +146,7 @@ require("telescope").load_extension("sess")
 
 Enter loads/creates. Ctrl-d (insert) or `dd` (normal) deletes with confirmation. `:Sess restore` opens a deleted-session picker; Enter restores the selected record. Restore completion accepts names, ids and trash keys. Restore only moves persisted data back and never loads or changes editor state. Commands, Telescope and autocommands use the same lifecycle.
 
-`:Sess load` defaults to the current working directory. Path targets beginning with `~/`, `/`, `./`, or `../` load their session or create one. Invalid or missing directories are rejected. Creating a session opens the default file explorer in the project root.
+`:Sess load` defaults to the current working directory. Path targets beginning with `~/`, `/`, `./`, or `../` load their session or create one. Existing directories are resolved with `fs_realpath`, so symlinked paths share one session identity. Invalid or missing directories are rejected. Creating a session opens the default file explorer in the project root.
 
 In the Telescope session picker, a path prompt switches to immediate directory completion. `<Tab>` inserts the selected directory and a trailing slash while keeping the picker open. `<Enter>` loads or creates its session. Returning to a non-path prompt restores the normal session finder.
 

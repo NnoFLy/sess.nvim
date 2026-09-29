@@ -2,21 +2,22 @@ local M = {}
 
 local storage = require("sess.storage")
 local consts = require("sess.consts")
+local paths = require("sess.path")
 
 local function now()
     return os.time()
 end
 
-local function current_cwd()
-    return vim.fs.normalize(vim.fn.fnamemodify(vim.fn.getcwd(), ":p"))
+local function normalize_cwd(cwd)
+    return paths.identity(cwd)
 end
 
-local function normalize_cwd(cwd)
-    if type(cwd) ~= "string" or vim.trim(cwd) == "" then
-        return nil
-    end
+local function current_cwd()
+    return normalize_cwd(vim.fn.getcwd())
+end
 
-    return vim.fs.normalize(vim.fn.fnamemodify(cwd, ":p"))
+local function same_cwd(left, right)
+    return normalize_cwd(left) == normalize_cwd(right)
 end
 
 local function default_name(cwd)
@@ -74,50 +75,62 @@ local function unique_name(name, sessions)
     return normalized .. " (" .. suffix .. ")"
 end
 
+local function lookup(sessions, diagnostics, description, predicate)
+    local match
+
+    for _, session in ipairs(sessions) do
+        if predicate(session) then
+            if match then
+                return nil, "ambiguous session target: " .. description, diagnostics
+            end
+
+            match = session
+        end
+    end
+
+    return match, nil, diagnostics
+end
+
 ---@param cwd Sess.Cwd
----@return Sess.Session?, string?
+---@return Sess.Session?, string?, string[]
 function M.get_by_path(cwd)
     cwd = normalize_cwd(cwd)
     if not cwd then
-        return nil, "working directory is required"
+        return nil, "working directory is required", {}
     end
 
-    local sessions, err = M.list()
+    local sessions, err, diagnostics = M.list()
     if err then
-        return nil, err
+        return nil, err, diagnostics
     end
 
-    for _, session in ipairs(sessions) do
-        if vim.fs.normalize(session.metadata.cwd) == cwd then
-            return session
+    return lookup(
+        sessions,
+        diagnostics,
+        "working directory " .. cwd,
+        function(session)
+            return same_cwd(session.metadata.cwd, cwd)
         end
-    end
-
-    return nil
+    )
 end
 
 ---@param name string
----@return Sess.Session?, string?
+---@return Sess.Session?, string?, string[]
 function M.get_by_name(name)
     name = normalize_name(name)
     if not name then
-        return nil, "session name cannot be empty"
+        return nil, "session name cannot be empty", {}
     end
 
-    local sessions, err = M.list()
+    local sessions, err, diagnostics = M.list()
     if err then
-        return nil, err
+        return nil, err, diagnostics
     end
 
     local normalized = name:lower()
-
-    for _, session in ipairs(sessions) do
-        if session.metadata.name:lower() == normalized then
-            return session
-        end
-    end
-
-    return nil
+    return lookup(sessions, diagnostics, "name " .. name, function(session)
+        return session.metadata.name:lower() == normalized
+    end)
 end
 
 ---@param opts Sess.CreateOpts?
@@ -154,7 +167,7 @@ function M.prepare_create(opts)
     end
 
     for _, existing in ipairs(sessions) do
-        if vim.fs.normalize(existing.metadata.cwd) == cwd then
+        if same_cwd(existing.metadata.cwd, cwd) then
             return nil, "session already exists for directory: " .. cwd
         end
     end
@@ -242,11 +255,12 @@ function M.list()
     local diagnostics = {}
 
     for _, id in ipairs(ids) do
-        local item, item_err = read_session(id)
-        if item then
+        local called, item, item_err = pcall(read_session, id)
+        if called and item then
             table.insert(sessions, item)
         else
-            table.insert(diagnostics, "failed to load session " .. id .. ": " .. tostring(item_err))
+            local load_err = called and item_err or item
+            table.insert(diagnostics, "failed to load session " .. id .. ": " .. tostring(load_err))
         end
     end
 
@@ -406,12 +420,11 @@ function M.restore(key)
     end
 
     local name = entry.metadata.name:lower()
-    local cwd = vim.fs.normalize(entry.metadata.cwd)
     for _, existing in ipairs(sessions) do
         if existing.metadata.name:lower() == name then
             return nil, "session name already exists: " .. entry.metadata.name
         end
-        if vim.fs.normalize(existing.metadata.cwd) == cwd then
+        if same_cwd(existing.metadata.cwd, entry.metadata.cwd) then
             return nil, "session already exists for directory: " .. entry.metadata.cwd
         end
     end
@@ -460,27 +473,47 @@ function M.resolve(target)
         end
     end
 
-    for _, item in ipairs(items) do
-        if item.metadata.name:lower() == target:lower() then
-            return item
+    local name_match, name_err = lookup(
+        items,
+        diagnostics,
+        "name " .. target,
+        function(item)
+            return item.metadata.name:lower() == target:lower()
         end
+    )
+    if name_err then
+        return nil, name_err, "ambiguous", diagnostics
+    end
+    if name_match then
+        return name_match, nil, nil, diagnostics
     end
 
     local cwd = normalize_cwd(target)
-
-    for _, item in ipairs(items) do
-        if vim.fs.normalize(item.metadata.cwd) == cwd then
-            return item
+    if cwd then
+        local path_match, path_err = lookup(
+            items,
+            diagnostics,
+            "working directory " .. cwd,
+            function(item)
+                return same_cwd(item.metadata.cwd, cwd)
+            end
+        )
+        if path_err then
+            return nil, path_err, "ambiguous", diagnostics
+        end
+        if path_match then
+            return path_match, nil, nil, diagnostics
         end
     end
 
     if #diagnostics > 0 then
         return nil,
             "cannot resolve target in damaged store: " .. table.concat(diagnostics, "; "),
-            "storage"
+            "storage",
+            diagnostics
     end
 
-    return nil, "session not found: " .. target, "not-found"
+    return nil, "session not found: " .. target, "not-found", diagnostics
 end
 
 ---@return Sess.Session[], string?

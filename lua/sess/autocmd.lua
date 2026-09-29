@@ -1,6 +1,7 @@
 local M = {}
 
-local GROUP = "SessNvim"
+-- Reserved for sess.nvim; keep the internal suffix to avoid common user groups.
+local GROUP = "SessNvimInternal"
 
 local autocmds = {
     ---@param group integer

@@ -27,6 +27,9 @@ smart_auto_load loads/creates a session for cwd when Neovim starts without
 arguments. auto_save snapshots the current session on exit, unless the current
 filetype is excluded. Neither option writes modified files to disk.
 
+The reserved SessNvimInternal augroup is used for sess.nvim's managed
+autocommands. Use a different augroup for user autocommands.
+
 ==============================================================================
 COMMANDS                                                     *sess-commands*
 
@@ -126,9 +129,10 @@ Current unload snapshots the layout before closing it. Hidden-session unload
 keeps the last snapshot without switching the current editor. Saving a newly
 named hidden buffer writes its file, but does not add it to that old snapshot.
 
-All saves use actual editor cwd scopes, without temporary chdir. Metadata cwd
-remains the project's lookup identity. Live views preserve global, tab-local
-and window-local cwd. Disk snapshots follow Neovim's 'sessionoptions'.
+All saves use actual editor cwd scopes, without temporary chdir. Existing
+directories are resolved with fs_realpath for project lookup, so symlinks share
+one identity. Live views preserve global, tab-local and window-local cwd.
+Disk snapshots follow Neovim's 'sessionoptions'.
 
 ==============================================================================
 LUA API                                                          *sess-api*
@@ -138,7 +142,8 @@ The API is prompt-free and does not notify. UI adapters own prompts/logging. >
     local ok, err, item, diagnostics = api.session.load("project")
 <
 Mutation results: (ok, err, session, diagnostics). On success err is nil and
-diagnostics is a list of strings. A post-operation failure does not undo success.
+diagnostics is a list of strings. Restoration, metadata and observer failures are
+diagnostics. A post-operation failure does not undo success.
 Initialization and validation failures return false and an error, not exceptions.
 Targets may be an id, name, path, or a record with id and metadata. Caller
 metadata is never trusted as authoritative; records are reloaded from storage.
@@ -206,14 +211,18 @@ api.session.toggle_pin(target?)                 *sess-api.session.toggle_pin*
 
 api.session.resolve(target?)                    *sess-api.session.resolve*
     Read-only identity lookup; nil means current. Returns
-    (ok, err, session, reason). Failure reasons may distinguish invalid-target,
-    not-found and storage errors. No current session returns an error.
+    (ok, err, session, reason, diagnostics). Failure reasons may distinguish
+    invalid-target, not-found, ambiguous and storage errors. No current session
+    returns an error.
 
 Queries:                                         *sess-api.session.queries*
     api.session.get_by_id(id)
     api.session.get_by_name(name)
     api.session.get_by_path(cwd)
-    Return (ok, err, session). A healthy lookup with no match returns true,nil,nil.
+    Return (ok, err, session), with a fourth diagnostics result for name/path
+    lookups. A healthy lookup with no match returns true,nil,nil. Unrelated
+    corrupt records do not hide a unique healthy match, but duplicate names or
+    project paths return an ambiguity error. Lookup diagnostics are preserved.
 
     api.session.list() returns (ok, err, sessions, diagnostics). Store-wide
     failure returns false. Corrupt/version-incompatible records are skipped

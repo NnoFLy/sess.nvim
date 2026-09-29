@@ -31,6 +31,15 @@ fixture.equal(project, api.state.current().metadata.cwd)
 
 local _, _, sessions = api.session.list()
 fixture.equal(1, #sessions)
+
+local link = fixture.root .. "/project-link"
+local linked, link_err = vim.uv.fs_symlink(project, link)
+assert(linked, link_err)
+local loaded, load_err = api.session.load(link)
+assert(loaded, load_err)
+local _, _, linked_sessions = api.session.list()
+fixture.equal(1, #linked_sessions)
+
 vim.cmd("Sess load ./project\\ with\\ space")
 local _, _, repeated_sessions = api.session.list()
 fixture.equal(1, #repeated_sessions)

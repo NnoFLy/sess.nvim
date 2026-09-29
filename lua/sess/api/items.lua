@@ -1,8 +1,13 @@
 local session = require("sess.api.session")
 local state = require("sess.api.state")
 local opts = require("sess.api.opts")
+local path_utils = require("sess.path")
 
 local M = {}
+
+local function normalize_cwd(cwd)
+    return path_utils.identity(cwd)
+end
 
 ---@param a Sess.Session
 ---@param b Sess.Session
@@ -85,8 +90,7 @@ function M.get_items()
     for _, s in ipairs(all_sessions) do
         if
             not current_session
-            or vim.fs.normalize(current_session.metadata.cwd)
-                ~= vim.fs.normalize(s.metadata.cwd)
+            or normalize_cwd(current_session.metadata.cwd) ~= normalize_cwd(s.metadata.cwd)
         then
             table.insert(items, s)
             table.insert(paths, s.metadata.cwd)
@@ -101,7 +105,7 @@ function M.get_items()
             local exists = false
 
             for _, path in ipairs(paths) do
-                if vim.fs.normalize(path) == dir then
+                if normalize_cwd(path) == normalize_cwd(dir) then
                     exists = true
                     break
                 end

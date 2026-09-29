@@ -35,20 +35,29 @@ The setup function, Lua API, user commands, User events, and optional Telescope 
 
 The catalog owns session records and metadata operations such as discovery, lookup, creation, renaming, pinning, deletion, and restoration. It validates names, IDs, paths, uniqueness, and metadata before lifecycle code changes editor state.
 
-### Lifecycle coordinator
+### Lifecycle layers
 
-The lifecycle layer coordinates create, load, save, unload, delete, restore, and rename operations. It defines this ordering:
+The lifecycle API is a thin facade over focused modules under `lua/sess/lifecycle/`:
+
+- `target` resolves caller input through the catalog and never trusts caller metadata;
+- `observer` validates hooks, runs pre-transition hooks, and publishes post-operation hooks/events;
+- `transaction` owns the transition guard, exception boundary, and rollback of reversible editor changes;
+- `save` coordinates snapshots, usage metadata, outgoing saves, and save diagnostics;
+- `create`, `load`, `unload`, and `mutations` own operation-specific catalog/editor/runtime mutations.
+
+Operation modules follow this ordering:
 
 1. Validate and resolve the target.
 2. Run the pre-transition hook.
-3. Save outgoing state when needed.
-4. Change or capture editor state.
-5. Persist metadata or snapshots.
-6. Commit runtime state.
-7. Run post-operation hooks and emit events.
-8. Return errors and diagnostics separately.
+3. Revalidate after hooks and outgoing observers when needed.
+4. Save outgoing state when needed.
+5. Change or capture editor state.
+6. Persist metadata or snapshots.
+7. Commit runtime state.
+8. Run post-operation hooks and emit events.
+9. Return errors and diagnostics separately.
 
-It also owns busy-state protection and rollback of reversible editor changes when an operation fails.
+The guard remains held through post-operation observers. Rollback is limited to reversible editor changes and never claims to undo arbitrary sourced Vimscript or user callbacks.
 
 ### Runtime state
 
