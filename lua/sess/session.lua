@@ -353,6 +353,76 @@ function M.delete(id, permanent)
     return storage.delete(id, permanent)
 end
 
+---@return Sess.DeletedSession[], string?, string[]
+function M.list_deleted()
+    return storage.list_trash()
+end
+
+---@param target string
+---@return Sess.DeletedSession?, string?, string?
+function M.resolve_deleted(target)
+    if type(target) ~= "string" or vim.trim(target) == "" then
+        return nil, "invalid deleted session target", "invalid-target"
+    end
+
+    target = vim.trim(target)
+    local target_name = target:lower()
+    local entries, list_err, diagnostics = M.list_deleted()
+    if list_err then
+        return nil, list_err, "storage"
+    end
+
+    local match
+    for _, entry in ipairs(entries) do
+        if entry.key == target or entry.id == target or entry.metadata.name:lower() == target_name then
+            if match then
+                return nil, "deleted session target is ambiguous: " .. target, "ambiguous"
+            end
+            match = entry
+        end
+    end
+
+    if match then
+        return match
+    end
+
+    if #diagnostics > 0 then
+        return nil, "deleted session not found: " .. target .. " (" .. table.concat(diagnostics, "; ") .. ")", "not-found"
+    end
+    return nil, "deleted session not found: " .. target, "not-found"
+end
+
+---@param key string
+---@return Sess.Session?, string?
+function M.restore(key)
+    local entry, err = storage.read_trash(key)
+    if not entry then
+        return nil, err
+    end
+
+    local sessions, scan_err, diagnostics = M.list()
+    if scan_err or #diagnostics > 0 then
+        return nil, scan_err or ("cannot verify uniqueness: " .. table.concat(diagnostics, "; "))
+    end
+
+    local name = entry.metadata.name:lower()
+    local cwd = vim.fs.normalize(entry.metadata.cwd)
+    for _, existing in ipairs(sessions) do
+        if existing.metadata.name:lower() == name then
+            return nil, "session name already exists: " .. entry.metadata.name
+        end
+        if vim.fs.normalize(existing.metadata.cwd) == cwd then
+            return nil, "session already exists for directory: " .. entry.metadata.cwd
+        end
+    end
+
+    local ok, restore_err = storage.restore(key)
+    if not ok then
+        return nil, restore_err
+    end
+    return { id = entry.id, metadata = entry.metadata }
+end
+
 -- Resolve identity without editor side effects. Never trust caller metadata.
 function M.resolve(target)
     if type(target) == "table" then

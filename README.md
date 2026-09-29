@@ -56,7 +56,8 @@ require("sess").setup({
 | `:Sess unload [name/id/path]` | Close a session's buffers and terminal jobs; defaults to current |
 | `:Sess pin [target]` | Toggle pin; defaults to current session |
 | `:Sess rename [target] [name]` | Rename; prompts for a missing name |
-| `:Sess delete [target]` | Confirm deletion; defaults to current session |
+| `:Sess delete [target]` | Move to private trash; defaults to current session |
+| `:Sess restore [target]` | Restore from trash, or open the deleted-session picker |
 | `:Sess list` | Open Telescope |
 
 ```lua
@@ -88,6 +89,8 @@ local current = api.state.current()
 local previous = api.state.prev()
 local active = api.state.active()
 local ok, err, sessions, diagnostics = api.session.list()
+local ok, err, deleted, diagnostics = api.session.list_deleted()
+api.session.restore("name-or-id-or-trash-key")
 ```
 
 Mutations return `(ok, err, session, diagnostics)`, with diagnostic strings on success. Loading the current session succeeds without saves, hooks or events. State getters return defensive copies.
@@ -121,7 +124,7 @@ vim.api.nvim_create_autocmd("User", {
 })
 ```
 
-Events: `SessCreated`, `SessLoaded`, `SessSaved`, `SessUnloaded`, `SessDeleted`, `SessRenamed`, `SessPinned`.
+Events: `SessCreated`, `SessLoaded`, `SessSaved`, `SessUnloaded`, `SessDeleted`, `SessRestored`, `SessRenamed`, `SessPinned`.
 
 State commits before `after_operation`, then the event fires. Outgoing saves emit `SessSaved` first. Create emits only `SessCreated`; switching doesn't emit `SessUnloaded`. Explicit unload does, as does current-session deletion before `SessDeleted`. Other deletions emit only `SessDeleted`.
 
@@ -135,7 +138,9 @@ Install telescope.nvim and plenary.nvim, then:
 require("telescope").load_extension("sess")
 ```
 
-Enter loads/creates. Ctrl-d (insert) or `dd` (normal) deletes with confirmation. Ctrl-r (insert) or `rr` (normal) renames. Ctrl-u (insert) or `uu` (normal) unloads the selected session. Commands, Telescope and autocommands use the same lifecycle.
+Enter loads/creates. Ctrl-d (insert) or `dd` (normal) deletes with confirmation. `:Sess restore` opens a deleted-session picker; Enter restores the selected record. Restore completion accepts names, ids and trash keys. Restore only moves persisted data back and never loads or changes editor state. Commands, Telescope and autocommands use the same lifecycle.
+
+Deleted sessions are soft-deleted into the private `trash/` directory and remain recoverable while their metadata is valid. Corrupt records are reported and skipped. Restore refuses duplicate ids, names, or project paths.
 
 ## Persistence and safety
 

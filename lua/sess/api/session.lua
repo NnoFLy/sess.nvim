@@ -66,6 +66,7 @@ local events = {
     delete = "SessDeleted",
     rename = "SessRenamed",
     pin = "SessPinned",
+    restore = "SessRestored",
 }
 
 -- State is committed before observers run. Their failures are diagnostics, not
@@ -473,6 +474,38 @@ function M.unload(target, options)
     return finish("unload", item, callbacks, diagnostics)
 end
 
+function M.restore(target, options)
+    local callbacks, hook_err = hooks(options)
+    if not callbacks then
+        return false, hook_err
+    end
+
+    local entry, err = catalog.resolve_deleted(target)
+    if not entry then
+        return false, err
+    end
+
+    local item = { id = entry.id, metadata = entry.metadata }
+    local ready, pre_err = before("restore", item, callbacks)
+    if not ready then
+        return false, pre_err
+    end
+
+    -- Resolve again immediately before the move. Callers and picker values are
+    -- untrusted and another operation may have changed the trash meanwhile.
+    local fresh_entry, resolve_err = catalog.resolve_deleted(entry.key)
+    if not fresh_entry then
+        return false, resolve_err
+    end
+
+    local restored, restore_err = catalog.restore(fresh_entry.key)
+    if not restored then
+        return false, restore_err
+    end
+
+    return finish("restore", restored, callbacks)
+end
+
 function M.delete(target, options)
     local callbacks, hook_err = hooks(options)
     if not callbacks then
@@ -585,6 +618,12 @@ function M.list()
     return err == nil, err, items, diagnostics
 end
 
+function M.list_deleted()
+    local items, err, diagnostics = catalog.list_deleted()
+
+    return err == nil, err, items, diagnostics
+end
+
 for name, query in pairs({
     get_by_id = catalog.get,
     get_by_name = catalog.get_by_name,
@@ -605,6 +644,7 @@ local mutations = {
     delete = true,
     rename = true,
     toggle_pin = true,
+    restore = true,
 }
 
 for name, operation in pairs(M) do

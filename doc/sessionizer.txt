@@ -57,12 +57,19 @@ COMMANDS                                                     *sess-commands*
     Rename the target (default current); prompt for a missing name.
 
 :Sess delete [target]                                        *:Sess-delete*
-    Confirm deletion (default current). Buffers/jobs are never deleted/stopped.
+    Move the target (default current) to private trash. Buffers/jobs are never
+    deleted/stopped.
+
+:Sess restore [target]                                       *:Sess-restore*
+    Restore a deleted session by name, id, or trash key. Without a target,
+    open the deleted-session Telescope picker. Restore never loads or changes
+    editor state. Completion offers names, ids and keys.
 
 :Sess list                                                   *:Sess-list*
     Open the Telescope picker.
 
-Tab completion supports subcommands, session names and create paths.
+Tab completion supports subcommands, session names, deleted-session names/ids/keys,
+and create paths. Corrupt trash records are reported and skipped.
 
 ==============================================================================
 BUFFER AND CWD POLICY                                         *sess-buffers*
@@ -160,6 +167,16 @@ api.session.delete(target?, opts?)               *sess-api.session.delete*
     deletion hides buffers and emits unload then delete. Non-current deletion
     does not perform an unload. No API confirmation prompt.
 
+api.session.list_deleted()                       *sess-api.session.list_deleted*
+    Read-only query returning deleted records and diagnostics. Invalid or
+    unsupported trash records are skipped.
+
+api.session.restore(target, opts?)               *sess-api.session.restore*
+    Restore by deleted name, original id, or unique trash key. Refuses
+    ambiguous targets and conflicts with an existing id, name, or project path.
+    The move is prompt-free and does not load the session or alter runtime
+    state. Valid old records remain recoverable.
+
 api.session.rename(target?, name)               *sess-api.session.rename*
     Rename; default target is current. name is required.
 
@@ -208,22 +225,22 @@ Supported hooks: >
     })
 <
 create/load/unload/delete accept per-call { hooks = {...} } overrides.
-before_transition runs for create, load, unload and current-session deletion.
+before_transition runs for create, load, unload, restore and current-session deletion.
 Throw to abort. Its context contains { operation, session, current }, where
 current is the outgoing session or nil. Preconditions are rechecked afterward.
 Hooks may themselves change the editor; those changes are not transactional.
 
-after_operation runs after successful create/load/save/unload/delete/rename/pin,
+after_operation runs after successful create/load/save/unload/delete/restore/rename/pin,
 with committed state. Throwing only adds a diagnostic. Context records are
 copies. The transition guard remains held through observers; recursive mutations
 return an in-progress error. Read-only queries remain available.
 
 User events:                                                   *sess-events*
-    SessCreated SessLoaded SessSaved SessUnloaded SessDeleted SessRenamed
+    SessCreated SessLoaded SessSaved SessUnloaded SessDeleted SessRestored SessRenamed
     SessPinned
 
 Payload event.data = { operation, session, current }. operation is lowercase
-create/load/save/unload/delete/rename/pin. current may be nil. Each payload is
+create/load/save/unload/delete/restore/rename/pin. current may be nil. Each payload is
 independent of owned runtime state.
 
 Ordering: publish state, call after_operation, emit User event. Outgoing saves

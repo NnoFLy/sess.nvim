@@ -11,6 +11,12 @@ local consts = require("sess.consts")
 ---@field metadata string
 ---@field session string
 
+---@class Sess.TrashEntry
+---@field key string Stable trash directory name.
+---@field id Sess.SessionId Original session id.
+---@field metadata Sess.SessionMetadata
+---@field deleted_at Sess.Timestamp
+
 local root_path ---@type string?
 
 local SESSIONS_DIR = "sessions"
@@ -79,6 +85,14 @@ local function dir_exists(path)
     local stat = vim.uv.fs_stat(path)
 
     return stat ~= nil and stat.type == "directory"
+end
+
+local function trash_entry_path(key)
+    if type(key) ~= "string" or key == "" or not key:match("^[%w_.%-]+$") then
+        return nil, "invalid trash entry key"
+    end
+
+    return join(trash_path(), key)
 end
 
 local function ensure_private_dir(path, label)
@@ -167,6 +181,44 @@ local function read_json(path)
     end
 
     return data
+end
+
+---@param data table
+---@return Sess.SessionMetadata?, string?
+local function validate_metadata(data)
+    local fields = {
+        version = "number",
+        name = "string",
+        cwd = "string",
+        created_at = "number",
+        last_used_at = "number",
+        pinned = "boolean",
+    }
+
+    for field, expected_type in pairs(fields) do
+        if type(data[field]) ~= expected_type then
+            return nil,
+                string.format("invalid session metadata: field %s must be %s", field, expected_type)
+        end
+    end
+
+    if data.version ~= consts.get_version() then
+        return nil, "unsupported session metadata version: " .. tostring(data.version)
+    end
+
+    if vim.trim(data.name) == "" then
+        return nil, "invalid session metadata: field name cannot be empty"
+    end
+
+    if vim.trim(data.cwd) == "" or vim.fs.normalize(vim.fn.fnamemodify(data.cwd, ":p")) == "" then
+        return nil, "invalid session metadata: field cwd must be a non-empty path"
+    end
+
+    if data.created_at < 0 or data.last_used_at < 0 then
+        return nil, "invalid session metadata: timestamps cannot be negative"
+    end
+
+    return data --[[@as Sess.SessionMetadata]]
 end
 
 ---@param path string
@@ -311,6 +363,125 @@ function M.exists(id)
     return true
 end
 
+-- Deleted session discovery and restoration
+
+---@param key string
+---@return Sess.SessionId?, Sess.Timestamp?, string?
+local function parse_trash_key(key)
+    -- The id is deliberately captured greedily so ids containing '-' remain
+    -- compatible with the historical <id>-<time>-<counter> layout.
+    local id, timestamp = key:match("^(.+)%-(%d+)%-%d+$")
+    if not id then
+        return nil, nil, "unsupported trash entry name: " .. key
+    end
+
+    local valid, err = validate_id(id)
+    if not valid then
+        return nil, nil, err
+    end
+
+    local deleted_at = tonumber(timestamp)
+    if not deleted_at or deleted_at < 0 or deleted_at ~= math.floor(deleted_at) then
+        return nil, nil, "invalid trash deletion timestamp: " .. timestamp
+    end
+
+    -- Reject timestamps that the UI cannot format instead of allowing a
+    -- malformed trash directory to crash the deleted-session picker.
+    local date_ok, date = pcall(os.date, "*t", deleted_at)
+    if not date_ok or type(date) ~= "table" then
+        return nil, nil, "invalid trash deletion timestamp: " .. timestamp
+    end
+
+    return id, deleted_at, nil
+end
+
+---@param key string
+---@return Sess.TrashEntry?, string?
+local function read_trash_entry(key)
+    local path, path_err = trash_entry_path(key)
+    if not path then
+        return nil, path_err
+    end
+
+    local id, deleted_at, parse_err = parse_trash_key(key)
+    if not id then
+        return nil, parse_err
+    end
+
+    if not dir_exists(path) then
+        return nil, "trash entry does not exist: " .. key
+    end
+
+    local metadata, err = read_json(join(path, METADATA_FILE))
+    if not metadata then
+        return nil, err
+    end
+
+    local valid_metadata, validation_err = validate_metadata(metadata)
+    if not valid_metadata then
+        return nil, validation_err
+    end
+
+    return { key = key, id = id, metadata = valid_metadata, deleted_at = deleted_at }
+end
+
+---@return Sess.TrashEntry[], string?, string[]
+function M.list_trash()
+    assert_initialized()
+
+    local ok, names = pcall(vim.fn.readdir, trash_path())
+    if not ok then
+        return {}, tostring(names), {}
+    end
+
+    local entries, diagnostics = {}, {}
+    for _, key in ipairs(names) do
+        if dir_exists(join(trash_path(), key)) then
+            local entry, err = read_trash_entry(key)
+            if entry then
+                table.insert(entries, entry)
+            else
+                table.insert(diagnostics, "skipping trash entry " .. key .. ": " .. tostring(err))
+            end
+        end
+    end
+
+    table.sort(entries, function(a, b)
+        return a.deleted_at > b.deleted_at or (a.deleted_at == b.deleted_at and a.key < b.key)
+    end)
+
+    return entries, nil, diagnostics
+end
+
+---@param key string
+---@return Sess.TrashEntry?, string?
+function M.read_trash(key)
+    return read_trash_entry(key)
+end
+
+---@param key string
+---@return boolean, string?, Sess.TrashEntry?
+function M.restore(key)
+    assert_initialized()
+
+    local entry, err = M.read_trash(key)
+    if not entry then
+        return false, err
+    end
+    if M.exists(entry.id) then
+        return false, "destination session already exists: " .. entry.id
+    end
+
+    local source = trash_entry_path(key)
+    local destination = session_paths(entry.id).dir
+    local ok, rename_err = vim.uv.fs_rename(source, destination)
+    if not ok then
+        return false, rename_err
+    end
+
+    return true, nil, entry
+end
+
 -- Session creation / deletion
 
 ---@param id Sess.SessionId
@@ -359,9 +530,15 @@ function M.delete(id, hard)
         return true
     end
 
-    -- Move the entire session into trash.
-    local destination =
-        join(trash_path(), id .. "-" .. tostring(os.time()) .. "-" .. tostring(vim.uv.hrtime()))
+    -- Move the entire session into trash. Avoid replacing a pre-existing entry
+    -- if a clock or test double returns the same timestamp twice.
+    local timestamp = tostring(os.time())
+    local counter = vim.uv.hrtime()
+    local destination = join(trash_path(), id .. "-" .. timestamp .. "-" .. tostring(counter))
+    while vim.uv.fs_stat(destination) do
+        counter = counter + 1
+        destination = join(trash_path(), id .. "-" .. timestamp .. "-" .. tostring(counter))
+    end
 
     local ok, err = vim.uv.fs_rename(paths.dir, destination)
 
@@ -421,39 +598,7 @@ function M.read_metadata(id)
         return nil, read_err
     end
 
-    local fields = {
-        version = "number",
-        name = "string",
-        cwd = "string",
-        created_at = "number",
-        last_used_at = "number",
-        pinned = "boolean",
-    }
-
-    for field, expected_type in pairs(fields) do
-        if type(data[field]) ~= expected_type then
-            return nil,
-                string.format("invalid session metadata: field %s must be %s", field, expected_type)
-        end
-    end
-
-    if data.version ~= consts.get_version() then
-        return nil, "unsupported session metadata version: " .. tostring(data.version)
-    end
-
-    if vim.trim(data.name) == "" then
-        return nil, "invalid session metadata: field name cannot be empty"
-    end
-
-    if vim.trim(data.cwd) == "" or vim.fs.normalize(vim.fn.fnamemodify(data.cwd, ":p")) == "" then
-        return nil, "invalid session metadata: field cwd must be a non-empty path"
-    end
-
-    if data.created_at < 0 or data.last_used_at < 0 then
-        return nil, "invalid session metadata: timestamps cannot be negative"
-    end
-
-    return data --[[@as Sess.SessionMetadata]]
+    return validate_metadata(data)
 end
 
 ---@param id Sess.SessionId

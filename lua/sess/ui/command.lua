@@ -12,6 +12,7 @@ local specs = {
     load = { handler = commands.load, max_args = 1, completion = "session" },
     pin = { handler = commands.pin, max_args = 1, completion = "session" },
     rename = { handler = commands.rename, max_args = 2, completion = { kind = "session", arg = 1 } },
+    restore = { handler = commands.restore, max_args = 1, completion = "deleted-session" },
     save = { handler = commands.save, max_args = 0 },
     unload = { handler = commands.unload, max_args = 1, completion = "session" },
 }
@@ -81,6 +82,28 @@ local function session_names()
     return names
 end
 
+local function deleted_session_names()
+    if not api.opts.is_setup() then
+        return {}
+    end
+    local ok, err, entries, diagnostics = api.session.list_deleted()
+    if not ok then
+        log.error(err)
+        return {}
+    end
+    for _, diagnostic in ipairs(diagnostics or {}) do
+        log.warn(diagnostic)
+    end
+    local candidates = {}
+    for _, entry in ipairs(entries or {}) do
+        candidates[#candidates + 1] = entry.metadata.name
+        candidates[#candidates + 1] = entry.id
+        candidates[#candidates + 1] = entry.key
+    end
+    table.sort(candidates)
+    return candidates
+end
+
 local function path_dirs(arg_lead)
     local ok, matches = pcall(vim.fn.getcompletion, arg_lead or "", "dir")
 
@@ -110,6 +133,18 @@ local function complete(arg_lead, cmdline, cursorpos)
     local completion_kind = type(spec.completion) == "table" and spec.completion.kind
         or spec.completion
     local completion_arg = type(spec.completion) == "table" and spec.completion.arg or 1
+    if completion_kind == "deleted-session" then
+        local arguments = rest:gsub("\\.", "_")
+        local _, completed_args = arguments:gsub("%S+", "")
+        if completed_args > 0 and not arguments:match("%s$") then
+            completed_args = completed_args - 1
+        end
+        if completed_args == 0 then
+            return filter_by_pattern(deleted_session_names(), arg_lead:gsub("\\(.)", "%1"))
+        end
+        return {}
+    end
+
     if completion_kind == "session" then
         -- Count finished arguments, not the partial argument being completed.
         -- Escaped spaces belong to a session name rather than a new argument.

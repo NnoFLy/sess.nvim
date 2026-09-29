@@ -16,11 +16,34 @@
 
 local finders = require("telescope.finders")
 local api = require("sess.api")
+local log = require("sess.log")
 
 local items = api.items
 local state = api.state
 
 local M = {}
+
+function M.generate_deleted_finder()
+    local ok, err, entries, diagnostics = api.session.list_deleted()
+    if not ok then
+        log.error(err)
+    end
+    for _, diagnostic in ipairs(diagnostics or {}) do
+        log.warn(diagnostic)
+    end
+    return finders.new_table({
+        results = entries or {},
+        entry_maker = function(entry)
+            local deleted_at = os.date("%Y-%m-%d %H:%M", entry.deleted_at)
+            local display = entry.metadata.name .. "  " .. entry.metadata.cwd .. "  " .. deleted_at
+            return {
+                value = entry,
+                display = display,
+                ordinal = display .. " " .. entry.id .. " " .. entry.key,
+            }
+        end,
+    })
+end
 
 local function replace_char(s, pos, char)
     return s:sub(1, pos - 1) .. char .. s:sub(pos + 1)
@@ -29,7 +52,6 @@ end
 ---@return table
 function M.generate_new_finder()
     local results, err, diagnostics = items.get_items()
-    local log = require("sess.log")
     if err then
         log.error(err)
     end

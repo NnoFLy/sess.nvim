@@ -9,9 +9,9 @@ local finders = require("telescope._extensions.sess.finders")
 
 ---@param prompt_bufnr number
 ---@return nil
-local function refresh(prompt_bufnr)
+local function refresh(prompt_bufnr, finder)
     local current_picker = action_state.get_current_picker(prompt_bufnr)
-    current_picker:refresh(finders.generate_new_finder(), { reset_prompt = true })
+    current_picker:refresh(finder or finders.generate_new_finder(), { reset_prompt = true })
 end
 
 ---@return Sess.TelescopeSessionEntry | nil
@@ -50,6 +50,22 @@ end
 
 ---@param prompt_bufnr number
 ---@return nil
+function M.restore_session(prompt_bufnr)
+    local value = selected_value()
+    if not value then
+        return
+    end
+
+    local ok, err, _, diagnostics = api.session.restore(value.key)
+    if not ok then
+        log.error(err)
+        return
+    end
+
+    log.diagnostics(diagnostics)
+    refresh(prompt_bufnr, finders.generate_deleted_finder())
+end
+
 function M.delete_session(prompt_bufnr)
     local value = selected_value()
     if not value or not value.id then

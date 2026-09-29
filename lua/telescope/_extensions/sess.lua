@@ -7,10 +7,12 @@ if not ok then
 end
 
 local config = require("telescope._extensions.sess.config")
+local pickers = require("telescope._extensions.sess.pickers")
 
 return telescope.register_extension({
     setup = config.setup,
     exports = {
-        sess = require("telescope._extensions.sess.pickers"),
+        sess = pickers.sess,
+        restore = pickers.restore,
     },
 })

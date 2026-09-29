@@ -17,13 +17,19 @@
 ---@field id Sess.SessionId
 ---@field metadata Sess.SessionMetadata
 
+---@class Sess.DeletedSession
+---@field key string
+---@field id Sess.SessionId
+---@field metadata Sess.SessionMetadata
+---@field deleted_at Sess.Timestamp
+
 ---@class Sess.Operation
----@field operation "create"|"load"|"save"|"unload"|"delete"|"rename"|"pin"
+---@field operation "create"|"load"|"save"|"unload"|"delete"|"rename"|"pin"|"restore"
 ---@field session Sess.Session
 ---@field current Sess.Session? Current before a pre-hook, after a post-hook/event.
 
 ---@class Sess.Hooks
----@field before_transition fun(context: Sess.Operation)? May throw to prevent create/load/unload/current-delete.
+---@field before_transition fun(context: Sess.Operation)? May throw to prevent create/load/unload/restore/current-delete.
 ---@field after_operation fun(context: Sess.Operation)? Errors become diagnostics after success.
 
 ---@class Sess.OperationOpts
