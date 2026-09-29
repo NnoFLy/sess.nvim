@@ -50,7 +50,7 @@ require("sess").setup({
 | Command | Behavior |
 | --- | --- |
 | `:Sess create [path]` | Create a session, or load the existing one for that path |
-| `:Sess load [name/id/path]` | Switch sessions; defaults to current cwd |
+| `:Sess load [name/id/path]` | Load or create a session for the target; defaults to current cwd |
 | `:Sess save` | Save the current session |
 | `:Sess last` | Return to the previous session |
 | `:Sess unload [name/id/path]` | Close a session's buffers and terminal jobs; defaults to current |
@@ -139,6 +139,10 @@ require("telescope").load_extension("sess")
 ```
 
 Enter loads/creates. Ctrl-d (insert) or `dd` (normal) deletes with confirmation. `:Sess restore` opens a deleted-session picker; Enter restores the selected record. Restore completion accepts names, ids and trash keys. Restore only moves persisted data back and never loads or changes editor state. Commands, Telescope and autocommands use the same lifecycle.
+
+`:Sess load` defaults to the current working directory. Path targets beginning with `~/`, `/`, `./`, or `../` load their session or create one. Invalid or missing directories are rejected. Creating a session opens the default file explorer in the project root.
+
+In the Telescope session picker, a path prompt switches to immediate directory completion. `<Tab>` inserts the selected directory and a trailing slash while keeping the picker open. `<Enter>` loads or creates its session. Returning to a non-path prompt restores the normal session finder.
 
 Deleted sessions are soft-deleted into the private `trash/` directory and remain recoverable while their metadata is valid. Corrupt records are reported and skipped. Restore refuses duplicate ids, names, or project paths.
 

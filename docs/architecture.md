@@ -74,7 +74,7 @@ Storage failures must be visible to callers. Corrupt records are skipped with di
 
 ### UI adapters
 
-Commands and Telescope provide input, target selection, confirmation, notifications, and presentation. They should call the shared API/lifecycle implementation so command behavior and picker behavior remain consistent.
+Commands and Telescope provide input, target selection, confirmation, notifications, and presentation. They should call the shared API/lifecycle implementation so command and picker behavior remain consistent. The UI load-or-create helper validates a directory, then delegates to `api.session.load()` or `api.session.create()` without changing the low-level API contract. Command completion and Telescope share read-only directory enumeration.
 
 ## Operation semantics
 

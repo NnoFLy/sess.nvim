@@ -17,6 +17,7 @@
 local finders = require("telescope.finders")
 local api = require("sess.api")
 local log = require("sess.log")
+local path = require("sess.ui.path")
 
 local items = api.items
 local state = api.state
@@ -50,6 +51,63 @@ local function replace_char(s, pos, char)
 end
 
 ---@return table
+function M.generate_directory_finder(prompt)
+    local candidates, err = path.enumerate(prompt)
+    if err then
+        log.error(err)
+    end
+
+    local ok, list_err, sessions, diagnostics = api.session.list()
+    if not ok then
+        log.error(list_err)
+    end
+    sessions = sessions or {}
+    for _, diagnostic in ipairs(diagnostics or {}) do
+        log.warn(diagnostic)
+    end
+
+    local by_path = {}
+    for _, session in ipairs(sessions) do
+        by_path[vim.fs.normalize(session.metadata.cwd)] = session
+    end
+
+    local results = {}
+    for _, candidate in ipairs(candidates) do
+        local session = by_path[candidate.path]
+        local metadata = session and session.metadata or {
+            name = candidate.name,
+            cwd = candidate.path,
+            pinned = false,
+            last_used_at = 0,
+            created_at = 0,
+        }
+        local display = (candidate.is_self and "./" or candidate.name) .. "  " .. candidate.path
+        display = display .. (session and "  [" .. metadata.name .. "]" or "  [new session]")
+
+        results[#results + 1] = {
+            path = candidate.path,
+            prompt = candidate.prompt,
+            is_self = candidate.is_self,
+            directory = true,
+            id = session and session.id or nil,
+            metadata = metadata,
+            display = display,
+            ordinal = candidate.prompt .. " " .. display,
+        }
+    end
+
+    return finders.new_table({
+        results = results,
+        entry_maker = function(entry)
+            return {
+                value = entry,
+                display = entry.display,
+                ordinal = entry.ordinal,
+            }
+        end,
+    })
+end
+
 function M.generate_new_finder()
     local results, err, diagnostics = items.get_items()
     if err then

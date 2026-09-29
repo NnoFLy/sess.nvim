@@ -1,5 +1,6 @@
 local api = require("sess.api")
 local log = require("sess.log")
+local path = require("sess.ui.path")
 local commands = require("sess.ui.commands")
 
 local M = {}
@@ -9,7 +10,7 @@ local specs = {
     delete = { handler = commands.delete, max_args = 1, completion = "session" },
     last = { handler = commands.last, max_args = 0 },
     list = { handler = commands.list, max_args = 0 },
-    load = { handler = commands.load, max_args = 1, completion = "session" },
+    load = { handler = commands.load, max_args = 1, completion = { kind = "session-or-path", arg = 1 } },
     pin = { handler = commands.pin, max_args = 1, completion = "session" },
     rename = { handler = commands.rename, max_args = 2, completion = { kind = "session", arg = 1 } },
     restore = { handler = commands.restore, max_args = 1, completion = "deleted-session" },
@@ -143,6 +144,19 @@ local function complete(arg_lead, cmdline, cursorpos)
             return filter_by_pattern(deleted_session_names(), arg_lead:gsub("\\(.)", "%1"))
         end
         return {}
+    end
+
+    if completion_kind == "session-or-path" then
+        if completion_arg ~= 1 then
+            return {}
+        end
+
+        local lead = path.unescape(arg_lead)
+        if path.is_path(lead) then
+            return path.complete(lead)
+        end
+
+        return filter_by_pattern(session_names(), lead)
     end
 
     if completion_kind == "session" then

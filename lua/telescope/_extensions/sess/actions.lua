@@ -6,6 +6,7 @@ local action_state = require("telescope.actions.state")
 local api = require("sess.api")
 local log = require("sess.log")
 local finders = require("telescope._extensions.sess.finders")
+local load_or_create = require("sess.ui.load_or_create")
 
 ---@param prompt_bufnr number
 ---@return nil
@@ -35,7 +36,9 @@ function M.enter(prompt_bufnr)
     actions.close(prompt_bufnr)
 
     local ok, err, _, diagnostics
-    if value.id == nil then
+    if value.directory then
+        ok, err, _, diagnostics = load_or_create.run(value.path)
+    elseif value.id == nil then
         ok, err, _, diagnostics = api.session.create(value.metadata.cwd)
     else
         ok, err, _, diagnostics = api.session.load(value.id)
@@ -46,6 +49,22 @@ function M.enter(prompt_bufnr)
     else
         log.diagnostics(diagnostics)
     end
+end
+
+---@param prompt_bufnr number
+---@return nil
+function M.complete_path(prompt_bufnr)
+    local value = selected_value()
+    if not value or not value.directory or not value.prompt then
+        return
+    end
+
+    local picker = action_state.get_current_picker(prompt_bufnr)
+    local prompt = value.prompt
+    if prompt:sub(-1) ~= "/" then
+        prompt = prompt .. "/"
+    end
+    picker:set_prompt(prompt)
 end
 
 ---@param prompt_bufnr number

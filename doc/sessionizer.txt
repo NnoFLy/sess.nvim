@@ -35,7 +35,9 @@ COMMANDS                                                     *sess-commands*
     With no path, use current cwd.
 
 :Sess load [target]                                          *:Sess-load*
-    Load by id/name/path. With no target, look up current cwd.
+    Load by id/name/path. Path targets, including the current cwd, load an
+    existing session or create one. Invalid or missing directories are
+    rejected. With no target, use current cwd.
 
 :Sess save                                                   *:Sess-save*
     Snapshot only the current session. No arguments; no implicit creation.
@@ -69,7 +71,18 @@ COMMANDS                                                     *sess-commands*
     Open the Telescope picker.
 
 Tab completion supports subcommands, session names, deleted-session names/ids/keys,
-and create paths. Corrupt trash records are reported and skipped.
+create paths, and load directory paths. For load, path arguments beginning with
+`~/`, `/`, `./`, or `../` complete immediate child directories; later arguments
+are not completed. Command-line escaping is preserved. Corrupt trash records
+are reported and skipped.
+
+The session Telescope picker normally shows available sessions. A prompt
+beginning with `~/`, `/`, `./`, or `../` switches to immediate directory
+completion and includes a `./` entry for the typed directory. In path mode,
+<Tab> inserts the selected directory with a trailing slash and keeps the
+picker open. <Enter> loads or creates its session. Creating a session opens the default file
+explorer in the project root. Returning to a non-path prompt restores the
+normal picker.
 
 ==============================================================================
 BUFFER AND CWD POLICY                                         *sess-buffers*
