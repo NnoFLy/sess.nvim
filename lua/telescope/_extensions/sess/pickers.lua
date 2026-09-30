@@ -92,7 +92,9 @@ function M.active(opts)
     for _, session in ipairs(state.active()) do
         expanded[session.id] = current and current.id == session.id or false
     end
-    picker_opts.finder = finders.generate_active_finder(expanded)
+    local finder, rows = finders.generate_active_finder(expanded)
+    picker_opts.finder = finder
+    picker_opts.selection_strategy = "row"
     picker_opts.mappings = nil
     picker_opts.attach_mappings = function(_, map)
         map("i", "<Tab>", actions.toggle_active)
@@ -107,6 +109,7 @@ function M.active(opts)
     local picker = pickers.new(picker_opts)
     picker._sess_expanded = expanded
     picker:find()
+    require("sess.ui.active_refresh").start(picker, finders.generate_active_finder, rows)
 end
 
 return M

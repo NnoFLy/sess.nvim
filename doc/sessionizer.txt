@@ -93,12 +93,16 @@ are reported and skipped.
 Agents are detected from live terminal jobs or registered through api.agent and
 belong to active sessions only. Detection uses the terminal job command and,
 where available, its process tree; it is best-effort and never starts or stops
-processes. The API returns (ok, err, result, diagnostics); list is sorted by
-agent id and all results are defensive copies. register, update, unregister,
-list, focus, and focused do not write storage. focus only operates on the
-current session; a missing or hidden target is a successful operation with an
-unavailable-target diagnostic. Agent records disappear only after a successful
-unload or delete and are never restored from disk.
+processes. Known terminal agents also inspect recent visible terminal output and
+report idle, working, blocked, or unknown. The active picker polls and redraws
+changed statuses while it is open. This screen detection is a fallback: an
+explicit status supplied by an integration remains authoritative. The API
+returns (ok, err, result, diagnostics); list is sorted by agent id and all
+results are defensive copies. register, update, unregister, list, focus, and
+focused do not write storage. focus only operates on the current session; a
+missing or hidden target is a successful operation with an unavailable-target
+diagnostic. Agent records disappear only after a successful unload or delete
+and are never restored from disk.
 
 The session Telescope picker normally shows available sessions. A prompt
 beginning with `~/`, `/`, `./`, or `../` switches to immediate directory

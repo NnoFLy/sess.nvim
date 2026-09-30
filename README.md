@@ -99,6 +99,8 @@ api.session.restore("name-or-id-or-trash-key")
 
 -- Agents are process-local and never persisted. Known agent terminal jobs
 -- (for example pi and codex) are detected automatically by :Sess active.
+-- Terminal agents get a best-effort idle/working/blocked/unknown status from
+-- their visible screen; integrations can override it explicitly.
 api.agent.register(nil, { id = "agent-1", name = "worker", bufnr = bufnr })
 api.agent.update(nil, "agent-1", { status = "done", info = "finished" })
 api.agent.focus(nil, "agent-1")
@@ -152,7 +154,7 @@ Install telescope.nvim and plenary.nvim, then:
 require("telescope").load_extension("sess")
 ```
 
-Enter loads/creates. Ctrl-d (insert) or `dd` (normal) deletes with confirmation. `:Sess restore` opens a deleted-session picker; Enter restores the selected record. `:Sess active` shows only currently active sessions, with `<Tab>` expansion and `<S-Tab>` collapse/expand-all. It detects known agent commands running in terminal buffers, including `pi`, `codex`, `claude`, and `opencode`; integrations can also register agents through `api.agent.register()`. Enter loads the selected session and focuses its existing agent buffer when visible. Agents are runtime-only: this picker never starts processes, creates windows, or persists agent data. Commands, Telescope and autocommands use the same lifecycle.
+Enter loads/creates. Ctrl-d (insert) or `dd` (normal) deletes with confirmation. `:Sess restore` opens a deleted-session picker; Enter restores the selected record. `:Sess active` shows only currently active sessions, with `<Tab>` expansion and `<S-Tab>` collapse/expand-all. It detects known agent commands running in terminal buffers, including `pi`, `codex`, `claude`, and `opencode`; integrations can also register agents through `api.agent.register()`. Known terminal agents show a best-effort `idle`, `working`, `blocked`, or `unknown` status based on recent terminal output. The active picker polls and redraws changed statuses while it is open. Explicit status updates remain authoritative. Enter loads the selected session and focuses its existing agent buffer when visible. Agents are runtime-only: this picker never starts processes, creates windows, or persists agent data. Commands, Telescope and autocommands use the same lifecycle.
 
 `:Sess load` defaults to the current working directory. Path targets beginning with `~/`, `/`, `./`, or `../` load their session or create one. Existing directories are resolved with `fs_realpath`, so symlinked paths share one session identity. Invalid or missing directories are rejected. Creating a session opens the default file explorer in the project root.
 

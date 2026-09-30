@@ -105,7 +105,7 @@ function M.generate_active_finder(expanded_by_id)
     local results = M.build_active_entries(sessions, agents, expanded_by_id, current and current.id, focused)
     return finders.new_table({ results = results, entry_maker = function(entry)
         return { value = entry, display = entry.display, ordinal = entry.ordinal }
-    end })
+    end }), results
 end
 
 function M.generate_deleted_finder()

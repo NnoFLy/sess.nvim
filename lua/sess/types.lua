@@ -25,7 +25,7 @@
 ---@field id string Session-local stable identifier.
 ---@field name string Short display name.
 ---@field info string? Optional display information.
----@field status string? Optional integration-provided status.
+---@field status string? Optional status: idle, working, blocked, done, unknown, or integration-defined.
 ---@field target Sess.AgentTarget
 
 ---@class Sess.DeletedSession

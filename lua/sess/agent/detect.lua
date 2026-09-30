@@ -191,6 +191,102 @@ local function terminal_agent(bufnr)
     return nil
 end
 
+local function terminal_lines(bufnr)
+    -- Bound reads and trim screen padding before selecting recent output.
+    -- A terminal can have hundreds of blank rows below its live status line.
+    local line_count_ok, count = pcall(vim.api.nvim_buf_line_count, bufnr)
+    if not line_count_ok then
+        return nil
+    end
+    local lines_ok, lines = pcall(vim.api.nvim_buf_get_lines, bufnr, math.max(0, count - 200), count, false)
+    if not lines_ok then
+        return nil
+    end
+
+    local last = #lines
+    while last > 0 and vim.trim(lines[last]) == "" do
+        last = last - 1
+    end
+    local start = math.max(1, last - 24)
+    local recent = {}
+    for index = start, last do
+        local line = lines[index]:gsub("\r", "")
+        -- Terminal buffers normally contain rendered text, but strip control
+        -- sequences as well for terminals that keep them in the buffer.
+        line = line:gsub("\27%][^\7]*\7", "")
+        line = line:gsub("\27%[[0-?]*[ -/]*[@-~]", "")
+        recent[#recent + 1] = line
+    end
+    return recent
+end
+
+local function contains_any(text, values)
+    for _, value in ipairs(values) do
+        if text:find(value, 1, true) then
+            return true
+        end
+    end
+    return false
+end
+
+local function has_input_prompt(lines)
+    local line = vim.trim(lines[#lines] or "")
+    -- Lua character classes are byte-based, not Unicode character sets.
+    return line:sub(1, #"❯") == "❯" or line:sub(1, #"›") == "›"
+end
+
+local function terminal_status(bufnr, name)
+    local lines = terminal_lines(bufnr)
+    if not lines then
+        return nil
+    end
+
+    local text = table.concat(lines, "\n"):lower()
+
+    -- Blocked takes precedence over prompts: approval UIs commonly retain
+    -- the agent's input marker while waiting for a decision.
+    if contains_any(text, {
+        "action required",
+        "allow command?",
+        "do you want to proceed",
+        "do you want to allow",
+        "would you like to",
+        "esc to cancel",
+        "enter to confirm",
+        "enter to select",
+        "[y/n]",
+        "waiting for permission",
+    }) then
+        return "blocked"
+    end
+
+    if contains_any(text, {
+        "working...",
+        " to interrupt",
+        "── working ──",
+        "⠋ working",
+        "⠙ working",
+        "⠹ working",
+        "⠸ working",
+        "⠼ working",
+        "⠴ working",
+        "⠦ working",
+        "⠧ working",
+        "⠇ working",
+        "⠏ working",
+    }) then
+        return "working"
+    end
+
+    if has_input_prompt(lines) then
+        return "idle"
+    end
+
+    -- Pi's normal input field has no distinctive prompt marker. Other agents
+    -- need positive evidence rather than silently claiming they are idle.
+    return (name == "pi" or name == "omp") and "idle" or "unknown"
+end
+
 local function session_buffers(session_id)
     local current = state.get_current_session()
     if current and current.id == session_id then
@@ -228,7 +324,7 @@ function M.list(session_id)
                     result[#result + 1] = {
                         id = "terminal:" .. bufnr,
                         name = agent,
-                        status = "running",
+                        status = terminal_status(bufnr, agent) or "unknown",
                         target = { bufnr = bufnr },
                     }
                 end
@@ -240,6 +336,24 @@ end
 
 function M.identify(value)
     return identify(value)
+end
+
+-- Return a best-effort status for a registered terminal agent. Integrations
+-- that provide an explicit status remain authoritative in the API layer.
+function M.status(bufnr, name)
+    local valid, is_valid = pcall(vim.api.nvim_buf_is_valid, bufnr)
+    if not valid or not is_valid then
+        return nil
+    end
+
+    local type_ok, buftype = pcall(function()
+        return vim.bo[bufnr].buftype
+    end)
+    if not type_ok or buftype ~= "terminal" then
+        return nil
+    end
+
+    return terminal_status(bufnr, name)
 end
 
 return M

@@ -140,6 +140,12 @@ local function all_agents(session_id)
 
     local result = {}
     for _, agent in pairs(by_id) do
+        -- Explicit integration status is authoritative. A registered agent
+        -- without one gets the same screen-based fallback as auto-detected
+        -- terminal agents.
+        if not agent.status and agent.target and agent.target.bufnr then
+            agent.status = detector.status(agent.target.bufnr, agent.name)
+        end
         result[#result + 1] = agent
     end
     table.sort(result, function(a, b)
@@ -217,7 +223,12 @@ function M.focus(target, agent_id)
     end
 
     agent.target.winid = win_or_err
-    state.set_agent(item.id, agent)
+    -- Focusing must not register derived status as an explicit override.
+    local registered = state.get_agents(item.id)[agent.id]
+    if registered then
+        registered.target.winid = win_or_err
+        state.set_agent(item.id, registered)
+    end
     state.set_focused_agent(item.id, agent.id)
     return true, nil, vim.deepcopy(agent), diagnostics
 end
