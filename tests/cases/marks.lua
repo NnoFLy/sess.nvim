@@ -59,10 +59,23 @@ vim.notify = function() end
 assert(not require("sess").goto_mark("xy"))
 vim.notify = notify
 
-vim.fn.getcharstr = function() return "m" end
+local messages = {}
+vim.notify = function(message, level)
+    messages[#messages + 1] = { message = message, level = level }
+end
+assert(require("sess").goto_mark("m"))
+vim.notify = notify
+fixture.equal({
+    { message = "[sess.nvim] Created mark @m on current session", level = vim.log.levels.INFO },
+}, messages)
+local created_ok, created_err, created = api.session.get_by_mark("m")
+assert(created_ok, created_err)
+fixture.equal(first.id, created.id)
+
+vim.fn.getcharstr = function() return "n" end
 assert(require("sess").set_mark())
 vim.fn.getcharstr = getcharstr
-local marked_current_ok, marked_current_err, marked_current = api.session.get_by_mark("m")
+local marked_current_ok, marked_current_err, marked_current = api.session.get_by_mark("n")
 assert(marked_current_ok, marked_current_err)
 fixture.equal(first.id, marked_current.id)
 

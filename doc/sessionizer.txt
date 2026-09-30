@@ -279,7 +279,8 @@ require("sess").set_mark(mark?)                  *sess.set_mark*
 <
 
 require("sess").goto_mark(mark?)                 *sess.goto_mark*
-    Load a mark. With no argument, read one following key using getcharstr;
+    Load a mark. A missing mark is assigned to the current session and reported
+    to the user. With no argument, read one following key using getcharstr;
     <Esc>, interrupted input, invalid input, and multi-character input are
     harmless. This function does not install a keymap. Example: >
         vim.keymap.set("n", "<C-q>", require("sess").goto_mark, {

@@ -147,10 +147,10 @@ registry, and can point to inactive sessions. Stale marks remain visible in
 `list_marks()` until explicitly replaced or removed. The core API never prompts;
 commands and Telescope confirm replacement. `:Sess load @s` resolves through the
 normal load lifecycle. `require("sess").goto_mark()` reads one following key
-when called without an argument, and never installs a mapping automatically.
-`require("sess").set_mark()` likewise reads one following key, assigns it to
-the current session, and confirms before replacement. Neither function installs a
-mapping automatically.
+when called without an argument and assigns missing marks to the current
+session, reporting the new mark. `require("sess").set_mark()` likewise reads
+one following key, assigns it to the current session, and confirms before
+replacement. Neither function installs a mapping automatically.
 
 See [`:help sess-api`](doc/sessionizer.txt) for its contract and failure behavior.
 

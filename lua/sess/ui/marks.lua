@@ -98,7 +98,25 @@ function M.goto_mark(value)
         log.error(tostring(ok))
         return false
     end
-    return M.report(ok, load_err, diagnostics)
+    if ok then
+        return M.report(ok, load_err, diagnostics)
+    end
+
+    if load_err ~= "mark not found: @" .. mark then
+        return M.report(false, load_err, diagnostics)
+    end
+
+    local assign_called, assigned, assign_err, _, assign_diagnostics = pcall(M.assign, nil, mark)
+    if not assign_called then
+        log.error(tostring(assigned))
+        return false
+    end
+    if not assigned then
+        return M.report(false, assign_err, assign_diagnostics)
+    end
+
+    log.info("Created mark @" .. mark .. " on current session")
+    return M.report(true, nil, assign_diagnostics)
 end
 
 return M
