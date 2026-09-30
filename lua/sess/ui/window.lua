@@ -27,6 +27,15 @@ local win_option_defaults = {
     winhighlight = "",
 }
 
+local keymap_defaults = {
+    open = "<C-e>",
+    load_prefix = "g",
+    delete = "d",
+    undo = "u",
+    change_mark = "r",
+    rename = "R",
+}
+
 function M.defaults()
     return {
         position = "right_bottom",
@@ -37,6 +46,7 @@ function M.defaults()
         title = " Marks ",
         title_pos = "center",
         win_options = vim.deepcopy(win_option_defaults),
+        keymap = vim.deepcopy(keymap_defaults),
     }
 end
 
@@ -73,6 +83,41 @@ local function validate_win_options(options)
     return true
 end
 
+local function keycode(value)
+    return vim.api.nvim_replace_termcodes(value, true, false, true)
+end
+
+local function validate_keymap(keymap)
+    if type(keymap) ~= "table" then
+        return false, "mark_window.keymap must be a table"
+    end
+
+    local seen = {}
+    for name in pairs(keymap_defaults) do
+        local value = keymap[name]
+        if type(value) ~= "string" or value == "" then
+            return false, "mark_window.keymap." .. name .. " must be a non-empty key specification"
+        end
+        local normalized = keycode(value)
+        if normalized == "" then
+            return false, "mark_window.keymap." .. name .. " must be a non-empty key specification"
+        end
+        if seen[normalized] then
+            return false,
+                "mark_window.keymap entries conflict: " .. seen[normalized] .. " and " .. name
+        end
+        seen[normalized] = name
+    end
+
+    for name in pairs(keymap) do
+        if keymap_defaults[name] == nil then
+            return false, "unknown mark_window.keymap option: " .. tostring(name)
+        end
+    end
+
+    return true
+end
+
 -- This accepts both a user partial and a fully merged configuration. Keeping
 -- it here avoids making the options module a dependency of the window owner.
 function M.validate(options)
@@ -89,6 +134,7 @@ function M.validate(options)
         title = true,
         title_pos = true,
         win_options = true,
+        keymap = true,
     }
     for name in pairs(options) do
         if not allowed[name] then
@@ -126,7 +172,13 @@ function M.validate(options)
     end
 
     if options.win_options ~= nil then
-        return validate_win_options(options.win_options)
+        local valid, err = validate_win_options(options.win_options)
+        if not valid then
+            return false, err
+        end
+    end
+    if options.keymap ~= nil then
+        return validate_keymap(options.keymap)
     end
 
     return true
@@ -243,7 +295,7 @@ function M.geometry(options, screen)
         style = "minimal",
         title = options.border == "none" and nil or options.title,
         title_pos = options.border == "none" and nil or options.title_pos,
-        focusable = false,
+        focusable = true,
     }
 end
 
@@ -283,6 +335,7 @@ function M.open(options)
     end
 
     local buf = vim.api.nvim_create_buf(false, true)
+    vim.b[buf].sess_mark_window = true
     local win
     local ok, err = pcall(function()
         set_buffer_option(buf, "buftype", "nofile")

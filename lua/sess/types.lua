@@ -29,6 +29,9 @@
 ---@class Sess.SetMarkOpts: Sess.OperationOpts
 ---@field replace boolean? Explicit permission to replace an existing owner.
 
+---@class Sess.MoveMarkOpts: Sess.OperationOpts
+---@field replace boolean? Explicit permission to replace an existing destination.
+
 ---@class Sess.AgentTarget
 ---@field bufnr integer Valid at registration time; may disappear later.
 ---@field winid integer? Last known window containing bufnr.
@@ -84,6 +87,14 @@
 ---@field cwd string? Internal catalog only; public create accepts cwd as its first argument.
 ---@field id Sess.SessionId?
 
+---@class Sess.MarkWindowKeymap
+---@field open string
+---@field load_prefix string
+---@field delete string
+---@field undo string
+---@field change_mark string
+---@field rename string
+
 ---@class Sess.MarkWindowOptions
 ---@field position string
 ---@field width integer
@@ -93,6 +104,7 @@
 ---@field title string
 ---@field title_pos "left"|"center"|"right"
 ---@field win_options { cursorline: boolean, winblend: integer, winhighlight: string }
+---@field keymap Sess.MarkWindowKeymap
 
 ---@class Sess.Opts
 ---@field paths string[]

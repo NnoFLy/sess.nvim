@@ -55,6 +55,14 @@ require("sess").setup({
             winblend = 0,
             winhighlight = "",
         },
+        keymap = {
+            open = "<C-e>",
+            load_prefix = "g",
+            delete = "d",
+            undo = "u",
+            change_mark = "r",
+            rename = "R",
+        },
     },
 })
 
@@ -136,6 +144,7 @@ local ok, err, marked, diagnostics = api.session.get_by_mark("s")
 local ok, err, marks, diagnostics = api.session.list_marks()
 api.session.set_mark("project", "s", { replace = true })
 api.session.clear_mark("s")
+api.session.move_mark("s", "p", { replace = true })
 
 -- Agents are process-local and never persisted. Known agent terminal jobs
 -- (for example pi and codex) are detected automatically by :Sess active.
@@ -160,11 +169,15 @@ Marks are one lowercase ASCII letter or digit, persist in a separate atomic
 registry, and can point to inactive sessions. Stale marks remain visible in
 `list_marks()` until explicitly replaced or removed. The core API never prompts;
 commands and Telescope confirm replacement. `:Sess load @s` resolves through the
-normal load lifecycle. `require("sess").goto_mark("s")` loads a mark directly;
-with no argument it opens or focuses an assigned-mark popup and returns whether
-that operation succeeded. The popup is a non-focusable float, never creates
-marks, shows stale assignments as unavailable, and can be cancelled with `<Esc>`
-or `<C-c>`. `require("sess").set_mark()`
+normal load lifecycle. `require("sess").goto_mark("s")` loads a mark directly.
+With no argument it reads one key: a mark loads directly, the configured
+`mark_window.keymap.open` key opens or focuses the mark manager, and `<Esc>`
+cancels. The popup is a focusable, read-only float, never creates marks, shows
+stale assignments as unavailable, and can be cancelled with `<Esc>` or `<C-c>`.
+Its default actions are arrows for navigation, `<Enter>` to load, `g` plus a
+mark to load directly, `d` to delete an assignment, `u` to undo the latest mark
+mutation, `r` to change a mark key, and `R` to rename a session.
+`require("sess").set_mark()`
 continues to read one following key when called without an argument, assigns it
 to the current session, and confirms before replacement. Neither function
 installs a global mapping automatically.
@@ -173,7 +186,8 @@ The mark popup supports the nine positions `left_top`, `center_top`,
 `right_top`, `left_center`, `center`, `right_center`, `left_bottom`,
 `center_bottom`, and `right_bottom`. Width and height are content dimensions;
 the complete float, including its border and margin, is clamped to the editor.
-Only the documented `mark_window.win_options` are accepted.
+`mark_window.keymap` configures popup actions; key specifications must be
+non-empty and unique. Only the documented `mark_window.win_options` are accepted.
 
 See [`:help sess-api`](doc/sessionizer.txt) for its contract and failure behavior.
 

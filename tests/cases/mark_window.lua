@@ -19,11 +19,19 @@ local function feed(keys)
 end
 
 local origin = vim.api.nvim_get_current_win()
+local getcharstr = vim.fn.getcharstr
+local function set_input(value)
+    vim.fn.getcharstr = function()
+        return value
+    end
+end
+set_input("\5")
 assert(sess.goto_mark())
+vim.fn.getcharstr = getcharstr
 local popup = vim.api.nvim_get_current_win()
 local popup_config = vim.api.nvim_win_get_config(popup)
 assert(popup_config.relative ~= "")
-assert(popup_config.focusable == false)
+assert(popup_config.focusable == true)
 local popup_buf = vim.api.nvim_win_get_buf(popup)
 local lines = vim.api.nvim_buf_get_lines(popup_buf, 0, -1, false)
 assert(lines[1] == "a  first")
@@ -33,7 +41,7 @@ local mapped = {}
 for _, mapping in ipairs(maps) do
     mapped[mapping.lhs] = true
 end
-assert(mapped.a and mapped.q and mapped.j and mapped.k)
+assert(mapped.g and mapped.d and mapped.u and mapped.r and mapped.R)
 assert(not vim.api.nvim_get_keymap("n")["a"])
 
 feed("z")
@@ -44,13 +52,17 @@ assert(vim.api.nvim_get_current_win() == origin)
 local marks = storage.read_marks()
 marks.q = "missing-session"
 assert(storage.write_marks(marks))
+set_input("\5")
 assert(sess.goto_mark())
+vim.fn.getcharstr = getcharstr
 popup = vim.api.nvim_get_current_win()
 lines = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(popup), 0, -1, false)
 assert(lines[2]:match("unavailable"))
 local notify = vim.notify
 vim.notify = function() end
-feed("q")
+set_input("q")
+feed("g")
+vim.fn.getcharstr = getcharstr
 vim.notify = notify
 assert(vim.api.nvim_get_current_win() == origin)
 local stale = storage.read_marks()

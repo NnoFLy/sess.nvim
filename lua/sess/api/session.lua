@@ -88,7 +88,19 @@ M.restore = invoke(mutations.restore, true, option_builder(2), 3)
 M.rename = invoke(mutations.rename, true, default_context, 3)
 M.toggle_pin = invoke(mutations.toggle_pin, true, default_context, 2)
 M.set_mark = invoke(marks.set, true, option_builder(3, { replace = true }), 4)
-M.clear_mark = invoke(marks.clear, true, default_context, 2)
+M.clear_mark = invoke(marks.clear, true, option_builder(2, { expected_id = true }), 3)
+M.move_mark = invoke(
+    marks.move,
+    true,
+    option_builder(3, {
+        replace = true,
+        expected_id = true,
+        expected_destination = true,
+        check_destination = true,
+    }),
+    4
+)
+M.restore_marks = invoke(marks.restore, true, default_context, 2)
 
 local function query(operation)
     return function(...)

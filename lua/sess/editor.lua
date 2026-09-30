@@ -43,22 +43,32 @@ function M.capture()
         for _, win in ipairs(vim.api.nvim_tabpage_list_wins(tab)) do
             local config = vim.api.nvim_win_get_config(win)
             local buf = vim.api.nvim_win_get_buf(win)
-            view.buffers[buf] = true
+            if not vim.b[buf].sess_mark_window then
+                view.buffers[buf] = true
 
-            local saved = vim.api.nvim_win_call(win, function()
-                return {
-                    buf = buf,
-                    view = vim.fn.winsaveview(),
-                    width = vim.api.nvim_win_get_width(win),
-                    height = vim.api.nvim_win_get_height(win),
-                    cwd = vim.fn.haslocaldir() == 1 and vim.fn.getcwd() or nil,
-                }
-            end)
+                local saved = vim.api.nvim_win_call(win, function()
+                    return {
+                        buf = buf,
+                        view = vim.fn.winsaveview(),
+                        width = vim.api.nvim_win_get_width(win),
+                        height = vim.api.nvim_win_get_height(win),
+                        cwd = vim.fn.haslocaldir() == 1 and vim.fn.getcwd() or nil,
+                    }
+                end)
 
-            if config.relative == "" and not config.external then
-                entry.windows[win] = saved
-            else
-                table.insert(entry.floats, { id = win, config = config, saved = saved })
+                if config.relative == "" and not config.external then
+                    entry.windows[win] = saved
+                else
+                    table.insert(entry.floats, { id = win, config = config, saved = saved })
+                end
+            elseif entry.current == win then
+                for _, candidate in ipairs(vim.api.nvim_tabpage_list_wins(tab)) do
+                    local candidate_buf = vim.api.nvim_win_get_buf(candidate)
+                    if not vim.b[candidate_buf].sess_mark_window then
+                        entry.current = candidate
+                        break
+                    end
+                end
             end
         end
 

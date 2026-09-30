@@ -7,14 +7,6 @@ local M = {}
 
 local active_popup
 local next_group = 0
-local mark_keys = {}
-
-for code = string.byte("a"), string.byte("z") do
-    mark_keys[#mark_keys + 1] = string.char(code)
-end
-for code = string.byte("0"), string.byte("9") do
-    mark_keys[#mark_keys + 1] = string.char(code)
-end
 
 -- Command syntax requires @; Lua navigation and picker input may omit it.
 function M.parse(value, require_prefix)
@@ -73,15 +65,17 @@ function M.report(ok, err, diagnostics)
     return ok
 end
 
-local function read_mark(value)
-    if value == nil then
-        local ok, key = pcall(vim.fn.getcharstr)
-        if not ok then
-            return nil
-        end
-        value = key
+local function read_key()
+    local ok, key = pcall(vim.fn.getcharstr)
+    if not ok or type(key) ~= "string" or key == "" then
+        return nil
     end
-    if value == "\27" then
+    return key
+end
+
+local function read_mark(value)
+    value = value == nil and read_key() or value
+    if value == nil or value == "\27" then
         return nil
     end
     local mark, err = M.parse(value)
@@ -89,6 +83,19 @@ local function read_mark(value)
         log.error(err)
     end
     return mark
+end
+
+local function read_popup_mark()
+    local value = read_key()
+    if value == nil or value == "\27" then
+        return nil
+    end
+    local valid, err = mark_rules.validate(value)
+    if not valid then
+        log.error(err)
+        return nil
+    end
+    return value
 end
 
 local function sanitize(value)
@@ -112,6 +119,10 @@ local function truncate(value, width)
         result = candidate
     end
     return result .. "…"
+end
+
+local function keycode(value)
+    return vim.api.nvim_replace_termcodes(value, true, false, true)
 end
 
 local function popup_active(popup)
@@ -168,6 +179,11 @@ local function current_row(popup)
     return vim.api.nvim_win_get_cursor(popup.window.win)[1]
 end
 
+local function selected_mark(popup)
+    local row = current_row(popup)
+    return row and popup.rows[row], row
+end
+
 local function move(popup, amount)
     local row = current_row(popup)
     if not row or #popup.rows == 0 then
@@ -178,32 +194,39 @@ local function move(popup, amount)
 end
 
 local function run_logged_operation(operation, ...)
-    local called, ok, err, _, diagnostics = pcall(operation, ...)
+    local called, ok, err, item, diagnostics = pcall(operation, ...)
     if not called then
         log.error(tostring(ok))
-        return false
+        return false, nil, {}
     end
     if not ok then
         log.error(err)
-        return false
+        log.diagnostics(diagnostics)
+        return false, item, diagnostics or {}
     end
     log.diagnostics(diagnostics)
-    return true
+    return true, item, diagnostics or {}
+end
+
+local function resolve_mark(mark)
+    local ok, item = run_logged_operation(api.session.get_by_mark, mark)
+    return ok and item or nil
 end
 
 local function select_mark(mark)
-    if not active_popup or not close_popup(true) then
-        return
+    local item = resolve_mark(mark)
+    if not item then
+        close_popup(true)
+        return false
     end
-    if not run_logged_operation(api.session.get_by_mark, mark) then
-        return
+    if not close_popup(true) then
+        return false
     end
-    run_logged_operation(api.session.load, "@" .. mark)
+    return run_logged_operation(api.session.load, "@" .. mark)
 end
 
 local function select_current(popup)
-    local row = current_row(popup)
-    local mark = row and popup.rows[row]
+    local mark = selected_mark(popup)
     if mark then
         select_mark(mark)
     end
@@ -217,6 +240,7 @@ local function set_lines(popup, lines)
         vim.api.nvim_set_option_value("modifiable", false, { buf = buf })
     end)
     if not ok then
+        pcall(vim.api.nvim_set_option_value, "modifiable", false, { buf = buf })
         return false, tostring(err)
     end
     return true
@@ -231,8 +255,7 @@ local function render(entries, width)
             name = name .. " (unavailable)"
         end
         local mark = sanitize(entry.mark)
-        local prefix = mark .. "  "
-        lines[#lines + 1] = truncate(prefix .. name, width)
+        lines[#lines + 1] = truncate(mark .. "  " .. name, width)
         rows[#rows + 1] = entry.mark
     end
 
@@ -242,7 +265,79 @@ local function render(entries, width)
     return lines, rows
 end
 
+local function list_entries()
+    local called, ok, err, entries, diagnostics = pcall(api.session.list_marks)
+    if not called then
+        return nil, tostring(ok)
+    end
+    if not ok then
+        return nil, err
+    end
+    return entries or {}, nil, diagnostics or {}
+end
+
+local function find_entry(entries, mark)
+    for _, entry in ipairs(entries) do
+        if entry.mark == mark then
+            return entry
+        end
+    end
+end
+
+local function entry_owner(entry)
+    return entry.session and entry.session.metadata.name or (entry.id .. " (stale)")
+end
+
+local function refresh(popup, preferred_mark)
+    if not popup_valid(popup) then
+        return false
+    end
+    local old_mark, old_row = selected_mark(popup)
+    local entries, err, diagnostics = list_entries()
+    if not entries then
+        log.error(err)
+        return false
+    end
+    log.diagnostics(diagnostics)
+
+    local lines, rows = render(entries, popup.window.geometry.width)
+    local rendered, render_err = set_lines(popup, lines)
+    if not rendered then
+        log.error("Failed to render mark popup: " .. render_err)
+        return false
+    end
+    popup.rows = rows
+
+    local mark = preferred_mark or old_mark
+    local row
+    if mark then
+        for index, value in ipairs(rows) do
+            if value == mark then
+                row = index
+                break
+            end
+        end
+    end
+    row = row or math.min(old_row or 1, math.max(1, #rows))
+    if window.is_valid(popup.window) then
+        pcall(vim.api.nvim_win_set_cursor, popup.window.win, { row, 0 })
+    end
+    return true
+end
+
+local function confirm(popup, question)
+    popup.interacting = true
+    local called, choice = pcall(vim.fn.confirm, question, "&Yes\n&No", 2)
+    popup.interacting = false
+    if not called then
+        log.error(tostring(choice))
+        return false
+    end
+    return choice == 1
+end
+
 local function install_mappings(popup)
+    local keymap = popup.window.options.keymap
     local opts = { buffer = popup.window.buf, noremap = true, silent = true, nowait = true }
     local function map(lhs, callback)
         vim.keymap.set("n", lhs, callback, opts)
@@ -263,22 +358,141 @@ local function install_mappings(popup)
     map("<C-c>", function()
         close_popup(true)
     end)
-
-    local assigned = {}
-    for _, mark in ipairs(popup.rows) do
-        assigned[mark] = true
-    end
-    for _, key in ipairs(mark_keys) do
-        if assigned[key] then
-            map(key, function()
-                select_mark(key)
-            end)
-        else
-            -- Every valid mark key is consumed locally. In particular, q/j/k
-            -- remain available as ordinary mark names without being commands.
-            map(key, function() end)
+    map(keymap.load_prefix, function()
+        if not popup_active(popup) then
+            return
         end
-    end
+        local mark = read_popup_mark()
+        if mark then
+            select_mark(mark)
+        end
+    end)
+    map(keymap.delete, function()
+        local mark = selected_mark(popup)
+        if not mark or not popup_active(popup) then
+            return
+        end
+        local entries, err, diagnostics = list_entries()
+        if not entries then
+            log.error(err)
+            return
+        end
+        log.diagnostics(diagnostics)
+        local entry = find_entry(entries, mark)
+        if not entry then
+            log.error("mark not found: @" .. mark)
+            refresh(popup)
+            return
+        end
+        if not confirm(popup, "Clear mark @" .. mark .. " on " .. entry_owner(entry) .. "?") then
+            return
+        end
+        local ok, _, _, clear_diagnostics = run_logged_operation(
+            api.session.clear_mark,
+            mark,
+            { expected_id = entry.id }
+        )
+        if ok then
+            popup.undo = {
+                changes = { { mark = mark, expected = nil, value = entry.id } },
+            }
+            refresh(popup)
+            log.diagnostics(clear_diagnostics)
+        end
+    end)
+    map(keymap.undo, function()
+        if not popup_active(popup) or not popup.undo then
+            return
+        end
+        local undo = popup.undo
+        local ok = run_logged_operation(api.session.restore_marks, undo.changes)
+        if ok then
+            popup.undo = nil
+            refresh(popup)
+        end
+    end)
+    map(keymap.change_mark, function()
+        local old_mark = selected_mark(popup)
+        if not old_mark or not popup_active(popup) then
+            return
+        end
+        local entries, err, diagnostics = list_entries()
+        if not entries then
+            log.error(err)
+            return
+        end
+        log.diagnostics(diagnostics)
+        local source = find_entry(entries, old_mark)
+        if not source then
+            log.error("mark not found: @" .. old_mark)
+            refresh(popup)
+            return
+        end
+
+        local new_mark = read_popup_mark()
+        if not new_mark or new_mark == old_mark then
+            return
+        end
+        local destination = find_entry(entries, new_mark)
+        if destination then
+            if
+                not confirm(
+                    popup,
+                    "Replace mark @" .. new_mark .. " on " .. entry_owner(destination) .. "?"
+                )
+            then
+                return
+            end
+        end
+
+        local ok = run_logged_operation(api.session.move_mark, old_mark, new_mark, {
+            replace = destination ~= nil,
+            expected_id = source.id,
+            check_destination = true,
+            expected_destination = destination and destination.id or nil,
+        })
+        if ok then
+            popup.undo = {
+                changes = {
+                    { mark = old_mark, expected = nil, value = source.id },
+                    {
+                        mark = new_mark,
+                        expected = source.id,
+                        value = destination and destination.id or nil,
+                    },
+                },
+            }
+            refresh(popup, new_mark)
+        end
+    end)
+    map(keymap.rename, function()
+        local mark = selected_mark(popup)
+        if not mark or not popup_active(popup) then
+            return
+        end
+        local item = resolve_mark(mark)
+        if not item then
+            return
+        end
+        popup.interacting = true
+        local called, input_err = pcall(vim.ui.input, {
+            prompt = "Rename session: ",
+            default = item.metadata.name,
+        }, function(value)
+            popup.interacting = false
+            if value == nil or vim.trim(value) == "" or not popup_active(popup) then
+                return
+            end
+            local ok = run_logged_operation(api.session.rename, item.id, value)
+            if ok then
+                refresh(popup, mark)
+            end
+        end)
+        if not called then
+            popup.interacting = false
+            log.error(tostring(input_err))
+        end
+    end)
 end
 
 local function install_autocmds(popup)
@@ -286,11 +500,11 @@ local function install_autocmds(popup)
     popup.group = vim.api.nvim_create_augroup("SessNvimMarkWindow" .. next_group, { clear = true })
     vim.api.nvim_create_autocmd("WinLeave", {
         group = popup.group,
-        callback = function()
-            if not popup_active(popup) then
+        callback = function(event)
+            if not popup_active(popup) or popup.interacting then
                 return
             end
-            if vim.api.nvim_get_current_win() == popup.window.win then
+            if event.win == popup.window.win then
                 close_popup(true)
             end
         end,
@@ -298,7 +512,7 @@ local function install_autocmds(popup)
     vim.api.nvim_create_autocmd("TabLeave", {
         group = popup.group,
         callback = function()
-            if not popup_active(popup) then
+            if not popup_active(popup) or popup.interacting then
                 return
             end
             if vim.tbl_contains(vim.api.nvim_tabpage_list_wins(0), popup.window.win) then
@@ -348,20 +562,12 @@ local function open_popup()
 
     local origin_win = vim.api.nvim_get_current_win()
     local origin_tab = vim.api.nvim_get_current_tabpage()
-    local called, ok, err, entries, diagnostics = pcall(api.session.list_marks)
-    if not called then
-        log.error(tostring(ok))
-        return false
-    end
-    if not ok then
+    local entries, err, diagnostics = list_entries()
+    if not entries then
         log.error(err)
         return false
     end
     log.diagnostics(diagnostics)
-    entries = entries or {}
-    table.sort(entries, function(left, right)
-        return left.mark < right.mark
-    end)
 
     local options = api.opts.get().mark_window
     local popup_window, open_err = window.open(options)
@@ -373,10 +579,10 @@ local function open_popup()
         window = popup_window,
         origin_win = origin_win,
         origin_tab = origin_tab,
+        rows = {},
     }
     active_popup = popup
-    local width = popup_window.geometry.width
-    local lines, rows = render(entries, width)
+    local lines, rows = render(entries, popup_window.geometry.width)
     popup.rows = rows
     local rendered, render_err = set_lines(popup, lines)
     if not rendered then
@@ -411,7 +617,20 @@ end
 
 function M.goto_mark(value)
     if value == nil then
-        return open_popup()
+        local key = read_key()
+        if key == nil or key == "\27" then
+            return false
+        end
+        local open_key = api.opts.get().mark_window.keymap.open
+        if key == keycode(open_key) then
+            return open_popup()
+        end
+        local mark, err = M.parse(key)
+        if not mark then
+            log.error(err)
+            return false
+        end
+        value = mark
     end
 
     local mark, err = M.parse(value)

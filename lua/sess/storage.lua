@@ -621,10 +621,12 @@ function M.delete(id, hard)
     -- if a clock or test double returns the same timestamp twice.
     local timestamp = tostring(os.time())
     local counter = vim.uv.hrtime()
-    local destination = join(trash_path(), id .. "-" .. timestamp .. "-" .. tostring(counter))
+    local destination =
+        join(trash_path(), id .. "-" .. timestamp .. "-" .. string.format("%.0f", counter))
     while vim.uv.fs_stat(destination) do
         counter = counter + 1
-        destination = join(trash_path(), id .. "-" .. timestamp .. "-" .. tostring(counter))
+        destination =
+            join(trash_path(), id .. "-" .. timestamp .. "-" .. string.format("%.0f", counter))
     end
 
     local ok, err = vim.uv.fs_rename(paths.dir, destination)

@@ -34,6 +34,14 @@ setup() returns (ok, err) and logs failures. Call once. Unknown options fail. >
                 winblend = 0,
                 winhighlight = "",
             },
+            keymap = {
+                open = "<C-e>",
+                load_prefix = "g",
+                delete = "d",
+                undo = "u",
+                change_mark = "r",
+                rename = "R",
+            },
         },
     })
 <
@@ -281,6 +289,12 @@ api.session.set_mark(target, mark, opts?)         *sess-api.session.set_mark*
 api.session.clear_mark(mark)                     *sess-api.session.clear_mark*
     Atomically remove a mark and return (ok, err, session, diagnostics).
 
+api.session.move_mark(from, to, opts?)            *sess-api.session.move_mark*
+    Atomically move an assignment between valid mark keys. opts.replace must
+    be true to replace an existing destination; the operation never prompts.
+    A stale owner remains attached to the moved assignment. The operation
+    returns (ok, err, session, diagnostics).
+
 require("sess").set_mark(mark?)                  *sess.set_mark*
     Assign a mark to the current session. With no argument, read one
     following key using getcharstr; <Esc>, interrupted input, invalid input,
@@ -295,16 +309,17 @@ require("sess").set_mark(mark?)                  *sess.set_mark*
 require("sess").goto_mark(mark?)                 *sess.goto_mark*
     With an explicit mark, load it directly. A missing mark is assigned to the
     current session and reported to the user, preserving the direct-navigation
-    behavior. With no argument, open or focus the assigned-mark popup and return
-    whether that operation succeeded. The no-argument call is asynchronous: its
-    return value does not describe a later selection. The popup is a
-    non-focusable float. Assigned letters/digits and <Up>/<Down>/<Enter> select;
-    <Esc> and <C-c> cancel. Stale assignments remain visible but cannot be
-    selected successfully. Leaving the popup or changing tabs cancels it.
-    Selection closes the popup and restores the originating window before
-    loading through the normal lifecycle. Popup selection errors and
-    diagnostics are logged by this UI function. This function does not install
-    a global keymap. Example: >
+    behavior. With no argument, read one key: a mark loads directly, the
+    configured mark_window.keymap.open key opens or focuses the popup, and
+    <Esc> cancels. The popup is a focusable read-only float. <Up>/<Down> move
+    the selection, <Enter> loads it, and the load_prefix followed by a mark
+    loads that mark directly. The configurable delete, undo, change_mark and
+    rename keys manage assignments and sessions. <Esc> and <C-c> cancel.
+    Stale assignments remain visible but cannot be loaded. Leaving the popup or
+    changing tabs cancels it. Selection closes the popup and restores the
+    originating window before loading through the normal lifecycle. Popup
+    selection errors and diagnostics are logged by this UI function. This
+    function does not install a global keymap. Example: >
         vim.keymap.set("n", "<C-q>", require("sess").goto_mark, {
             desc = "Sess: goto mark", silent = true,
         })
@@ -321,10 +336,12 @@ Mark popup configuration                                      *sess-mark-window*
     omitted for border=none.
 
     win_options accepts only cursorline (boolean), winblend (integer 0..100),
-    and winhighlight (string). Defaults are merged defensively, and invalid
-    values or unknown nested fields fail setup without initializing storage.
-    The popup is a private scratch buffer with a minimal floating window;
-    opening it does not write session or mark storage.
+    and winhighlight (string). keymap accepts open, load_prefix, delete, undo,
+    change_mark and rename key specifications. They must be non-empty and must
+    not conflict with one another or the load prefix. Defaults are merged
+    defensively, and invalid values or unknown nested fields fail setup without
+    initializing storage. The popup is a private read-only scratch buffer with
+    a minimal floating window; opening it does not write session or mark storage.
 
 api.session.resolve(target?)                    *sess-api.session.resolve*
     Read-only identity lookup; nil means current. Returns
