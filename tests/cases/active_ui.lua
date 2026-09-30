@@ -5,6 +5,7 @@ local _, _, first = api.session.create(fixture.directory("first"), { name = "fir
 assert(api.session.load(first))
 local _, _, second = api.session.create(fixture.directory("second"), { name = "second" })
 assert(api.session.load(second))
+assert(api.session.set_mark(first, "s"))
 
 local selected
 local closed = false
@@ -60,12 +61,15 @@ local all_finder = finders.generate_active_finder({}, "all")
 local all_headers = session_headers(all_finder.results)
 assert(all_headers[first.id].expanded)
 assert(all_headers[second.id].expanded)
+assert(all_headers[first.id].display:find("@s", 1, true))
 assert(all_finder.results[2].kind == "placeholder")
 
 local current_finder = finders.generate_active_finder({}, "current")
 local current_headers = session_headers(current_finder.results)
 assert(not current_headers[first.id].expanded)
 assert(current_headers[second.id].expanded)
+assert(current_headers[first.id].display:find("○", 1, true))
+assert(current_headers[second.id].display:find("●", 1, true))
 
 local none_finder = finders.generate_active_finder({}, "none")
 local none_headers = session_headers(none_finder.results)
@@ -111,6 +115,10 @@ end
 
 selected = { value = { kind = "placeholder", session_id = first.id } }
 local actions = require("telescope._extensions.sess.actions")
+assert(config.values.mappings.i["<C-b>"] == actions.mark_session)
+assert(config.values.mappings.n["<C-b>"] == actions.mark_session)
+assert(config.values.active_mappings.i["<C-b>"] == actions.mark_session)
+assert(config.values.active_mappings.n["<C-b>"] == actions.mark_session)
 actions.toggle_active(1)
 actions.active_enter(1)
 assert(not closed)

@@ -17,6 +17,18 @@
 ---@field id Sess.SessionId
 ---@field metadata Sess.SessionMetadata
 
+---@alias Sess.Mark string One lowercase ASCII letter or digit.
+
+---@class Sess.MarkEntry
+---@field mark Sess.Mark
+---@field id Sess.SessionId Owner, including a missing or deleted session.
+---@field session Sess.Session?
+---@field stale boolean
+---@field error string?
+
+---@class Sess.SetMarkOpts: Sess.OperationOpts
+---@field replace boolean? Explicit permission to replace an existing owner.
+
 ---@class Sess.AgentTarget
 ---@field bufnr integer Valid at registration time; may disappear later.
 ---@field winid integer? Last known window containing bufnr.
@@ -35,8 +47,11 @@
 ---@field deleted_at Sess.Timestamp
 
 ---@class Sess.Operation
----@field operation "create"|"load"|"save"|"unload"|"delete"|"rename"|"pin"|"restore"
----@field session Sess.Session
+---@field operation "create"|"load"|"save"|"unload"|"delete"|"rename"|"pin"|"restore"|"mark"|"unmark"
+---@field session Sess.Session? Nil when clearing a stale mark.
+---@field mark Sess.Mark? Mark/unmark operations only.
+---@field session_id Sess.SessionId? Mark owner, even when stale.
+---@field previous_id Sess.SessionId? Previous owner on mark replacement.
 ---@field current Sess.Session? Current before a pre-hook, after a post-hook/event.
 
 ---@class Sess.Hooks

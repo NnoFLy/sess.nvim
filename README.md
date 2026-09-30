@@ -47,7 +47,12 @@ require("sess").setup({
 -- Telescope configuration:
 require("telescope").setup({
     extensions = {
-        sess = { active_expand = "all" }, -- all | current | none
+        sess = {
+            active_expand = "all", -- all | current | none
+            -- Override regular or active picker mappings when needed.
+            -- mappings = { i = { ["<C-b>"] = ... } },
+            -- active_mappings = { i = { ["<C-b>"] = ... } },
+        },
     },
 })
 ```
@@ -60,7 +65,9 @@ augroup for user autocmds.
 | Command | Behavior |
 | --- | --- |
 | `:Sess create [path]` | Create a session, or load the existing one for that path |
-| `:Sess load [name/id/path]` | Load or create a session for the target; defaults to current cwd |
+| `:Sess load [name/id/path/@mark]` | Load or create a session for the target; defaults to current cwd |
+| `:Sess mark @mark [target]` | Assign a persistent mark to the current or named session |
+| `:Sess unmark @mark` | Remove a persistent mark |
 | `:Sess save` | Save the current session |
 | `:Sess last` | Return to the previous session, or open the most recently used session after a fresh start |
 | `:Sess unload [name/id/path]` | Close a session's buffers and terminal jobs; defaults to current |
@@ -75,6 +82,10 @@ augroup for user autocmds.
 vim.keymap.set("n", "<M-s>s", "<cmd>Sess save<cr>")
 vim.keymap.set("n", "<M-s>l", "<cmd>Sess list<cr>")
 vim.keymap.set("n", "<leader><C-^>", "<cmd>Sess last<cr>")
+vim.keymap.set("n", "<C-q>", require("sess").goto_mark, {
+    desc = "Sess: goto mark",
+    silent = true,
+})
 ```
 
 ### Switching and saving
@@ -103,6 +114,10 @@ local active = api.state.active()
 local ok, err, sessions, diagnostics = api.session.list()
 local ok, err, deleted, diagnostics = api.session.list_deleted()
 api.session.restore("name-or-id-or-trash-key")
+local ok, err, marked, diagnostics = api.session.get_by_mark("s")
+local ok, err, marks, diagnostics = api.session.list_marks()
+api.session.set_mark("project", "s", { replace = true })
+api.session.clear_mark("s")
 
 -- Agents are process-local and never persisted. Known agent terminal jobs
 -- (for example pi and codex) are detected automatically by :Sess active.
@@ -118,7 +133,17 @@ Mutations return `(ok, err, session, diagnostics)`, with diagnostic strings on s
 
 Listing returns `false` for store-wide failures; corrupt records are skipped with diagnostics, never repaired or deleted automatically. Create/rename refuse to claim uniqueness with damaged metadata. `api.items.get_items()` returns `(items, err, diagnostics)`; UI adapters report diagnostics.
 
-`api.session.get_by_name()` and `get_by_path()` return `(ok, err, session, diagnostics)`. A unique healthy match remains usable when unrelated records are corrupt, while duplicate names or project paths fail with an ambiguity error. Lookup diagnostics are always returned.
+`api.session.get_by_name()` and `get_by_path()` return
+`(ok, err, session, diagnostics)`. A unique healthy match remains usable when
+unrelated records are corrupt, while duplicate names or project paths fail with
+an ambiguity error. Lookup diagnostics are always returned.
+
+Marks are one lowercase ASCII letter or digit, persist in a separate atomic
+registry, and can point to inactive sessions. Stale marks remain visible in
+`list_marks()` until explicitly replaced or removed. The core API never prompts;
+commands and Telescope confirm replacement. `:Sess load @s` resolves through the
+normal load lifecycle. `require("sess").goto_mark()` reads one following key
+when called without an argument, and never installs a mapping automatically.
 
 See [`:help sess-api`](doc/sessionizer.txt) for its contract and failure behavior.
 
@@ -147,11 +172,11 @@ vim.api.nvim_create_autocmd("User", {
 })
 ```
 
-Events: `SessCreated`, `SessLoaded`, `SessSaved`, `SessUnloaded`, `SessDeleted`, `SessRestored`, `SessRenamed`, `SessPinned`.
+Events: `SessCreated`, `SessLoaded`, `SessSaved`, `SessUnloaded`, `SessDeleted`, `SessRestored`, `SessRenamed`, `SessPinned`, `SessMarked`, `SessUnmarked`.
 
 State commits before `after_operation`, then the event fires. Outgoing saves emit `SessSaved` first. Create emits only `SessCreated`; switching doesn't emit `SessUnloaded`. Explicit unload does, as does current-session deletion before `SessDeleted`. Other deletions emit only `SessDeleted`.
 
-Payloads are defensive `{ operation, session, current }` records; `current` may be nil. Hooks/events allow queries but reject recursive mutations. Post-hook/subscriber errors don't undo success. Subscriber execution follows Neovim's autocmd rules: Neovim may display errors, and those exposed through its API or `v:errmsg` become diagnostics.
+Payloads are defensive `{ operation, session, current }` records; `current` may be nil. Mark events also include `mark` and `session_id`, and replacement includes `previous_id`. Unmarking a stale mark may have a nil `session`. Hooks/events allow queries but reject recursive mutations. Post-hook/subscriber errors don't undo success. Subscriber execution follows Neovim's autocmd rules: Neovim may display errors, and those exposed through its API or `v:errmsg` become diagnostics.
 
 ## Telescope
 
@@ -169,8 +194,12 @@ agents. Sessions are expanded by default; configure the Telescope extension's
 `active_expand` option as `"all"`, `"current"`, or `"none"`. `<Tab>`
 expands/collapses the selected group and `<S-Tab>` expands/collapses all groups.
 The picker footer lists these controls and `<Enter>` to switch and focus an
-agent. Empty groups show a non-actionable `no agents` row. It detects known
-agent commands running in terminal buffers, including `pi`, `codex`, `claude`,
+agent. Active picker mappings are configured through `active_mappings`, while
+regular picker mappings use `mappings`. Empty groups show a non-actionable `no agents` row. `<C-b>` prompts for
+a mark on the selected session in both regular and active pickers. Marks are
+shown in a stable leading column on regular rows and on active session
+headers. It detects known agent commands running in terminal buffers, including
+`pi`, `codex`, `claude`,
 and `opencode`; integrations can also register agents through
 `api.agent.register()`. Known terminal agents show a best-effort `idle`,
 `working`, `blocked`, or `unknown` status based on recent terminal output. The
@@ -180,7 +209,11 @@ focuses its existing agent buffer when visible. Agents are runtime-only: this
 picker never starts processes, creates windows, or persists agent data. Commands,
 Telescope and autocommands use the same lifecycle.
 
-`:Sess load` defaults to the current working directory. Path targets beginning with `~/`, `/`, `./`, or `../` load their session or create one. Existing directories are resolved with `fs_realpath`, so symlinked paths share one session identity. Invalid or missing directories are rejected. Creating a session opens the default file explorer in the project root.
+`:Sess load` defaults to the current working directory. `:Sess mark @s` marks
+the current session, `:Sess mark @s project-api` marks a specific session, and
+`:Sess unmark @s` removes it. Use `:Sess load @s` or the optional native
+`<C-q>{mark}` mapping to navigate. Setting a mark and navigating a mark are
+separate actions. Path targets beginning with `~/`, `/`, `./`, or `../` load their session or create one. Existing directories are resolved with `fs_realpath`, so symlinked paths share one session identity. Invalid or missing directories are rejected. Creating a session opens the default file explorer in the project root.
 
 In the Telescope session picker, a path prompt switches to immediate directory completion. `<Tab>` inserts the selected directory and a trailing slash while keeping the picker open. `<Enter>` loads or creates its session. Returning to a non-path prompt restores the normal session finder.
 

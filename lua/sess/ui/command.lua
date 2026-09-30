@@ -12,11 +12,13 @@ local specs = {
     last = { handler = commands.last, max_args = 0 },
     list = { handler = commands.list, max_args = 0 },
     load = { handler = commands.load, max_args = 1, completion = { kind = "session-or-path", arg = 1 } },
+    mark = { handler = commands.mark, max_args = 2, completion = { kind = "mark-target", arg = 1 } },
     pin = { handler = commands.pin, max_args = 1, completion = "session" },
     rename = { handler = commands.rename, max_args = 2, completion = { kind = "session", arg = 1 } },
     restore = { handler = commands.restore, max_args = 1, completion = "deleted-session" },
     save = { handler = commands.save, max_args = 0 },
     unload = { handler = commands.unload, max_args = 1, completion = "session" },
+    unmark = { handler = commands.unmark, max_args = 1, completion = "mark" },
 }
 
 local function keys(t)
@@ -84,6 +86,45 @@ local function session_names()
     return names
 end
 
+local function mark_names()
+    local ok, err, entries = api.session.list_marks()
+    if not ok then
+        log.error(err)
+        return {}
+    end
+    local result = {}
+    for _, entry in ipairs(entries or {}) do
+        result[#result + 1] = "@" .. entry.mark
+    end
+    return result
+end
+
+local function valid_mark_names()
+    local result = {}
+    for code = string.byte("a"), string.byte("z") do
+        result[#result + 1] = "@" .. string.char(code)
+    end
+    for code = string.byte("0"), string.byte("9") do
+        result[#result + 1] = "@" .. string.char(code)
+    end
+    return result
+end
+
+local function mark_targets()
+    local result = mark_names()
+    vim.list_extend(result, session_names())
+    return result
+end
+
+local function count_completed_arguments(rest)
+    local arguments = rest:gsub("\\.", "_")
+    local _, completed = arguments:gsub("%S+", "")
+    if completed > 0 and not arguments:match("%s$") then
+        completed = completed - 1
+    end
+    return completed
+end
+
 local function deleted_session_names()
     if not api.opts.is_setup() then
         return {}
@@ -147,8 +188,20 @@ local function complete(arg_lead, cmdline, cursorpos)
         return {}
     end
 
+    if completion_kind == "mark" or completion_kind == "mark-target" then
+        local completed_args = count_completed_arguments(rest)
+        if completion_kind == "mark-target" and completed_args == 1 then
+            return filter_by_pattern(session_names(), arg_lead:gsub("\\(.)", "%1"))
+        end
+        if completed_args > 0 then
+            return {}
+        end
+        return filter_by_pattern(completion_kind == "mark" and mark_names() or valid_mark_names(), arg_lead)
+    end
+
     if completion_kind == "session-or-path" then
-        if completion_arg ~= 1 then
+        local completed_args = count_completed_arguments(rest)
+        if completed_args > 0 or completion_arg ~= 1 then
             return {}
         end
 
@@ -157,7 +210,7 @@ local function complete(arg_lead, cmdline, cursorpos)
             return path.complete(lead)
         end
 
-        return filter_by_pattern(session_names(), lead)
+        return filter_by_pattern(mark_targets(), lead)
     end
 
     if completion_kind == "session" then

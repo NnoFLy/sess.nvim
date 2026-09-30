@@ -6,7 +6,7 @@ local _, _, b = api.session.create(fixture.directory("b"), { name = "beta" })
 vim.notify = function() end
 require("sess.ui.command").setup()
 
-fixture.equal({ "unload" }, vim.fn.getcompletion("Sess un", "cmdline"))
+fixture.equal({ "unload", "unmark" }, vim.fn.getcompletion("Sess un", "cmdline"))
 fixture.equal({ "alpha", "beta" }, vim.fn.getcompletion("Sess unload ", "cmdline"))
 fixture.equal({ "alpha" }, vim.fn.getcompletion("Sess unload al", "cmdline"))
 fixture.equal({}, vim.fn.getcompletion("Sess unload alpha ", "cmdline"))

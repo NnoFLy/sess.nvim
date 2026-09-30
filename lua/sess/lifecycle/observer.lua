@@ -51,11 +51,13 @@ local events = {
     rename = "SessRenamed",
     pin = "SessPinned",
     restore = "SessRestored",
+    mark = "SessMarked",
+    unmark = "SessUnmarked",
 }
 
 -- State is committed before observers run. Their failures are diagnostics, not
 -- failed operations. The transaction guard remains held through hooks/events.
-function M.finish(operation, item, callbacks, diagnostics)
+function M.finish(operation, item, callbacks, diagnostics, details)
     diagnostics = diagnostics or {}
 
     local payload = {
@@ -63,6 +65,10 @@ function M.finish(operation, item, callbacks, diagnostics)
         session = vim.deepcopy(item),
         current = state.get_current_session(),
     }
+
+    for key, value in pairs(details or {}) do
+        payload[key] = vim.deepcopy(value)
+    end
 
     if callbacks.after_operation then
         local ok, err = pcall(callbacks.after_operation, vim.deepcopy(payload))

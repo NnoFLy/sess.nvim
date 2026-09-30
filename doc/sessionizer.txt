@@ -38,9 +38,18 @@ COMMANDS                                                     *sess-commands*
     With no path, use current cwd.
 
 :Sess load [target]                                          *:Sess-load*
-    Load by id/name/path. Path targets, including the current cwd, load an
-    existing session or create one. Invalid or missing directories are
-    rejected. With no target, use current cwd.
+    Load by id/name/path/@mark. Path targets, including the current cwd, load
+    an existing session or create one. Invalid or missing directories are
+    rejected. With no target, use current cwd. Mark targets are resolved
+    through the normal load lifecycle.
+
+:Sess mark @mark [target]                                     *:Sess-mark*
+    Assign a persistent one-character lowercase ASCII letter or digit mark.
+    The default target is the current session. Replacing an existing mark
+    requires confirmation in the command or picker UI; the API is prompt-free.
+
+:Sess unmark @mark                                           *:Sess-unmark*
+    Remove a mark. Stale marks remain until explicitly unmarked or replaced.
 
 :Sess save                                                   *:Sess-save*
     Snapshot only the current session. No arguments; no implicit creation.
@@ -82,15 +91,18 @@ COMMANDS                                                     *sess-commands*
     Configure Telescope's active_expand option as "all", "current", or "none"
     to change the initial expansion. <Tab> expands/collapses the selected
     group; <S-Tab> expands/collapses all groups; <Enter> switches and focuses.
-    Empty groups show a non-actionable "no agents" row. Known agent commands
+    Empty groups show a non-actionable "no agents" row. <C-b> prompts for a
+    mark on the selected session. Marks appear on active session headers and
+    regular picker rows. Known agent commands
     running in terminal buffers (including pi, codex, claude, and opencode) are
     detected; integrations may also register agents explicitly. Enter loads
     the parent and focuses the selected agent's existing visible buffer. This
     picker is runtime-only; it never starts processes, creates windows, or
     persists agent state.
 
-Tab completion supports subcommands, session names, deleted-session names/ids/keys,
-create paths, and load directory paths. For load, path arguments beginning with
+Tab completion supports subcommands, marks, session names, deleted-session names/ids/keys,
+create paths, and load directory paths. `load` accepts existing `@mark` targets;
+`mark` completes valid marks and session targets independently. For load, path arguments beginning with
 `~/`, `/`, `./`, or `../` complete immediate child directories; later arguments
 are not completed. Command-line escaping is preserved. Corrupt trash records
 are reported and skipped.
@@ -109,7 +121,8 @@ missing or hidden target is a successful operation with an unavailable-target
 diagnostic. Agent records disappear only after a successful unload or delete
 and are never restored from disk.
 
-The session Telescope picker normally shows available sessions. A prompt
+The session Telescope picker normally shows available sessions. <C-b> prompts
+for and assigns a mark to the selected session. A prompt
 beginning with `~/`, `/`, `./`, or `../` switches to immediate directory
 completion and includes a `./` entry for the typed directory. In path mode,
 <Tab> inserts the selected directory with a trailing slash and keeps the
@@ -237,6 +250,32 @@ api.session.rename(target?, name)               *sess-api.session.rename*
 api.session.toggle_pin(target?)                 *sess-api.session.toggle_pin*
     Toggle pin; default target is current.
 
+api.session.get_by_mark(mark)                    *sess-api.session.get_by_mark*
+    Resolve a mark without changing editor state. Returns
+    (ok, err, session, diagnostics). Missing and stale marks fail without
+    deleting the registry entry.
+
+api.session.list_marks()                         *sess-api.session.list_marks*
+    Return (ok, err, entries, diagnostics). Each entry contains mark, id,
+    session, stale, and optional error fields. Stale entries are preserved.
+
+api.session.set_mark(target, mark, opts?)         *sess-api.session.set_mark*
+    Assign a mark to a catalog-resolved session. opts.replace must be true to
+    replace an owner. The operation is atomic, prompt-free, and returns
+    (ok, err, session, diagnostics).
+
+api.session.clear_mark(mark)                     *sess-api.session.clear_mark*
+    Atomically remove a mark and return (ok, err, session, diagnostics).
+
+require("sess").goto_mark(mark?)                 *sess.goto_mark*
+    Load a mark. With no argument, read one following key using getcharstr;
+    <Esc>, interrupted input, invalid input, and multi-character input are
+    harmless. This function does not install a keymap. Example: >
+        vim.keymap.set("n", "<C-q>", require("sess").goto_mark, {
+            desc = "Sess: goto mark", silent = true,
+        })
+<
+
 api.session.resolve(target?)                    *sess-api.session.resolve*
     Read-only identity lookup; nil means current. Returns
     (ok, err, session, reason, diagnostics). Failure reasons may distinguish
@@ -288,17 +327,19 @@ Throw to abort. Its context contains { operation, session, current }, where
 current is the outgoing session or nil. Preconditions are rechecked afterward.
 Hooks may themselves change the editor; those changes are not transactional.
 
-after_operation runs after successful create/load/save/unload/delete/restore/rename/pin,
+after_operation runs after successful create/load/save/unload/delete/restore/rename/pin/mark/unmark,
 with committed state. Throwing only adds a diagnostic. Context records are
 copies. The transition guard remains held through observers; recursive mutations
 return an in-progress error. Read-only queries remain available.
 
 User events:                                                   *sess-events*
     SessCreated SessLoaded SessSaved SessUnloaded SessDeleted SessRestored SessRenamed
-    SessPinned
+    SessPinned SessMarked SessUnmarked
 
 Payload event.data = { operation, session, current }. operation is lowercase
-create/load/save/unload/delete/restore/rename/pin. current may be nil. Each payload is
+create/load/save/unload/delete/restore/rename/pin/mark/unmark. Mark events also
+include mark and session_id; replacement includes previous_id. current may be nil,
+and unmarking a stale mark may have a nil session. Each payload is
 independent of owned runtime state.
 
 Ordering: publish state, call after_operation, emit User event. Outgoing saves
@@ -368,8 +409,9 @@ Install telescope.nvim and plenary.nvim, then: >
     require("telescope").load_extension("sess")
 <
 The active_expand option accepts "all", "current", or "none". Unsupported
-values are rejected during Telescope setup. The active picker uses tree-style
-session/agent rows and a footer showing <Tab> expand/collapse, <S-Tab>
+values are rejected during Telescope setup. Regular picker mappings use
+`mappings`; active picker mappings use `active_mappings`. The active picker uses
+tree-style session/agent rows and a footer showing <Tab> expand/collapse, <S-Tab>
 expand/collapse all, and <Enter> switch/focus controls. Empty expanded sessions
 show a non-actionable "no agents" row. Manual expansion changes are preserved
 while the picker is open and across status refreshes.

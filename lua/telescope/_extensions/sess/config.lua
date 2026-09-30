@@ -23,14 +23,30 @@ config.values = {
             ["<C-u>"] = actions.unload_session,
             ["<Tab>"] = actions.toggle_pin_session,
             ["<C-r>"] = actions.rename_session,
+            ["<C-b>"] = actions.mark_session,
             ["<CR>"] = actions.enter,
         },
         ["n"] = {
             ["dd"] = actions.delete_session,
             ["uu"] = actions.unload_session,
             ["rr"] = actions.rename_session,
+            ["<C-b>"] = actions.mark_session,
             ["<Tab>"] = actions.toggle_pin_session,
             ["<CR>"] = actions.enter,
+        },
+    },
+    active_mappings = {
+        ["i"] = {
+            ["<Tab>"] = actions.toggle_active,
+            ["<S-Tab>"] = actions.toggle_all_active,
+            ["<CR>"] = actions.active_enter,
+            ["<C-b>"] = actions.mark_session,
+        },
+        ["n"] = {
+            ["<Tab>"] = actions.toggle_active,
+            ["<S-Tab>"] = actions.toggle_all_active,
+            ["<CR>"] = actions.active_enter,
+            ["<C-b>"] = actions.mark_session,
         },
     },
 }

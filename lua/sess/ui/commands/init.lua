@@ -3,6 +3,7 @@ return {
     create = require("sess.ui.commands.create"),
     delete = require("sess.ui.commands.delete"),
     last = require("sess.ui.commands.last"),
+    mark = require("sess.ui.commands.mark"),
     list = require("sess.ui.commands.list"),
     load = require("sess.ui.commands.load"),
     pin = require("sess.ui.commands.pin"),
@@ -10,4 +11,5 @@ return {
     restore = require("sess.ui.commands.restore"),
     save = require("sess.ui.commands.save"),
     unload = require("sess.ui.commands.unload"),
+    unmark = require("sess.ui.commands.unmark"),
 }

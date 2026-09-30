@@ -36,6 +36,23 @@ local function pad(value, width)
     return value .. string.rep(" ", math.max(0, width - vim.fn.strdisplaywidth(value)))
 end
 
+local function mark_columns()
+    local ok, err, entries, diagnostics = api.session.list_marks()
+    if not ok then
+        log.warn(err)
+    end
+    log.diagnostics(diagnostics)
+    local by_id, width = {}, 2
+    for _, entry in ipairs(entries or {}) do
+        if not entry.stale then
+            local marks = by_id[entry.id]
+            by_id[entry.id] = marks and (marks .. " @" .. entry.mark) or ("@" .. entry.mark)
+            width = math.max(width, vim.fn.strdisplaywidth(by_id[entry.id]))
+        end
+    end
+    return by_id, width
+end
+
 local function default_expanded(session_id, current_id, active_expand)
     if active_expand == "all" then
         return true
@@ -53,11 +70,16 @@ end
 ---@param expanded_by_id table<string, boolean>
 ---@param current_id string?
 ---@param focused_by_id table<string, string>?
+---@param marks_by_id table<string, string>?
 ---@return table[]
-function M.build_active_entries(sessions, agents_by_id, expanded_by_id, current_id, focused_by_id)
+function M.build_active_entries(sessions, agents_by_id, expanded_by_id, current_id, focused_by_id, marks_by_id)
     expanded_by_id = expanded_by_id or {}
+    marks_by_id = marks_by_id or {}
     local entries = {}
-    local name_width, status_width = 0, 0
+    local name_width, status_width, mark_width = 0, 0, 2
+    for _, mark in pairs(marks_by_id) do
+        mark_width = math.max(mark_width, vim.fn.strdisplaywidth(mark))
+    end
     for _, session in ipairs(sessions or {}) do
         for _, agent in ipairs(agents_by_id[session.id] or {}) do
             name_width = math.max(name_width, vim.fn.strdisplaywidth(agent.name))
@@ -78,17 +100,21 @@ function M.build_active_entries(sessions, agents_by_id, expanded_by_id, current_
                 status,
             }, " ")
         end
+        local mark = marks_by_id[session.id] or ""
+        local current_marker = current_id == session.id and "● " or "○ "
         entries[#entries + 1] = {
             kind = "session",
             session_id = session.id,
             session = vim.deepcopy(session),
             expanded = expanded,
             display = (expanded and "▾ " or "▸ ")
-                .. (current_id == session.id and "● " or "  ")
+                .. current_marker
+                .. pad(mark, mark_width) .. " "
                 .. session.metadata.name
                 .. "  "
                 .. session.metadata.cwd,
             ordinal = table.concat({
+                mark,
                 session.metadata.name,
                 session.metadata.cwd,
                 table.concat(searchable, " "),
@@ -126,6 +152,7 @@ function M.build_active_entries(sessions, agents_by_id, expanded_by_id, current_
                             info
                         ),
                         ordinal = table.concat({
+                            marks_by_id[session.id] or "",
                             session.metadata.name,
                             session.metadata.cwd,
                             agent.id,
@@ -151,6 +178,8 @@ function M.generate_active_finder(expanded_by_id, active_expand)
             expanded_by_id[session.id] = default_expanded(session.id, current and current.id, active_expand)
         end
     end
+    local marks_by_id = mark_columns()
+
     local agents, focused = {}, {}
     for _, session in ipairs(sessions) do
         local ok, err, list, diagnostics = api.agent.list(session.id)
@@ -160,7 +189,7 @@ function M.generate_active_finder(expanded_by_id, active_expand)
         local _, _, focused_agent = api.agent.focused(session.id)
         focused[session.id] = focused_agent and focused_agent.id or nil
     end
-    local results = M.build_active_entries(sessions, agents, expanded_by_id, current and current.id, focused)
+    local results = M.build_active_entries(sessions, agents, expanded_by_id, current and current.id, focused, marks_by_id)
     return finders.new_table({ results = results, entry_maker = function(entry)
         return { value = entry, display = entry.display, ordinal = entry.ordinal }
     end }), results
@@ -261,6 +290,8 @@ function M.generate_new_finder()
         log.warn(diagnostic)
     end
 
+    local mark_by_id, mark_width = mark_columns()
+
     return finders.new_table({
         results = results,
 
@@ -296,19 +327,20 @@ function M.generate_new_finder()
             end
 
             local display = "    " .. session.metadata.name .. "  " .. session.metadata.cwd
+            display = pad(mark_by_id[session.id] or "", mark_width) .. " " .. display
             if session.metadata.pinned then
-                display = replace_char(display, 1, "P")
+                display = replace_char(display, mark_width + 2, "P")
             end
 
             for _, s in pairs(state.active()) do
                 if s.id == session.id then
-                    display = replace_char(display, 2, "A")
+                    display = replace_char(display, mark_width + 3, "A")
                 end
             end
 
             local previous_session = state.prev()
             if previous_session and session.id == previous_session.id then
-                display = replace_char(display, 3, "L")
+                display = replace_char(display, mark_width + 4, "L")
             end
 
             local current_session = state.current()
@@ -320,7 +352,11 @@ function M.generate_new_finder()
             return {
                 value = session,
                 display = display,
-                ordinal = session.metadata.name .. " " .. session.metadata.cwd,
+                ordinal = table.concat({
+                    mark_by_id[session.id] or "",
+                    session.metadata.name,
+                    session.metadata.cwd,
+                }, " "),
             }
         end,
     })

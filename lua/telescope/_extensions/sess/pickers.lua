@@ -7,6 +7,14 @@ local actions = require("telescope._extensions.sess.actions")
 local path = require("sess.ui.path")
 local state = require("sess.api").state
 
+local function apply_mappings(map, mappings)
+    for mode, mode_mappings in pairs(mappings or {}) do
+        for key, action in pairs(mode_mappings) do
+            map(mode, key, action)
+        end
+    end
+end
+
 local function make_picker(opts, restore_picker)
     opts = opts or {}
 
@@ -105,12 +113,7 @@ function M.active(opts)
     end
     picker_opts.mappings = nil
     picker_opts.attach_mappings = function(_, map)
-        map("i", "<Tab>", actions.toggle_active)
-        map("n", "<Tab>", actions.toggle_active)
-        map("i", "<S-Tab>", actions.toggle_all_active)
-        map("n", "<S-Tab>", actions.toggle_all_active)
-        map("i", "<CR>", actions.active_enter)
-        map("n", "<CR>", actions.active_enter)
+        apply_mappings(map, config.values.active_mappings)
         return true
     end
     picker_opts = vim.tbl_deep_extend("force", picker_opts, opts)

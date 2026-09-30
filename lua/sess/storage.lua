@@ -343,6 +343,65 @@ function M.root()
     return root_path
 end
 
+-- Marks are a separate registry: reassignment never rewrites session records.
+function M.validate_mark(mark)
+    if type(mark) ~= "string" or not mark:match("^[a-z0-9]$") then
+        return false, "mark must be one lowercase ASCII letter or digit"
+    end
+    return true
+end
+
+local function validate_marks(data)
+    if type(data) ~= "table" or data.version ~= 1 then
+        return nil, "unsupported mark registry version"
+    end
+    if type(data.marks) ~= "table" then
+        return nil, "mark registry must contain a marks object"
+    end
+    for mark, id in pairs(data.marks) do
+        local valid, err = M.validate_mark(mark)
+        if not valid then
+            return nil, "invalid mark registry: " .. err
+        end
+        valid, err = validate_id(id)
+        if not valid then
+            return nil, "invalid mark registry: " .. err
+        end
+    end
+    return data.marks
+end
+
+function M.read_marks()
+    assert_initialized()
+    local path = join(root_path, "marks.json")
+    local stat, err, code = vim.uv.fs_stat(path)
+    if not stat then
+        if code == "ENOENT" then
+            return {}
+        end
+        return nil, err
+    end
+    local data, read_err = read_json(path)
+    if not data then
+        return nil, read_err
+    end
+    return validate_marks(data)
+end
+
+function M.write_marks(marks)
+    assert_initialized()
+    local data = { version = 1, marks = marks }
+    local valid, err = validate_marks(data)
+    if not valid then
+        return false, err
+    end
+    -- Encode an empty registry as an object, not a JSON array.
+    if next(marks) == nil then
+        data.marks = vim.empty_dict()
+    end
+    return write_json(join(root_path, "marks.json"), data)
+end
+
 -- Session discovery
 
 ---@return Sess.SessionId[], string?

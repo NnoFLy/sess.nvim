@@ -7,6 +7,7 @@ local api = require("sess.api")
 local log = require("sess.log")
 local finders = require("telescope._extensions.sess.finders")
 local load_or_create = require("sess.ui.load_or_create")
+local marks = require("sess.ui.marks")
 
 ---@param prompt_bufnr number
 ---@return nil
@@ -215,6 +216,36 @@ end
 
 ---@param prompt_bufnr number
 ---@return nil
+function M.mark_session(prompt_bufnr)
+    local value = selected_value()
+    local is_active = value and value.kind ~= nil
+    local session_id = value and (value.id or value.session_id)
+    if not session_id then
+        return
+    end
+    if is_active and value.kind ~= "session" and value.kind ~= "agent" then
+        return
+    end
+    vim.ui.input({ prompt = "Mark (a-z, 0-9): " }, function(input)
+        local mark, parse_err = marks.parse(input or "")
+        if not mark then
+            log.error(parse_err)
+            return
+        end
+        local ok, err, _, diagnostics = marks.assign(session_id, mark)
+        if not ok then
+            log.error(err)
+            return
+        end
+        log.diagnostics(diagnostics)
+        if is_active then
+            refresh_active(prompt_bufnr, action_state.get_current_picker(prompt_bufnr)._sess_expanded or {})
+        else
+            refresh(prompt_bufnr)
+        end
+    end)
+end
+
 function M.toggle_pin_session(prompt_bufnr)
     local value = selected_value()
     if not value or not value.id then
@@ -233,6 +264,32 @@ end
 
 ---@param prompt_bufnr number
 ---@return nil
+function M.unmark_session(prompt_bufnr)
+    local value = selected_value()
+    if not value or not value.id then
+        return
+    end
+    local _, _, entries = api.session.list_marks()
+    local mark
+    for _, entry in ipairs(entries or {}) do
+        if entry.id == value.id then
+            mark = entry.mark
+            break
+        end
+    end
+    if not mark then
+        return
+    end
+
+    local ok, err, _, diagnostics = api.session.clear_mark(mark)
+    if not ok then
+        log.error(err)
+    else
+        log.diagnostics(diagnostics)
+    end
+    refresh(prompt_bufnr)
+end
+
 function M.rename_session(prompt_bufnr)
     local value = selected_value()
     if not value or not value.id then

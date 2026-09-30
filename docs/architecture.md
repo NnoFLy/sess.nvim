@@ -25,6 +25,8 @@ User commands / Telescope / Lua API
          |      state      |
          v        |        v
        Storage <- views <- snapshots
+          ^
+          marks registry
 ```
 
 ### Public entry points
@@ -33,7 +35,7 @@ The setup function, Lua API, user commands, User events, and optional Telescope 
 
 ### Session catalog
 
-The catalog owns session records and metadata operations such as discovery, lookup, creation, renaming, pinning, deletion, and restoration. It validates names, IDs, paths, uniqueness, and metadata before lifecycle code changes editor state.
+The catalog owns session records and metadata operations such as discovery, lookup, creation, renaming, pinning, deletion, restoration, and persistent mark lookup. It validates names, IDs, paths, uniqueness, metadata, and mark registry entries before lifecycle code changes editor state. Marks are independent of snapshots and agent runtime state.
 
 ### Lifecycle layers
 
@@ -43,7 +45,7 @@ The lifecycle API is a thin facade over focused modules under `lua/sess/lifecycl
 - `observer` validates hooks, runs pre-transition hooks, and publishes post-operation hooks/events;
 - `transaction` owns the transition guard, exception boundary, and rollback of reversible editor changes;
 - `save` coordinates snapshots, usage metadata, outgoing saves, and save diagnostics;
-- `create`, `load`, `unload`, and `mutations` own operation-specific catalog/editor/runtime mutations.
+- `create`, `load`, `unload`, `mutations`, and `marks` own operation-specific catalog/editor/runtime mutations. Mark operations only update the registry and publish observers; loading a mark delegates to `load`.
 
 Operation modules follow this ordering:
 
@@ -73,7 +75,7 @@ The agent API validates registrations and delegates focus to the editor adapter.
 
 ### Storage
 
-Storage owns the on-disk representation, including metadata, snapshots, session directories, and deleted-session entries. It is responsible for:
+Storage owns the on-disk representation, including metadata, snapshots, session directories, deleted-session entries, and the atomically-written `marks.json` registry. It is responsible for:
 
 - validating filesystem-derived identifiers;
 - creating private directories;
@@ -81,6 +83,7 @@ Storage owns the on-disk representation, including metadata, snapshots, session 
 - atomic metadata and snapshot writes;
 - listing records with diagnostics;
 - moving deleted records to reversible trash;
+- validating and atomically replacing the independent mark registry;
 - refusing unsafe paths and malformed records.
 
 Storage failures must be visible to callers. Corrupt records are skipped with diagnostics and are not automatically repaired or removed.

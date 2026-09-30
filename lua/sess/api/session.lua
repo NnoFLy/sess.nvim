@@ -6,6 +6,7 @@ local load = require("sess.lifecycle.load")
 local mutations = require("sess.lifecycle.mutations")
 local unload = require("sess.lifecycle.unload")
 local save = require("sess.lifecycle.save")
+local marks = require("sess.lifecycle.marks")
 
 local M = {}
 
@@ -20,6 +21,8 @@ M.delete = transaction.wrap(mutations.delete, true)
 M.restore = transaction.wrap(mutations.restore, true)
 M.rename = transaction.wrap(mutations.rename, true)
 M.toggle_pin = transaction.wrap(mutations.toggle_pin, true)
+M.set_mark = transaction.wrap(marks.set, true)
+M.clear_mark = transaction.wrap(marks.clear, true)
 
 local function query(operation)
     return transaction.wrap(operation, false)
@@ -33,6 +36,21 @@ end)
 M.list = query(function()
     local items, err, diagnostics = catalog.list()
     return err == nil, err, items, diagnostics
+end)
+
+M.get = query(function(target)
+    local item, err, _, diagnostics = catalog.resolve(target)
+    return item ~= nil, err, item, diagnostics or {}
+end)
+
+M.get_by_mark = query(function(mark)
+    local item, err, diagnostics = catalog.get_by_mark(mark)
+    return item ~= nil, err, item, diagnostics
+end)
+
+M.list_marks = query(function()
+    local entries, err, diagnostics = catalog.list_marks()
+    return err == nil, err, entries, diagnostics
 end)
 
 M.list_deleted = query(function()

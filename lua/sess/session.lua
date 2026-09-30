@@ -436,6 +436,59 @@ function M.restore(key)
     return { id = entry.id, metadata = entry.metadata }
 end
 
+-- Stale owners stay queryable until explicitly replaced or unmarked.
+local function stale_mark_error(mark, id, err)
+    return "stale mark @" .. mark .. ": " .. (err or ("session not found: " .. id))
+end
+
+function M.list_marks()
+    local marks, err = storage.read_marks()
+    if not marks then
+        return {}, err, {}
+    end
+    local entries, diagnostics = {}, {}
+    for mark, id in pairs(marks) do
+        local item, get_err = M.get(id)
+        local stale_err
+        if not item then
+            stale_err = stale_mark_error(mark, id, get_err)
+            diagnostics[#diagnostics + 1] = stale_err
+        end
+        entries[#entries + 1] = {
+            mark = mark,
+            id = id,
+            session = item,
+            stale = not item,
+            error = stale_err,
+        }
+    end
+    table.sort(entries, function(a, b)
+        return a.mark < b.mark
+    end)
+    table.sort(diagnostics)
+    return entries, nil, diagnostics
+end
+
+function M.get_by_mark(mark)
+    local valid, err = storage.validate_mark(mark)
+    if not valid then
+        return nil, err, {}
+    end
+    local marks, read_err = storage.read_marks()
+    if not marks then
+        return nil, read_err, {}
+    end
+    local id = marks[mark]
+    if not id then
+        return nil, "mark not found: @" .. mark, {}
+    end
+    local item, get_err = M.get(id)
+    if not item then
+        return nil, stale_mark_error(mark, id, get_err), {}
+    end
+    return item, nil, {}
+end
+
 -- Resolve identity without editor side effects. Never trust caller metadata.
 function M.resolve(target)
     if type(target) == "table" then
@@ -456,6 +509,14 @@ function M.resolve(target)
     end
 
     target = vim.trim(target)
+    if target:sub(1, 1) == "@" then
+        local item, err, diagnostics = M.get_by_mark(target:sub(2))
+        local reason
+        if not item then
+            reason = "mark"
+        end
+        return item, err, reason, diagnostics
+    end
 
     local items, err, diagnostics = M.list()
     if err then

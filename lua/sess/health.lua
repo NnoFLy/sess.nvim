@@ -27,6 +27,13 @@ function M.check()
         end
     end
 
+    local mark_registry, mark_err = storage.read_marks()
+    if mark_err then
+        health.error("Mark registry read failed: " .. mark_err)
+    else
+        health.ok("Mark registry: " .. tostring(vim.tbl_count(mark_registry)) .. " marks")
+    end
+
     local items, err, diagnostics = require("sess.session").list()
     if err then
         health.error("Store read failed: " .. err)
@@ -35,6 +42,11 @@ function M.check()
 
     for _, diagnostic in ipairs(diagnostics) do
         health.error(diagnostic)
+    end
+
+    local _, _, mark_diagnostics = require("sess.session").list_marks()
+    for _, diagnostic in ipairs(mark_diagnostics or {}) do
+        health.warn(diagnostic)
     end
 
     for _, item in ipairs(items) do
