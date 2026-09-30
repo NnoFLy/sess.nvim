@@ -57,20 +57,40 @@ function M.report(ok, err, diagnostics)
     return ok
 end
 
-function M.goto_mark(value)
+local function read_mark(value)
     if value == nil then
-        local called, key = pcall(vim.fn.getcharstr)
-        if not called then
-            return false
+        local ok, key = pcall(vim.fn.getcharstr)
+        if not ok then
+            return nil
         end
         value = key
     end
     if value == "\27" then
-        return false
+        return nil
     end
     local mark, err = M.parse(value)
     if not mark then
         log.error(err)
+    end
+    return mark
+end
+
+function M.set_mark(value)
+    local mark = read_mark(value)
+    if not mark then
+        return false
+    end
+    local ok, assigned, assign_err, _, diagnostics = pcall(M.assign, nil, mark)
+    if not ok then
+        log.error(tostring(assigned))
+        return false
+    end
+    return M.report(assigned, assign_err, diagnostics)
+end
+
+function M.goto_mark(value)
+    local mark = read_mark(value)
+    if not mark then
         return false
     end
     local called, ok, load_err, _, diagnostics = pcall(api.session.load, "@" .. mark)

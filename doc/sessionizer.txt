@@ -267,6 +267,17 @@ api.session.set_mark(target, mark, opts?)         *sess-api.session.set_mark*
 api.session.clear_mark(mark)                     *sess-api.session.clear_mark*
     Atomically remove a mark and return (ok, err, session, diagnostics).
 
+require("sess").set_mark(mark?)                  *sess.set_mark*
+    Assign a mark to the current session. With no argument, read one
+    following key using getcharstr; <Esc>, interrupted input, invalid input,
+    and multi-character input are harmless. Existing marks require
+    confirmation before replacement. This function does not install a
+    keymap. Example: >
+        vim.keymap.set("n", "<C-q><C-q>", require("sess").set_mark, {
+            desc = "Sess: set mark", silent = true,
+        })
+<
+
 require("sess").goto_mark(mark?)                 *sess.goto_mark*
     Load a mark. With no argument, read one following key using getcharstr;
     <Esc>, interrupted input, invalid input, and multi-character input are

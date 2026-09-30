@@ -59,6 +59,13 @@ vim.notify = function() end
 assert(not require("sess").goto_mark("xy"))
 vim.notify = notify
 
+vim.fn.getcharstr = function() return "m" end
+assert(require("sess").set_mark())
+vim.fn.getcharstr = getcharstr
+local marked_current_ok, marked_current_err, marked_current = api.session.get_by_mark("m")
+assert(marked_current_ok, marked_current_err)
+fixture.equal(first.id, marked_current.id)
+
 local events = {}
 vim.api.nvim_create_autocmd("User", {
     pattern = { "SessMarked", "SessUnmarked" },

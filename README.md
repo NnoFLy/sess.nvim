@@ -86,6 +86,10 @@ vim.keymap.set("n", "<C-q>", require("sess").goto_mark, {
     desc = "Sess: goto mark",
     silent = true,
 })
+vim.keymap.set("n", "<C-q><C-q>", require("sess").set_mark, {
+    desc = "Sess: set mark",
+    silent = true,
+})
 ```
 
 ### Switching and saving
@@ -144,6 +148,9 @@ registry, and can point to inactive sessions. Stale marks remain visible in
 commands and Telescope confirm replacement. `:Sess load @s` resolves through the
 normal load lifecycle. `require("sess").goto_mark()` reads one following key
 when called without an argument, and never installs a mapping automatically.
+`require("sess").set_mark()` likewise reads one following key, assigns it to
+the current session, and confirms before replacement. Neither function installs a
+mapping automatically.
 
 See [`:help sess-api`](doc/sessionizer.txt) for its contract and failure behavior.
 
@@ -211,9 +218,9 @@ Telescope and autocommands use the same lifecycle.
 
 `:Sess load` defaults to the current working directory. `:Sess mark @s` marks
 the current session, `:Sess mark @s project-api` marks a specific session, and
-`:Sess unmark @s` removes it. Use `:Sess load @s` or the optional native
-`<C-q>{mark}` mapping to navigate. Setting a mark and navigating a mark are
-separate actions. Path targets beginning with `~/`, `/`, `./`, or `../` load their session or create one. Existing directories are resolved with `fs_realpath`, so symlinked paths share one session identity. Invalid or missing directories are rejected. Creating a session opens the default file explorer in the project root.
+`:Sess unmark @s` removes it. Use `:Sess load @s`, the optional native
+`<C-q>{mark}` mapping to navigate, or `<C-q><C-q>{mark}` to set a mark on the
+current session. Setting a mark and navigating a mark are separate actions. Path targets beginning with `~/`, `/`, `./`, or `../` load their session or create one. Existing directories are resolved with `fs_realpath`, so symlinked paths share one session identity. Invalid or missing directories are rejected. Creating a session opens the default file explorer in the project root.
 
 In the Telescope session picker, a path prompt switches to immediate directory completion. `<Tab>` inserts the selected directory and a trailing slash while keeping the picker open. `<Enter>` loads or creates its session. Returning to a non-path prompt restores the normal session finder.
 
