@@ -84,6 +84,16 @@
 ---@field cwd string? Internal catalog only; public create accepts cwd as its first argument.
 ---@field id Sess.SessionId?
 
+---@class Sess.MarkWindowOptions
+---@field position string
+---@field width integer
+---@field height integer
+---@field margin integer
+---@field border string
+---@field title string
+---@field title_pos "left"|"center"|"right"
+---@field win_options { cursorline: boolean, winblend: integer, winhighlight: string }
+
 ---@class Sess.Opts
 ---@field paths string[]
 ---@field log_level Sess.log_level
@@ -92,3 +102,4 @@
 ---@field exclude_filetypes string[]
 ---@field hooks Sess.Hooks
 ---@field store_path Sess.DBPath
+---@field mark_window Sess.MarkWindowOptions

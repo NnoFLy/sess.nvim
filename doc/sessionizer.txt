@@ -21,6 +21,20 @@ setup() returns (ok, err) and logs failures. Call once. Unknown options fail. >
         log_level = "info", -- debug | info | warn | error
         store_path = vim.fn.stdpath("data") .. "/sess.nvim",
         hooks = {},
+        mark_window = {
+            position = "right_bottom",
+            width = 48,
+            height = 10,
+            margin = 1,
+            border = "rounded",
+            title = " Marks ",
+            title_pos = "center",
+            win_options = {
+                cursorline = true,
+                winblend = 0,
+                winhighlight = "",
+            },
+        },
     })
 <
 smart_auto_load loads/creates a session for cwd when Neovim starts without
@@ -279,14 +293,38 @@ require("sess").set_mark(mark?)                  *sess.set_mark*
 <
 
 require("sess").goto_mark(mark?)                 *sess.goto_mark*
-    Load a mark. A missing mark is assigned to the current session and reported
-    to the user. With no argument, read one following key using getcharstr;
-    <Esc>, interrupted input, invalid input, and multi-character input are
-    harmless. This function does not install a keymap. Example: >
+    With an explicit mark, load it directly. A missing mark is assigned to the
+    current session and reported to the user, preserving the direct-navigation
+    behavior. With no argument, open or focus the assigned-mark popup and return
+    whether that operation succeeded. The no-argument call is asynchronous: its
+    return value does not describe a later selection. The popup is a
+    non-focusable float. Assigned letters/digits and <Up>/<Down>/<Enter> select;
+    <Esc> and <C-c> cancel. Stale assignments remain visible but cannot be
+    selected successfully. Leaving the popup or changing tabs cancels it.
+    Selection closes the popup and restores the originating window before
+    loading through the normal lifecycle. Popup selection errors and
+    diagnostics are logged by this UI function. This function does not install
+    a global keymap. Example: >
         vim.keymap.set("n", "<C-q>", require("sess").goto_mark, {
             desc = "Sess: goto mark", silent = true,
         })
 <
+
+Mark popup configuration                                      *sess-mark-window*
+    mark_window is validated before storage or managed autocommands are
+    initialized. It accepts position values left_top, center_top, right_top,
+    left_center, center, right_center, left_bottom, center_bottom, and
+    right_bottom. width and height are positive finite integers describing
+    content cells/rows; margin is a nonnegative integer. The named borders
+    none, single, double, rounded, solid, and shadow are supported. title must
+    be single-line text and title_pos is left, center, or right. A title is
+    omitted for border=none.
+
+    win_options accepts only cursorline (boolean), winblend (integer 0..100),
+    and winhighlight (string). Defaults are merged defensively, and invalid
+    values or unknown nested fields fail setup without initializing storage.
+    The popup is a private scratch buffer with a minimal floating window;
+    opening it does not write session or mark storage.
 
 api.session.resolve(target?)                    *sess-api.session.resolve*
     Read-only identity lookup; nil means current. Returns

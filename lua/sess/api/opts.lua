@@ -1,5 +1,7 @@
 local M = {}
 
+local window = require("sess.ui.window")
+
 local loaded = false
 local configured
 
@@ -11,6 +13,7 @@ local defaults = {
     exclude_filetypes = { "gitcommit" },
     store_path = vim.fn.stdpath("data") .. "/sess.nvim",
     hooks = {},
+    mark_window = window.defaults(),
 }
 
 function M.validate_hooks(hooks)
@@ -46,7 +49,16 @@ function M.setup(user_opts)
         end
     end
 
-    local candidate = vim.tbl_deep_extend("force", vim.deepcopy(defaults), user_opts or {})
+    local ok, candidate =
+        pcall(vim.tbl_deep_extend, "force", vim.deepcopy(defaults), user_opts or {})
+    if not ok then
+        return false, tostring(candidate)
+    end
+
+    local valid_window, window_err = window.validate(candidate.mark_window)
+    if not valid_window then
+        return false, window_err
+    end
 
     for _, name in ipairs({ "paths", "exclude_filetypes" }) do
         if type(candidate[name]) ~= "table" or not vim.islist(candidate[name]) then

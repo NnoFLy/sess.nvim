@@ -98,6 +98,17 @@ Storage failures must be visible to callers. Corrupt records are skipped with di
 
 Commands and Telescope provide input, target selection, confirmation, notifications, and presentation. They should call the shared API/lifecycle implementation so command and picker behavior remain consistent. The UI load-or-create helper validates a directory, then delegates to `api.session.load()` or `api.session.create()` without changing the low-level API contract. The active picker reads one `api.active.snapshot()` and only formats rows; it does not compose marks, agents, focus, or diagnostics. Command completion and Telescope share read-only directory enumeration.
 
+The mark popup has two private UI owners. `ui/window.lua` validates its
+supported floating-window options, computes editor-relative geometry, and owns
+only the scratch buffer and float. It clamps the full bordered
+rectangle to the usable editor area and exposes update/close operations for
+resize and failure cleanup. It does not resolve sessions or run lifecycle
+operations. `ui/marks.lua` owns the one active popup, origin focus, assigned-mark
+listing, buffer-local mappings, cancellation, and close-before-load ordering.
+It resolves the selected mark again through the API rather than trusting the
+rendered session record. Popup resources are never persisted and are excluded
+from session/editor layout ownership.
+
 ## Operation semantics
 
 ### Save

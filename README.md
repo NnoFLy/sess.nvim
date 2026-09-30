@@ -42,6 +42,20 @@ require("sess").setup({
     log_level = "info", -- debug | info | warn | error
     store_path = vim.fn.stdpath("data") .. "/sess.nvim",
     hooks = {}, -- optional before_transition and after_operation callbacks
+    mark_window = {
+        position = "right_bottom", -- left_top, center_top, right_top, etc.
+        width = 48,
+        height = 10,
+        margin = 1,
+        border = "rounded", -- none | single | double | rounded | solid | shadow
+        title = " Marks ",
+        title_pos = "center",
+        win_options = {
+            cursorline = true,
+            winblend = 0,
+            winhighlight = "",
+        },
+    },
 })
 
 -- Telescope configuration:
@@ -146,11 +160,20 @@ Marks are one lowercase ASCII letter or digit, persist in a separate atomic
 registry, and can point to inactive sessions. Stale marks remain visible in
 `list_marks()` until explicitly replaced or removed. The core API never prompts;
 commands and Telescope confirm replacement. `:Sess load @s` resolves through the
-normal load lifecycle. `require("sess").goto_mark()` reads one following key
-when called without an argument and assigns missing marks to the current
-session, reporting the new mark. `require("sess").set_mark()` likewise reads
-one following key, assigns it to the current session, and confirms before
-replacement. Neither function installs a mapping automatically.
+normal load lifecycle. `require("sess").goto_mark("s")` loads a mark directly;
+with no argument it opens or focuses an assigned-mark popup and returns whether
+that operation succeeded. The popup is a non-focusable float, never creates
+marks, shows stale assignments as unavailable, and can be cancelled with `<Esc>`
+or `<C-c>`. `require("sess").set_mark()`
+continues to read one following key when called without an argument, assigns it
+to the current session, and confirms before replacement. Neither function
+installs a global mapping automatically.
+
+The mark popup supports the nine positions `left_top`, `center_top`,
+`right_top`, `left_center`, `center`, `right_center`, `left_bottom`,
+`center_bottom`, and `right_bottom`. Width and height are content dimensions;
+the complete float, including its border and margin, is clamped to the editor.
+Only the documented `mark_window.win_options` are accepted.
 
 See [`:help sess-api`](doc/sessionizer.txt) for its contract and failure behavior.
 
