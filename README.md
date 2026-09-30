@@ -43,6 +43,13 @@ require("sess").setup({
     store_path = vim.fn.stdpath("data") .. "/sess.nvim",
     hooks = {}, -- optional before_transition and after_operation callbacks
 })
+
+-- Telescope configuration:
+require("telescope").setup({
+    extensions = {
+        sess = { active_expand = "all" }, -- all | current | none
+    },
+})
 ```
 
 sess.nvim owns the reserved `SessNvimInternal` autocmd group. Use a different
@@ -154,7 +161,24 @@ Install telescope.nvim and plenary.nvim, then:
 require("telescope").load_extension("sess")
 ```
 
-Enter loads/creates. Ctrl-d (insert) or `dd` (normal) deletes with confirmation. `:Sess restore` opens a deleted-session picker; Enter restores the selected record. `:Sess active` shows only currently active sessions, with `<Tab>` expansion and `<S-Tab>` collapse/expand-all. It detects known agent commands running in terminal buffers, including `pi`, `codex`, `claude`, and `opencode`; integrations can also register agents through `api.agent.register()`. Known terminal agents show a best-effort `idle`, `working`, `blocked`, or `unknown` status based on recent terminal output. The active picker polls and redraws changed statuses while it is open. Explicit status updates remain authoritative. Enter loads the selected session and focuses its existing agent buffer when visible. Agents are runtime-only: this picker never starts processes, creates windows, or persists agent data. Commands, Telescope and autocommands use the same lifecycle.
+All Sess pickers display results top-to-bottom with the input prompt at the top.
+Enter loads/creates. Ctrl-d (insert) or `dd` (normal) deletes with confirmation.
+`:Sess restore` opens a deleted-session picker; Enter restores the selected record.
+`:Sess active` shows active sessions as tree-style groups with their cwd and
+agents. Sessions are expanded by default; configure the Telescope extension's
+`active_expand` option as `"all"`, `"current"`, or `"none"`. `<Tab>`
+expands/collapses the selected group and `<S-Tab>` expands/collapses all groups.
+The picker footer lists these controls and `<Enter>` to switch and focus an
+agent. Empty groups show a non-actionable `no agents` row. It detects known
+agent commands running in terminal buffers, including `pi`, `codex`, `claude`,
+and `opencode`; integrations can also register agents through
+`api.agent.register()`. Known terminal agents show a best-effort `idle`,
+`working`, `blocked`, or `unknown` status based on recent terminal output. The
+active picker polls and redraws changed statuses while it is open. Explicit
+status updates remain authoritative. Enter loads the selected session and
+focuses its existing agent buffer when visible. Agents are runtime-only: this
+picker never starts processes, creates windows, or persists agent data. Commands,
+Telescope and autocommands use the same lifecycle.
 
 `:Sess load` defaults to the current working directory. Path targets beginning with `~/`, `/`, `./`, or `../` load their session or create one. Existing directories are resolved with `fs_realpath`, so symlinked paths share one session identity. Invalid or missing directories are rejected. Creating a session opens the default file explorer in the project root.
 

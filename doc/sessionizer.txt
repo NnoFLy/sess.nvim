@@ -76,13 +76,18 @@ COMMANDS                                                     *sess-commands*
     Open the Telescope picker.
 
 :Sess active                                                 *:Sess-active*
-    Open the active-session picker. Sessions are expandable with <Tab> and
-    <S-Tab> collapses or expands all rows. Known agent commands running in
-    terminal buffers (including pi, codex, claude, and opencode) are detected;
-    integrations may also register agents explicitly. Enter loads the parent
-    and focuses the selected agent's existing visible buffer. This picker is
-    runtime-only; it never starts processes, creates windows, or persists agent
-    state.
+    Open the active-session picker. All Sess pickers display results
+    top-to-bottom with the input prompt at the top. Sessions are shown as
+    tree-style groups with their cwd and agents, and are expanded by default.
+    Configure Telescope's active_expand option as "all", "current", or "none"
+    to change the initial expansion. <Tab> expands/collapses the selected
+    group; <S-Tab> expands/collapses all groups; <Enter> switches and focuses.
+    Empty groups show a non-actionable "no agents" row. Known agent commands
+    running in terminal buffers (including pi, codex, claude, and opencode) are
+    detected; integrations may also register agents explicitly. Enter loads
+    the parent and focuses the selected agent's existing visible buffer. This
+    picker is runtime-only; it never starts processes, creates windows, or
+    persists agent state.
 
 Tab completion supports subcommands, session names, deleted-session names/ids/keys,
 create paths, and load directory paths. For load, path arguments beginning with
@@ -357,8 +362,18 @@ SessUnloaded or remove the session from active records.
 TELESCOPE                                                   *sess-telescope*
 
 Install telescope.nvim and plenary.nvim, then: >
+    require("telescope").setup({
+        extensions = { sess = { active_expand = "all" } },
+    })
     require("telescope").load_extension("sess")
 <
+The active_expand option accepts "all", "current", or "none". Unsupported
+values are rejected during Telescope setup. The active picker uses tree-style
+session/agent rows and a footer showing <Tab> expand/collapse, <S-Tab>
+expand/collapse all, and <Enter> switch/focus controls. Empty expanded sessions
+show a non-actionable "no agents" row. Manual expansion changes are preserved
+while the picker is open and across status refreshes.
+
 Enter loads/creates. Ctrl-d (insert)/dd (normal) deletes with confirmation.
 Ctrl-r (insert)/rr (normal) renames. Ctrl-u (insert)/uu (normal) unloads the
 selected session, using the same Save/Discard/Cancel then Stop/Cancel prompts

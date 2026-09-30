@@ -25,6 +25,29 @@ local state = api.state
 
 local M = {}
 
+local status_symbols = {
+    blocked = "⚠",
+    idle = "○",
+    unknown = "?",
+    working = "●",
+}
+
+local function pad(value, width)
+    return value .. string.rep(" ", math.max(0, width - vim.fn.strdisplaywidth(value)))
+end
+
+local function default_expanded(session_id, current_id, active_expand)
+    if active_expand == "all" then
+        return true
+    elseif active_expand == "none" then
+        return false
+    elseif active_expand == "current" then
+        return current_id == session_id
+    end
+
+    error('sess.nvim: invalid active expansion mode "' .. tostring(active_expand) .. '"')
+end
+
 ---@param sessions Sess.Session[]
 ---@param agents_by_id table<string, Sess.Agent[]>
 ---@param expanded_by_id table<string, boolean>
@@ -34,16 +57,25 @@ local M = {}
 function M.build_active_entries(sessions, agents_by_id, expanded_by_id, current_id, focused_by_id)
     expanded_by_id = expanded_by_id or {}
     local entries = {}
+    local name_width, status_width = 0, 0
+    for _, session in ipairs(sessions or {}) do
+        for _, agent in ipairs(agents_by_id[session.id] or {}) do
+            name_width = math.max(name_width, vim.fn.strdisplaywidth(agent.name))
+            status_width = math.max(status_width, vim.fn.strdisplaywidth(agent.status or "unknown"))
+        end
+    end
+
     for _, session in ipairs(sessions or {}) do
         local expanded = expanded_by_id[session.id] == true
         local agents = agents_by_id[session.id] or {}
         local searchable = {}
         for _, agent in ipairs(agents) do
+            local status = agent.status or "unknown"
             searchable[#searchable + 1] = table.concat({
                 agent.id,
                 agent.name,
                 agent.info or "",
-                agent.status or "",
+                status,
             }, " ")
         end
         entries[#entries + 1] = {
@@ -53,7 +85,9 @@ function M.build_active_entries(sessions, agents_by_id, expanded_by_id, current_
             expanded = expanded,
             display = (expanded and "▾ " or "▸ ")
                 .. (current_id == session.id and "● " or "  ")
-                .. session.metadata.name,
+                .. session.metadata.name
+                .. "  "
+                .. session.metadata.cwd,
             ordinal = table.concat({
                 session.metadata.name,
                 session.metadata.cwd,
@@ -61,37 +95,61 @@ function M.build_active_entries(sessions, agents_by_id, expanded_by_id, current_
             }, " "),
         }
         if expanded then
-            for _, agent in ipairs(agents) do
-                local marker = focused_by_id and focused_by_id[session.id] == agent.id and "> " or "  "
-                local status = agent.status and " [" .. agent.status .. "]" or ""
-                local info = agent.info and "  " .. agent.info or ""
+            if #agents == 0 then
                 entries[#entries + 1] = {
-                    kind = "agent",
+                    kind = "placeholder",
                     session_id = session.id,
-                    agent_id = agent.id,
-                    agent = vim.deepcopy(agent),
-                    display = "  " .. marker .. agent.name .. status .. info,
-                    ordinal = table.concat({
-                        session.metadata.name,
-                        session.metadata.cwd,
-                        agent.id,
-                        agent.name,
-                        agent.info or "",
-                        agent.status or "",
-                    }, " "),
+                    session = vim.deepcopy(session),
+                    display = "  └─ no agents",
+                    ordinal = table.concat({ session.metadata.name, session.metadata.cwd, "no agents" }, " "),
                 }
+            else
+                for index, agent in ipairs(agents) do
+                    local status = agent.status or "unknown"
+                    local branch = index == #agents and "└─" or "├─"
+                    local focused = focused_by_id and focused_by_id[session.id] == agent.id
+                    local focus_marker = focused and ">" or " "
+                    local status_symbol = status_symbols[status] or "?"
+                    local info = agent.info and agent.info ~= "" and "  " .. agent.info or ""
+                    entries[#entries + 1] = {
+                        kind = "agent",
+                        session_id = session.id,
+                        agent_id = agent.id,
+                        agent = vim.deepcopy(agent),
+                        display = string.format(
+                            "  %s %s %s %s  %s%s",
+                            branch,
+                            focus_marker,
+                            status_symbol,
+                            pad(agent.name, name_width),
+                            pad(status, status_width),
+                            info
+                        ),
+                        ordinal = table.concat({
+                            session.metadata.name,
+                            session.metadata.cwd,
+                            agent.id,
+                            agent.name,
+                            agent.info or "",
+                            status,
+                        }, " "),
+                    }
+                end
             end
         end
     end
     return entries
 end
 
-function M.generate_active_finder(expanded_by_id)
-    expanded_by_id = vim.deepcopy(expanded_by_id or {})
+function M.generate_active_finder(expanded_by_id, active_expand)
+    expanded_by_id = expanded_by_id or {}
+    active_expand = active_expand or "current"
     local sessions = state.active()
     local current = state.current()
     for _, session in ipairs(sessions) do
-        if expanded_by_id[session.id] == nil then expanded_by_id[session.id] = current and current.id == session.id or false end
+        if expanded_by_id[session.id] == nil then
+            expanded_by_id[session.id] = default_expanded(session.id, current and current.id, active_expand)
+        end
     end
     local agents, focused = {}, {}
     for _, session in ipairs(sessions) do

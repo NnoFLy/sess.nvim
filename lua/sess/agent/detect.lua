@@ -10,6 +10,7 @@ local agents = {
     ["claude-code"] = "claude",
     cline = "cline",
     codex = "codex",
+    ["codex-cli"] = "codex",
     copilot = "copilot",
     cursor = "cursor",
     ["cursor-agent"] = "cursor",
@@ -26,6 +27,7 @@ local agents = {
     muse = "muse",
     omp = "omp",
     opencode = "opencode",
+    ["opencode-cli"] = "opencode",
     pi = "pi",
     qoder = "qodercli",
     qodercli = "qodercli",
@@ -48,7 +50,10 @@ local function identify(value)
         return nil
     end
 
-    command = basename(command):lower():gsub("%.cmd$", ""):gsub("%.exe$", "")
+    command = basename(command):lower()
+    for _, extension in ipairs({ "%.cmd$", "%.exe$", "%.bat$", "%.js$", "%.mjs$", "%.cjs$" }) do
+        command = command:gsub(extension, "")
+    end
     return agents[command]
 end
 
@@ -71,25 +76,62 @@ local shells = {
     zsh = true,
 }
 
-local function command_agent(command)
+-- Terminal integrations commonly put an agent behind one of these launchers.
+-- Do not scan arbitrary command arguments: a project path or prompt can contain
+-- an agent name without actually starting that agent.
+local command_wrappers = {
+    env = true,
+    exec = true,
+    nohup = true,
+    npm = true,
+    npx = true,
+    pnpm = true,
+    ruby = true,
+    setsid = true,
+    sudo = true,
+    timeout = true,
+    bun = true,
+    deno = true,
+    node = true,
+    python = true,
+    python3 = true,
+}
+
+local function command_values(command)
+    if type(command) == "table" then
+        local values = {}
+        for _, value in ipairs(command) do
+            if type(value) == "string" then
+                values[#values + 1] = value
+            end
+        end
+        return values
+    end
+
     if type(command) ~= "string" then
-        return nil
+        return {}
     end
 
     local values = {}
     for value in command:gmatch("[^%z%s]+") do
         values[#values + 1] = value
     end
+    return values
+end
+
+local function command_agent(command)
+    local values = command_values(command)
     if #values == 0 then
         return nil
     end
 
+    local executable = basename(values[1]):lower()
     local agent = identify(values[1])
     if agent then
         return agent
     end
 
-    if not shells[basename(values[1]):lower()] then
+    if not shells[executable] and not command_wrappers[executable] then
         return nil
     end
 
@@ -104,11 +146,26 @@ local function command_agent(command)
 end
 
 local function process_command(pid)
+    -- Neovim exposes the process command line on supported platforms. It is
+    -- preferable to parsing /proc and also lets this work on non-Linux hosts.
+    local got_process, process = pcall(vim.api.nvim_get_proc, pid)
+    if got_process and type(process) == "table" then
+        local agent = command_agent(process.cmdline) or command_agent(process.name)
+        if agent then
+            return agent
+        end
+    end
+
     return command_agent(read_file("/proc/" .. pid .. "/cmdline"))
 end
 
 local function child_pids(pid)
-    local children = read_file("/proc/" .. pid .. "/task/" .. pid .. "/children")
+    local got_children, children = pcall(vim.api.nvim_get_proc_children, pid)
+    if got_children and type(children) == "table" and #children > 0 then
+        return children
+    end
+
+    children = read_file("/proc/" .. pid .. "/task/" .. pid .. "/children")
     local result = {}
     for child in (children or ""):gmatch("%d+") do
         result[#result + 1] = tonumber(child)
@@ -147,16 +204,16 @@ local function job_agent(job_id)
         return nil
     end
 
+    -- job_info is available in Vim but not in Neovim. Calling it through pcall
+    -- keeps this compatible with both hosts; process inspection is the primary
+    -- Neovim path.
     local called, info = pcall(vim.fn.job_info, job_id)
     if called and type(info) == "table" then
         if info.status and info.status ~= "run" and info.status ~= "running" then
             return nil
         end
 
-        local command = info.cmd
-        local agent = type(command) == "table"
-                and command_agent(table.concat(command, "\0"))
-            or command_agent(command)
+        local agent = command_agent(info.cmd)
         if agent then
             return agent
         end
@@ -185,7 +242,8 @@ local function terminal_agent(bufnr)
     -- even on systems without a /proc process tree.
     local got_name, name = pcall(vim.api.nvim_buf_get_name, bufnr)
     if got_name then
-        return identify(name:match("([^:]+)$"))
+        local command = name:match("([^:]+)$")
+        return command_agent(command)
     end
 
     return nil
@@ -288,23 +346,31 @@ local function terminal_status(bufnr, name)
 end
 
 local function session_buffers(session_id)
+    local result, seen = {}, {}
+    local function add(bufnr)
+        if not seen[bufnr] then
+            seen[bufnr] = true
+            result[#result + 1] = bufnr
+        end
+    end
+
     local current = state.get_current_session()
     if current and current.id == session_id then
-        local result, seen = {}, {}
+        -- A terminal can remain live but hidden after the user changes windows.
+        -- Include the current view as well as visible windows so discovery does
+        -- not depend on which agent happened to be on screen when the picker
+        -- opened.
         for _, win in ipairs(vim.api.nvim_list_wins()) do
             local ok, bufnr = pcall(vim.api.nvim_win_get_buf, win)
-            if ok and not seen[bufnr] then
-                seen[bufnr] = true
-                result[#result + 1] = bufnr
+            if ok then
+                add(bufnr)
             end
         end
-        return result
     end
 
     local view = state.get_view(session_id)
-    local result = {}
     for bufnr in pairs(view and view.buffers or {}) do
-        result[#result + 1] = bufnr
+        add(bufnr)
     end
     table.sort(result)
     return result

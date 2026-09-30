@@ -87,14 +87,22 @@ function M.active(opts)
     opts = opts or {}
     local picker_opts = vim.deepcopy(config.values)
     picker_opts.prompt_title = "Active Sessions"
+    local active_expand = config.values.active_expand
     local expanded = {}
     local current = state.current()
     for _, session in ipairs(state.active()) do
-        expanded[session.id] = current and current.id == session.id or false
+        local should_expand = active_expand == "all"
+        if active_expand == "current" then
+            should_expand = current ~= nil and current.id == session.id
+        end
+        expanded[session.id] = should_expand
     end
-    local finder, rows = finders.generate_active_finder(expanded)
+    local finder, rows = finders.generate_active_finder(expanded, active_expand)
     picker_opts.finder = finder
     picker_opts.selection_strategy = "row"
+    picker_opts.get_status_text = function()
+        return "<Tab> expand/collapse  <S-Tab> all  <Enter> switch/focus"
+    end
     picker_opts.mappings = nil
     picker_opts.attach_mappings = function(_, map)
         map("i", "<Tab>", actions.toggle_active)
@@ -108,8 +116,11 @@ function M.active(opts)
     picker_opts = vim.tbl_deep_extend("force", picker_opts, opts)
     local picker = pickers.new(picker_opts)
     picker._sess_expanded = expanded
+    picker._sess_active_expand = active_expand
     picker:find()
-    require("sess.ui.active_refresh").start(picker, finders.generate_active_finder, rows)
+    require("sess.ui.active_refresh").start(picker, function(expanded_by_id)
+        return finders.generate_active_finder(expanded_by_id, picker._sess_active_expand)
+    end, rows)
 end
 
 return M

@@ -55,16 +55,19 @@ end
 ---@return nil
 local function refresh_active(prompt_bufnr, expanded)
     local picker = action_state.get_current_picker(prompt_bufnr)
-    picker:refresh(finders.generate_active_finder(expanded), { reset_prompt = false })
+    picker:refresh(
+        finders.generate_active_finder(expanded, picker._sess_active_expand),
+        { reset_prompt = false }
+    )
 end
 
 function M.toggle_active(prompt_bufnr)
-    local picker = action_state.get_current_picker(prompt_bufnr)
     local value = selected_value()
-    if not value then
+    if not value or (value.kind ~= "session" and value.kind ~= "agent") then
         return
     end
 
+    local picker = action_state.get_current_picker(prompt_bufnr)
     local expanded = picker._sess_expanded or {}
     local session_id = value.session_id
     expanded[session_id] = not expanded[session_id]
@@ -92,7 +95,7 @@ end
 
 function M.active_enter(prompt_bufnr)
     local value = selected_value()
-    if not value then
+    if not value or (value.kind ~= "session" and value.kind ~= "agent") then
         return
     end
 

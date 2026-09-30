@@ -39,7 +39,7 @@ assert(stop)
 
 vim.api.nvim_chan_send(channel, "\27[2J\27[HWorking...")
 assert(vim.wait(2000, function()
-    return picker.finder.results[2].display:find("[working]", 1, true) ~= nil
+    return picker.finder.results[2].display:find("working", 1, true)
 end, 10), "picker did not refresh after terminal output")
 local before = refreshes
 vim.wait(600, function() return false end, 10)
@@ -47,7 +47,7 @@ assert(refreshes == before, "unchanged rows must not redraw")
 
 vim.api.nvim_chan_send(channel, "\27[2J\27[HReady")
 assert(vim.wait(2000, function()
-    return picker.finder.results[2].display:find("[idle]", 1, true) ~= nil
+    return picker.finder.results[2].display:find("idle", 1, true)
 end, 10))
 
 -- Hidden sessions must continue to update even when their windows are closed.
