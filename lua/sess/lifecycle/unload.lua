@@ -131,6 +131,7 @@ function M.run(destination, options)
     end
     state.remove_active_session(item.id)
     state.set_view(item.id, nil)
+    state.remove_agents(item.id)
 
     return observer.finish("unload", item, callbacks, diagnostics)
 end

@@ -53,6 +53,71 @@ end
 
 ---@param prompt_bufnr number
 ---@return nil
+local function refresh_active(prompt_bufnr, expanded)
+    local picker = action_state.get_current_picker(prompt_bufnr)
+    picker:refresh(finders.generate_active_finder(expanded), { reset_prompt = false })
+end
+
+function M.toggle_active(prompt_bufnr)
+    local picker = action_state.get_current_picker(prompt_bufnr)
+    local value = selected_value()
+    if not value then
+        return
+    end
+
+    local expanded = picker._sess_expanded or {}
+    local session_id = value.session_id
+    expanded[session_id] = not expanded[session_id]
+    picker._sess_expanded = expanded
+    refresh_active(prompt_bufnr, expanded)
+end
+
+function M.toggle_all_active(prompt_bufnr)
+    local picker = action_state.get_current_picker(prompt_bufnr)
+    local expanded = picker._sess_expanded or {}
+    local sessions = api.state.active()
+    local any_expanded = false
+    for _, session in ipairs(sessions) do
+        if expanded[session.id] then
+            any_expanded = true
+            break
+        end
+    end
+    for _, session in ipairs(sessions) do
+        expanded[session.id] = not any_expanded
+    end
+    picker._sess_expanded = expanded
+    refresh_active(prompt_bufnr, expanded)
+end
+
+function M.active_enter(prompt_bufnr)
+    local value = selected_value()
+    if not value then
+        return
+    end
+
+    local agent_id = value.kind == "agent" and value.agent_id
+    if not agent_id then
+        local _, _, focused = api.agent.focused(value.session_id)
+        agent_id = focused and focused.id or nil
+    end
+    actions.close(prompt_bufnr)
+    local ok, err, _, diagnostics = api.session.load(value.session_id)
+    if not ok then
+        log.error(err)
+        return
+    end
+
+    log.diagnostics(diagnostics)
+    if agent_id then
+        local focused, focus_err, _, focus_diagnostics = api.agent.focus(value.session_id, agent_id)
+        if not focused then
+            log.error(focus_err)
+        end
+        log.diagnostics(focus_diagnostics)
+    end
+end
+
 function M.complete_path(prompt_bufnr)
     local value = selected_value()
     if not value or not value.directory or not value.prompt then

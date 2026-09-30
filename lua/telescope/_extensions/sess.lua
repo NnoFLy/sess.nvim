@@ -14,5 +14,6 @@ return telescope.register_extension({
     exports = {
         sess = pickers.sess,
         restore = pickers.restore,
+        active = pickers.active,
     },
 })

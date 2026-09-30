@@ -1,7 +1,7 @@
 local M = {}
 
 -- This module alone owns mutable runtime records. All reads and writes copy.
-local state = { active_sessions = {} }
+local state = { active_sessions = {}, agents_by_session = {}, focused_agents = {} }
 local views = {}
 
 function M.get_view(id)
@@ -54,6 +54,49 @@ end
 
 function M.get_active_sessions()
     return vim.deepcopy(state.active_sessions)
+end
+
+function M.get_agents(id)
+    local agents = state.agents_by_session[id] or {}
+    local result = {}
+    for agent_id, agent in pairs(agents) do
+        result[agent_id] = vim.deepcopy(agent)
+    end
+    return result
+end
+
+function M.set_agent(session_id, agent)
+    state.agents_by_session[session_id] = state.agents_by_session[session_id] or {}
+    state.agents_by_session[session_id][agent.id] = vim.deepcopy(agent)
+end
+
+function M.remove_agent(session_id, agent_id)
+    local agents = state.agents_by_session[session_id]
+    if not agents or not agents[agent_id] then
+        return nil
+    end
+    local agent = vim.deepcopy(agents[agent_id])
+    agents[agent_id] = nil
+    if state.focused_agents[session_id] == agent_id then
+        state.focused_agents[session_id] = nil
+    end
+    if next(agents) == nil then
+        state.agents_by_session[session_id] = nil
+    end
+    return agent
+end
+
+function M.get_focused_agent_id(session_id)
+    return state.focused_agents[session_id]
+end
+
+function M.set_focused_agent(session_id, agent_id)
+    state.focused_agents[session_id] = agent_id
+end
+
+function M.remove_agents(session_id)
+    state.agents_by_session[session_id] = nil
+    state.focused_agents[session_id] = nil
 end
 
 function M.replace(session)

@@ -61,11 +61,15 @@ The guard remains held through post-operation observers. Rollback is limited to 
 
 ### Runtime state
 
-Runtime state is the in-memory source of truth for the current and previous sessions, active sessions, and per-session views. Reads and writes should use defensive copies so callers cannot mutate internal state accidentally.
+Runtime state is the in-memory source of truth for the current and previous sessions, active sessions, and per-session views. It also owns process-local agent records and focused-agent IDs keyed by canonical session ID. Reads and writes should use defensive copies so callers cannot mutate internal state accidentally. Agents are not initialized from disk and never enter metadata, snapshots, or Vim session files.
 
 ### Editor adapter
 
-The editor layer translates between session operations and Neovim state. It captures and restores buffers, windows, tabpages, cursor positions, working-directory scopes, terminal jobs, and snapshot information. It must not make persistence or UI policy decisions.
+The editor layer translates between session operations and Neovim state. It captures and restores buffers, windows, tabpages, cursor positions, working-directory scopes, terminal jobs, and snapshot information. It must not make persistence or UI policy decisions. Its focus helper only validates and focuses buffers already visible in the current session's tabs; it never creates windows or reveals hidden buffers.
+
+### Runtime agents
+
+The agent API validates registrations and delegates focus to the editor adapter. The active picker also performs best-effort discovery of known agent commands in live terminal buffers, using the terminal job command and, where available, its process tree. Discovery is derived runtime state: it never starts/stops processes or writes records merely by opening the picker. Focus is explicitly limited to the current session. Unload and delete remove registered agent records only after destructive editor/storage work and runtime state have committed, before observers run. Failed or cancelled operations preserve them. The active picker reads only active runtime sessions, loads through the lifecycle API, and optionally focuses an existing target as a follow-up action.
 
 ### Storage
 

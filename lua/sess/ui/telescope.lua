@@ -15,6 +15,16 @@ function M.list(opts)
     return true
 end
 
+function M.active(opts)
+    local ok = pcall(require, "telescope")
+    if not ok then
+        log.error("You need to install telescope.nvim for this command")
+        return false
+    end
+    require("telescope._extensions.sess.pickers").active(opts)
+    return true
+end
+
 function M.restore(opts)
     local ok = pcall(require, "telescope")
     if not ok then

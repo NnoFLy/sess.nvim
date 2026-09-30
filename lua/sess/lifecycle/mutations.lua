@@ -91,6 +91,7 @@ function M.delete(destination, options)
 
     state.remove_active_session(item.id)
     state.set_view(item.id, nil)
+    state.remove_agents(item.id)
 
     local diagnostics = {}
     if is_current then

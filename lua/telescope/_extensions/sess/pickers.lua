@@ -83,4 +83,30 @@ function M.restore(opts)
     return make_picker(opts, true)
 end
 
+function M.active(opts)
+    opts = opts or {}
+    local picker_opts = vim.deepcopy(config.values)
+    picker_opts.prompt_title = "Active Sessions"
+    local expanded = {}
+    local current = state.current()
+    for _, session in ipairs(state.active()) do
+        expanded[session.id] = current and current.id == session.id or false
+    end
+    picker_opts.finder = finders.generate_active_finder(expanded)
+    picker_opts.mappings = nil
+    picker_opts.attach_mappings = function(_, map)
+        map("i", "<Tab>", actions.toggle_active)
+        map("n", "<Tab>", actions.toggle_active)
+        map("i", "<S-Tab>", actions.toggle_all_active)
+        map("n", "<S-Tab>", actions.toggle_all_active)
+        map("i", "<CR>", actions.active_enter)
+        map("n", "<CR>", actions.active_enter)
+        return true
+    end
+    picker_opts = vim.tbl_deep_extend("force", picker_opts, opts)
+    local picker = pickers.new(picker_opts)
+    picker._sess_expanded = expanded
+    picker:find()
+end
+
 return M

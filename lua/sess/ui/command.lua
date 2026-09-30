@@ -6,6 +6,7 @@ local commands = require("sess.ui.commands")
 local M = {}
 
 local specs = {
+    active = { handler = commands.active, max_args = 0 },
     create = { handler = commands.create, max_args = 1, completion = "path" },
     delete = { handler = commands.delete, max_args = 1, completion = "session" },
     last = { handler = commands.last, max_args = 0 },

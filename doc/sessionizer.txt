@@ -75,11 +75,30 @@ COMMANDS                                                     *sess-commands*
 :Sess list                                                   *:Sess-list*
     Open the Telescope picker.
 
+:Sess active                                                 *:Sess-active*
+    Open the active-session picker. Sessions are expandable with <Tab> and
+    <S-Tab> collapses or expands all rows. Known agent commands running in
+    terminal buffers (including pi, codex, claude, and opencode) are detected;
+    integrations may also register agents explicitly. Enter loads the parent
+    and focuses the selected agent's existing visible buffer. This picker is
+    runtime-only; it never starts processes, creates windows, or persists agent
+    state.
+
 Tab completion supports subcommands, session names, deleted-session names/ids/keys,
 create paths, and load directory paths. For load, path arguments beginning with
 `~/`, `/`, `./`, or `../` complete immediate child directories; later arguments
 are not completed. Command-line escaping is preserved. Corrupt trash records
 are reported and skipped.
+
+Agents are detected from live terminal jobs or registered through api.agent and
+belong to active sessions only. Detection uses the terminal job command and,
+where available, its process tree; it is best-effort and never starts or stops
+processes. The API returns (ok, err, result, diagnostics); list is sorted by
+agent id and all results are defensive copies. register, update, unregister,
+list, focus, and focused do not write storage. focus only operates on the
+current session; a missing or hidden target is a successful operation with an
+unavailable-target diagnostic. Agent records disappear only after a successful
+unload or delete and are never restored from disk.
 
 The session Telescope picker normally shows available sessions. A prompt
 beginning with `~/`, `/`, `./`, or `../` switches to immediate directory

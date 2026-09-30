@@ -1,4 +1,5 @@
 return {
+    active = require("sess.ui.commands.active"),
     create = require("sess.ui.commands.create"),
     delete = require("sess.ui.commands.delete"),
     last = require("sess.ui.commands.last"),

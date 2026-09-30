@@ -25,6 +25,89 @@ local state = api.state
 
 local M = {}
 
+---@param sessions Sess.Session[]
+---@param agents_by_id table<string, Sess.Agent[]>
+---@param expanded_by_id table<string, boolean>
+---@param current_id string?
+---@param focused_by_id table<string, string>?
+---@return table[]
+function M.build_active_entries(sessions, agents_by_id, expanded_by_id, current_id, focused_by_id)
+    expanded_by_id = expanded_by_id or {}
+    local entries = {}
+    for _, session in ipairs(sessions or {}) do
+        local expanded = expanded_by_id[session.id] == true
+        local agents = agents_by_id[session.id] or {}
+        local searchable = {}
+        for _, agent in ipairs(agents) do
+            searchable[#searchable + 1] = table.concat({
+                agent.id,
+                agent.name,
+                agent.info or "",
+                agent.status or "",
+            }, " ")
+        end
+        entries[#entries + 1] = {
+            kind = "session",
+            session_id = session.id,
+            session = vim.deepcopy(session),
+            expanded = expanded,
+            display = (expanded and "▾ " or "▸ ")
+                .. (current_id == session.id and "● " or "  ")
+                .. session.metadata.name,
+            ordinal = table.concat({
+                session.metadata.name,
+                session.metadata.cwd,
+                table.concat(searchable, " "),
+            }, " "),
+        }
+        if expanded then
+            for _, agent in ipairs(agents) do
+                local marker = focused_by_id and focused_by_id[session.id] == agent.id and "> " or "  "
+                local status = agent.status and " [" .. agent.status .. "]" or ""
+                local info = agent.info and "  " .. agent.info or ""
+                entries[#entries + 1] = {
+                    kind = "agent",
+                    session_id = session.id,
+                    agent_id = agent.id,
+                    agent = vim.deepcopy(agent),
+                    display = "  " .. marker .. agent.name .. status .. info,
+                    ordinal = table.concat({
+                        session.metadata.name,
+                        session.metadata.cwd,
+                        agent.id,
+                        agent.name,
+                        agent.info or "",
+                        agent.status or "",
+                    }, " "),
+                }
+            end
+        end
+    end
+    return entries
+end
+
+function M.generate_active_finder(expanded_by_id)
+    expanded_by_id = vim.deepcopy(expanded_by_id or {})
+    local sessions = state.active()
+    local current = state.current()
+    for _, session in ipairs(sessions) do
+        if expanded_by_id[session.id] == nil then expanded_by_id[session.id] = current and current.id == session.id or false end
+    end
+    local agents, focused = {}, {}
+    for _, session in ipairs(sessions) do
+        local ok, err, list, diagnostics = api.agent.list(session.id)
+        for _, diagnostic in ipairs(diagnostics or {}) do log.warn(diagnostic) end
+        if not ok then log.warn(err) end
+        agents[session.id] = list or {}
+        local _, _, focused_agent = api.agent.focused(session.id)
+        focused[session.id] = focused_agent and focused_agent.id or nil
+    end
+    local results = M.build_active_entries(sessions, agents, expanded_by_id, current and current.id, focused)
+    return finders.new_table({ results = results, entry_maker = function(entry)
+        return { value = entry, display = entry.display, ordinal = entry.ordinal }
+    end })
+end
+
 function M.generate_deleted_finder()
     local ok, err, entries, diagnostics = api.session.list_deleted()
     if not ok then

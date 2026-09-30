@@ -303,6 +303,48 @@ function M.load(item, view)
     return {}
 end
 
+-- Focus an existing visible buffer without creating windows or loading files.
+function M.focus_buffer(bufnr, preferred_winid)
+    local valid, is_valid = pcall(vim.api.nvim_buf_is_valid, bufnr)
+    if not valid or not is_valid then
+        return false, "buffer is unavailable"
+    end
+
+    local function contains(win)
+        local ok, value = pcall(vim.api.nvim_win_get_buf, win)
+        return ok and value == bufnr
+    end
+
+    local function focus(win)
+        local ok, err = pcall(vim.api.nvim_set_current_win, win)
+        if ok then
+            return true, win
+        end
+        return false, tostring(err)
+    end
+
+    if preferred_winid then
+        local ok, win_valid = pcall(vim.api.nvim_win_is_valid, preferred_winid)
+        if ok and win_valid and contains(preferred_winid) then
+            return focus(preferred_winid)
+        end
+    end
+
+    for _, tab in ipairs(vim.api.nvim_list_tabpages()) do
+        for _, win in ipairs(vim.api.nvim_tabpage_list_wins(tab)) do
+            if contains(win) then
+                local switched, switch_err = pcall(vim.api.nvim_set_current_tabpage, tab)
+                if not switched then
+                    return false, tostring(switch_err)
+                end
+                return focus(win)
+            end
+        end
+    end
+
+    return false, "agent target is unavailable"
+end
+
 function M.snapshot(item)
     local previous = vim.v.this_session
     local ok, err = storage.replace_snapshot(item.id, function(path)

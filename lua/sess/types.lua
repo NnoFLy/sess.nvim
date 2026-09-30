@@ -17,6 +17,17 @@
 ---@field id Sess.SessionId
 ---@field metadata Sess.SessionMetadata
 
+---@class Sess.AgentTarget
+---@field bufnr integer Valid at registration time; may disappear later.
+---@field winid integer? Last known window containing bufnr.
+
+---@class Sess.Agent
+---@field id string Session-local stable identifier.
+---@field name string Short display name.
+---@field info string? Optional display information.
+---@field status string? Optional integration-provided status.
+---@field target Sess.AgentTarget
+
 ---@class Sess.DeletedSession
 ---@field key string
 ---@field id Sess.SessionId
