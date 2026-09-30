@@ -24,9 +24,12 @@ User commands / Telescope / Lua API
       Catalog  Runtime  Editor
          |      state      |
          v        |        v
-       Storage <- views <- snapshots
+       Storage <- views <- paths/callbacks
           ^
           marks registry
+
+Read-only application queries such as `api.active.snapshot()` compose runtime
+state, marks, detected agents, and diagnostics before UI adapters format rows.
 ```
 
 ### Public entry points
@@ -35,17 +38,20 @@ The setup function, Lua API, user commands, User events, and optional Telescope 
 
 ### Session catalog
 
-The catalog owns session records and metadata operations such as discovery, lookup, creation, renaming, pinning, deletion, restoration, and persistent mark lookup. It validates names, IDs, paths, uniqueness, metadata, and mark registry entries before lifecycle code changes editor state. Marks are independent of snapshots and agent runtime state.
+The catalog owns session records and metadata operations such as discovery, lookup, creation, renaming, pinning, deletion, restoration, and persistent mark lookup. It validates names, IDs, paths, uniqueness, metadata, and mark registry entries before lifecycle code changes editor state. Mark syntax/value validation lives in domain-neutral `sess.mark`; storage only validates and persists the registry, lifecycle marks owns assignment/replacement semantics, and UI owns prefix parsing, confirmation, and notifications. Marks are independent of snapshots and agent runtime state.
 
 ### Lifecycle layers
 
 The lifecycle API is a thin facade over focused modules under `lua/sess/lifecycle/`:
 
 - `target` resolves caller input through the catalog and never trusts caller metadata;
-- `observer` validates hooks, runs pre-transition hooks, and publishes post-operation hooks/events;
-- `transaction` owns the transition guard, exception boundary, and rollback of reversible editor changes;
-- `save` coordinates snapshots, usage metadata, outgoing saves, and save diagnostics;
-- `create`, `load`, `unload`, `mutations`, and `marks` own operation-specific catalog/editor/runtime mutations. Mark operations only update the registry and publish observers; loading a mark delegates to `load`.
+- `observer` runs pre-transition hooks and publishes post-operation hooks/events. Hook callbacks are resolved by the public API and passed in an operation context;
+- `operation_scope` owns the transition guard and exception/result boundary;
+- `editor_rollback` captures, protects, and restores reversible editor state;
+- `commit` applies runtime activation after persistence and editor changes succeed;
+- `transaction` is only a compatibility facade for those focused modules;
+- `save` coordinates path-based snapshot callbacks, usage metadata, outgoing saves, and save diagnostics;
+- `create`, `load`, `unload`, `mutations`, and `marks` own operation-specific catalog/editor/runtime mutations. They receive an operation context and never import the public options API. Mark operations only update the registry and publish observers; loading a mark delegates to `load`.
 
 Operation modules follow this ordering:
 
@@ -67,11 +73,11 @@ Runtime state is the in-memory source of truth for the current and previous sess
 
 ### Editor adapter
 
-The editor layer translates between session operations and Neovim state. It captures and restores buffers, windows, tabpages, cursor positions, working-directory scopes, terminal jobs, and snapshot information. It must not make persistence or UI policy decisions. Its focus helper only validates and focuses buffers already visible in the current session's tabs; it never creates windows or reveals hidden buffers.
+The editor layer translates between session operations and Neovim state. It captures and restores buffers, windows, tabpages, cursor positions, working-directory scopes, terminal jobs, and editor snapshots. Snapshot methods accept only paths: `write_snapshot(temp_path)` writes to a storage-provided temporary path and `source_snapshot(snapshot_path)` sources a path selected by lifecycle/storage. It does not resolve session IDs, replace files, validate persisted records, or make persistence/UI policy decisions. Its focus helper only validates and focuses buffers already visible in the current session's tabs; it never creates windows or reveals hidden buffers.
 
 ### Runtime agents
 
-The agent API validates registrations and delegates focus to the editor adapter. The active picker also performs best-effort discovery of known agent commands in live terminal buffers, using the terminal job command and, where available, its process tree. Detected terminal agents classify recent visible output as idle, working, blocked, or unknown. This screen classifier is deliberately conservative and only supplies a fallback; an explicit integration status wins. Discovery is derived runtime state: it never starts/stops processes or writes records merely by opening the picker. Focus is explicitly limited to the current session. Unload and delete remove registered agent records only after destructive editor/storage work and runtime state have committed, before observers run. Failed or cancelled operations preserve them. The active picker reads only active runtime sessions, loads through the lifecycle API, and optionally focuses an existing target as a follow-up action.
+The agent API validates registrations and delegates focus to the editor adapter. Detection is composed from injectable adapters: `agent/process_probe.lua` reads process/job trees and identifies commands, `agent/terminal_probe.lua` reads terminal jobs/names/output, `agent/status.lua` performs pure output classification, and `agent/discovery.lua` combines probes with runtime views. The active picker performs best-effort discovery of known agent commands in live terminal buffers. Detected terminal agents classify recent visible output as idle, working, blocked, or unknown. This screen classifier is deliberately conservative and only supplies a fallback; an explicit integration status wins. Discovery is derived runtime state: it never starts/stops processes or writes records merely by opening the picker. Focus is explicitly limited to the current session. Unload and delete remove registered agent records only after destructive editor/storage work and runtime state have committed, before observers run. Failed or cancelled operations preserve them. The active picker reads only active runtime sessions, loads through the lifecycle API, and optionally focuses an existing target as a follow-up action.
 
 ### Storage
 
@@ -90,7 +96,7 @@ Storage failures must be visible to callers. Corrupt records are skipped with di
 
 ### UI adapters
 
-Commands and Telescope provide input, target selection, confirmation, notifications, and presentation. They should call the shared API/lifecycle implementation so command and picker behavior remain consistent. The UI load-or-create helper validates a directory, then delegates to `api.session.load()` or `api.session.create()` without changing the low-level API contract. Command completion and Telescope share read-only directory enumeration.
+Commands and Telescope provide input, target selection, confirmation, notifications, and presentation. They should call the shared API/lifecycle implementation so command and picker behavior remain consistent. The UI load-or-create helper validates a directory, then delegates to `api.session.load()` or `api.session.create()` without changing the low-level API contract. The active picker reads one `api.active.snapshot()` and only formats rows; it does not compose marks, agents, focus, or diagnostics. Command completion and Telescope share read-only directory enumeration.
 
 ## Operation semantics
 
@@ -114,7 +120,7 @@ Deletion is soft deletion into private trash. Restoration moves persisted data b
 
 Pre-transition hooks run before a mutating lifecycle operation and may abort it. Post-operation hooks and User autocmd subscribers run after state is committed. Observer failures become diagnostics and must not roll back an otherwise successful operation.
 
-Observers receive defensive payloads containing the operation, affected session, and current session. Recursive lifecycle mutations are rejected while an operation is in progress.
+Observers receive defensive payloads containing the operation, affected session, and current session. Recursive lifecycle mutations are rejected while an operation is in progress. Agent register/update/unregister/focus are independent runtime operations but are explicitly rejected while a lifecycle operation is scoped; focus therefore cannot mutate editor state from a transition hook.
 
 ## Design rules for future changes
 

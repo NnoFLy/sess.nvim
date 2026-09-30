@@ -2,17 +2,13 @@ local catalog = require("sess.session")
 local editor = require("sess.editor")
 local state = require("sess.state")
 local observer = require("sess.lifecycle.observer")
-local opts = require("sess.api.opts")
 local target = require("sess.lifecycle.target")
-local transaction = require("sess.lifecycle.transaction")
+local rollback = require("sess.lifecycle.editor_rollback")
 
 local M = {}
 
-function M.restore(destination, options)
-    local callbacks, hook_err = observer.hooks(options)
-    if not callbacks then
-        return false, hook_err
-    end
+function M.restore(destination, options, context)
+    local callbacks = context.hooks
 
     local entry, err = catalog.resolve_deleted(destination)
     if not entry then
@@ -38,11 +34,8 @@ function M.restore(destination, options)
     return observer.finish("restore", restored, callbacks)
 end
 
-function M.delete(destination, options)
-    local callbacks, hook_err = observer.hooks(options)
-    if not callbacks then
-        return false, hook_err
-    end
+function M.delete(destination, options, context)
+    local callbacks = context.hooks
 
     local item, err = target.resolve(destination)
     if not item then
@@ -65,7 +58,7 @@ function M.delete(destination, options)
 
     local changed, change_err
     if is_current then
-        changed, change_err = transaction.change(function()
+        changed, change_err = rollback.change(function()
             editor.empty(vim.fn.getcwd())
             local ok, delete_err = catalog.delete(item.id)
             if not ok then
@@ -102,7 +95,7 @@ function M.delete(destination, options)
     return observer.finish("delete", item, callbacks, diagnostics)
 end
 
-function M.rename(destination, name)
+function M.rename(destination, name, context)
     if type(name) ~= "string" or vim.trim(name) == "" then
         return false, "session name cannot be empty"
     end
@@ -118,10 +111,10 @@ function M.rename(destination, name)
     end
 
     state.replace(renamed)
-    return observer.finish("rename", renamed, opts.get().hooks)
+    return observer.finish("rename", renamed, context.hooks)
 end
 
-function M.toggle_pin(destination)
+function M.toggle_pin(destination, context)
     local item, err = target.resolve(destination)
     if not item then
         return false, err
@@ -133,7 +126,7 @@ function M.toggle_pin(destination)
     end
 
     state.replace(updated)
-    return observer.finish("pin", updated, opts.get().hooks)
+    return observer.finish("pin", updated, context.hooks)
 end
 
 return M

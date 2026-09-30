@@ -2,11 +2,12 @@ local catalog = require("sess.session")
 local editor = require("sess.editor")
 local observer = require("sess.lifecycle.observer")
 local save = require("sess.lifecycle.save")
-local transaction = require("sess.lifecycle.transaction")
+local rollback = require("sess.lifecycle.editor_rollback")
+local commit = require("sess.lifecycle.commit")
 
 local M = {}
 
-function M.run(cwd, options)
+function M.run(cwd, options, context)
     if cwd ~= nil and (type(cwd) ~= "string" or vim.trim(cwd) == "") then
         return false, "working directory must be a non-empty string"
     end
@@ -22,10 +23,7 @@ function M.run(cwd, options)
         end
     end
 
-    local callbacks, hook_err = observer.hooks({ hooks = options.hooks })
-    if not callbacks then
-        return false, hook_err
-    end
+    local callbacks = context.hooks
 
     local request = { cwd = cwd or vim.fn.getcwd(), name = options.name, id = options.id }
     local item, err = catalog.prepare_create(request)
@@ -56,7 +54,7 @@ function M.run(cwd, options)
     end
 
     local created
-    local changed, change_err = transaction.change(function()
+    local changed, change_err = rollback.change(function()
         editor.empty(item.metadata.cwd)
 
         local create_err
@@ -65,7 +63,7 @@ function M.run(cwd, options)
             error(create_err)
         end
 
-        local ok, snapshot_err = editor.snapshot(created)
+        local ok, snapshot_err = save.snapshot(created)
         if not ok then
             error(snapshot_err)
         end
@@ -81,7 +79,7 @@ function M.run(cwd, options)
         return false, change_err
     end
 
-    transaction.activate(created, current)
+    commit.activate(created, current)
     return observer.finish("create", created, callbacks, diagnostics)
 end
 

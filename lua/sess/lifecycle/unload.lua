@@ -3,13 +3,13 @@ local editor = require("sess.editor")
 local state = require("sess.state")
 local observer = require("sess.lifecycle.observer")
 local target = require("sess.lifecycle.target")
-local transaction = require("sess.lifecycle.transaction")
+local rollback = require("sess.lifecycle.editor_rollback")
 local save = require("sess.lifecycle.save")
 local unload = require("sess.unload")
 
 local M = {}
 
-function M.run(destination, options)
+function M.run(destination, options, context)
     -- Preserve unload({ hooks = ... }) for callers of the current-only API.
     if
         type(destination) == "table"
@@ -20,10 +20,7 @@ function M.run(destination, options)
         options, destination = destination, nil
     end
 
-    local callbacks, hook_err = observer.hooks(options, { confirm = true })
-    if not callbacks then
-        return false, hook_err
-    end
+    local callbacks = context.hooks
     if options and options.confirm ~= nil and type(options.confirm) ~= "function" then
         return false, "unload confirm must be a function"
     end
@@ -84,9 +81,9 @@ function M.run(destination, options)
         local view = state.get_view(item.id)
         if view then
             local original = editor.capture()
-            local refreshed, refresh_err, refresh_diagnostics = transaction.change(function()
+            local refreshed, refresh_err, refresh_diagnostics = rollback.change(function()
                 local restore_diagnostics = editor.restore(view)
-                local ok, snapshot_err = editor.snapshot(item)
+                local ok, snapshot_err = save.snapshot(item)
                 if not ok then
                     error(snapshot_err)
                 end
@@ -117,7 +114,7 @@ function M.run(destination, options)
 
     local changed, change_err
     if is_current then
-        changed, change_err = transaction.change(close)
+        changed, change_err = rollback.change(close)
     else
         changed, change_err = editor.protected(close)
     end

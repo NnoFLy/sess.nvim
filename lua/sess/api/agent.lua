@@ -2,6 +2,7 @@ local catalog = require("sess.session")
 local detector = require("sess.agent.detect")
 local editor = require("sess.editor")
 local state = require("sess.state")
+local scope = require("sess.lifecycle.operation_scope")
 
 local M = {}
 local allowed = { id = true, name = true, info = true, status = true, bufnr = true, winid = true }
@@ -155,6 +156,7 @@ local function all_agents(session_id)
 end
 
 function M.register(target, spec)
+    if scope.is_busy() then return false, "session transition already in progress" end
     local item, err, _, diagnostics = resolve(target)
     if not item then return false, err, nil, diagnostics end
 
@@ -169,6 +171,7 @@ function M.register(target, spec)
 end
 
 function M.update(target, agent_id, patch)
+    if scope.is_busy() then return false, "session transition already in progress" end
     local item, err, _, diagnostics = resolve(target)
     if not item then return false, err, nil, diagnostics end
 
@@ -183,6 +186,7 @@ function M.update(target, agent_id, patch)
 end
 
 function M.unregister(target, agent_id)
+    if scope.is_busy() then return false, "session transition already in progress" end
     local item, err, _, diagnostics = resolve(target)
     if not item then return false, err, nil, diagnostics end
 
@@ -198,6 +202,7 @@ function M.list(target)
 end
 
 function M.focus(target, agent_id)
+    if scope.is_busy() then return false, "session transition already in progress" end
     local item, err, _, diagnostics = resolve(target)
     if not item then return false, err, nil, diagnostics end
 

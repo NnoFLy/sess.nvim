@@ -1,32 +1,6 @@
-local opts = require("sess.api.opts")
 local state = require("sess.state")
 
 local M = {}
-
-function M.hooks(overrides, extra_options)
-    if overrides == nil then
-        return opts.get().hooks
-    end
-
-    if type(overrides) ~= "table" then
-        return nil, "options must be a table"
-    end
-
-    for key in pairs(overrides) do
-        if key ~= "hooks" and not (extra_options and extra_options[key]) then
-            return nil, "unknown operation option: " .. tostring(key)
-        end
-    end
-
-    if overrides.hooks ~= nil then
-        local valid, err = opts.validate_hooks(overrides.hooks)
-        if not valid then
-            return nil, err
-        end
-    end
-
-    return vim.tbl_extend("force", opts.get().hooks, overrides.hooks or {})
-end
 
 function M.before(operation, item, callbacks)
     if not callbacks.before_transition then

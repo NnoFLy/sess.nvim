@@ -1,5 +1,6 @@
 local M = {}
 
+local mark_rules = require("sess.mark")
 local storage = require("sess.storage")
 local consts = require("sess.consts")
 local paths = require("sess.path")
@@ -470,7 +471,7 @@ function M.list_marks()
 end
 
 function M.get_by_mark(mark)
-    local valid, err = storage.validate_mark(mark)
+    local valid, err = mark_rules.validate(mark)
     if not valid then
         return nil, err, {}
     end

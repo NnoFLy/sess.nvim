@@ -1,11 +1,30 @@
 local catalog = require("sess.session")
 local editor = require("sess.editor")
 local state = require("sess.state")
-local opts = require("sess.api.opts")
+local storage = require("sess.storage")
 local observer = require("sess.lifecycle.observer")
 local target = require("sess.lifecycle.target")
 
 local M = {}
+
+-- Storage owns temporary paths and replacement; the editor only writes to the
+-- path it receives.
+function M.snapshot(item)
+    local previous = vim.v.this_session
+    local ok, err = storage.replace_snapshot(item.id, function(path)
+        return editor.write_snapshot(path, item)
+    end)
+    if ok then
+        local path, path_err = storage.get_session_path(item.id)
+        if not path then
+            return false, path_err
+        end
+        vim.v.this_session = path
+    else
+        vim.v.this_session = previous
+    end
+    return ok, err
+end
 
 -- Usage metadata is best-effort only after the snapshot/editor action succeeds.
 function M.touch(item, diagnostics)
@@ -29,7 +48,7 @@ function M.current(callbacks)
     end
 
     local view = editor.capture()
-    local ok, save_err = editor.snapshot(item)
+    local ok, save_err = M.snapshot(item)
     if not ok then
         return false, save_err
     end
@@ -57,12 +76,12 @@ function M.outgoing(callbacks)
     return true, nil, item, diagnostics
 end
 
-function M.save(...)
+function M.save(callbacks, ...)
     if select("#", ...) > 0 then
         return false, "save() takes no arguments and saves only the current session"
     end
 
-    return M.current(opts.get().hooks)
+    return M.current(callbacks)
 end
 
 return M

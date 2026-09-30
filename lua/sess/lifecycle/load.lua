@@ -1,18 +1,17 @@
 local catalog = require("sess.session")
 local editor = require("sess.editor")
+local storage = require("sess.storage")
 local state = require("sess.state")
 local observer = require("sess.lifecycle.observer")
 local save = require("sess.lifecycle.save")
 local target = require("sess.lifecycle.target")
-local transaction = require("sess.lifecycle.transaction")
+local rollback = require("sess.lifecycle.editor_rollback")
+local commit = require("sess.lifecycle.commit")
 
 local M = {}
 
-function M.run(destination, options)
-    local callbacks, hook_err = observer.hooks(options)
-    if not callbacks then
-        return false, hook_err
-    end
+function M.run(destination, options, context)
+    local callbacks = context.hooks
 
     local item, err, lookup_diagnostics
     if destination == nil then
@@ -26,7 +25,7 @@ function M.run(destination, options)
         return false, err or "no session for current working directory"
     end
 
-    local valid, validation_err = editor.validate(item)
+    local valid, validation_err = M.validate(item)
     if not valid then
         return false, validation_err
     end
@@ -46,7 +45,7 @@ function M.run(destination, options)
         return false, err
     end
 
-    valid, validation_err = editor.validate(item)
+    valid, validation_err = M.validate(item)
     if not valid then
         return false, validation_err
     end
@@ -63,13 +62,24 @@ function M.run(destination, options)
         return false, err
     end
 
-    valid, validation_err = editor.validate(item)
+    valid, validation_err = M.validate(item)
     if not valid then
         return false, validation_err
     end
 
-    local changed, change_err, restore_diagnostics = transaction.change(function()
-        return editor.load(item, state.get_view(item.id))
+    local changed, change_err, restore_diagnostics = rollback.change(function()
+        local view = state.get_view(item.id)
+        if editor.load ~= editor._legacy_load then
+            return editor.load(item, view)
+        end
+        if view then
+            return editor.restore(view)
+        end
+
+        editor.empty(item.metadata.cwd)
+        local snapshot_path = assert(storage.get_session_path(item.id))
+        editor.source_snapshot(snapshot_path)
+        return {}
     end)
     if not changed then
         return false, change_err
@@ -77,15 +87,22 @@ function M.run(destination, options)
 
     vim.list_extend(diagnostics, restore_diagnostics or {})
     item = save.touch(item, diagnostics)
-    transaction.activate(item, outgoing_item)
+    commit.activate(item, outgoing_item)
 
     return observer.finish("load", item, callbacks, diagnostics)
 end
 
-function M.last(options)
+function M.validate(item)
+    if vim.fn.isdirectory(item.metadata.cwd) == 0 then
+        return false, "directory does not exist: " .. item.metadata.cwd
+    end
+    return storage.validate_snapshot(item.id)
+end
+
+function M.last(options, context)
     local previous = state.get_prev_session()
     if previous then
-        return M.run(previous, options)
+        return M.run(previous, options, context)
     end
 
     local sessions, err, catalog_diagnostics = catalog.list()
@@ -121,7 +138,7 @@ function M.last(options)
         return false, "no previous session"
     end
 
-    local ok, load_err, loaded, load_diagnostics = M.run(selected, options)
+    local ok, load_err, loaded, load_diagnostics = M.run(selected, options, context)
     if not ok then
         return false, load_err
     end

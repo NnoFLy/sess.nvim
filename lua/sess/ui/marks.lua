@@ -1,6 +1,6 @@
 local api = require("sess.api")
 local log = require("sess.log")
-local storage = require("sess.storage")
+local mark_rules = require("sess.mark")
 
 local M = {}
 
@@ -14,13 +14,13 @@ function M.parse(value, require_prefix)
     elseif require_prefix then
         return nil, "mark must use @ followed by one lowercase ASCII letter or digit"
     end
-    local valid, err = storage.validate_mark(value)
+    local valid, err = mark_rules.validate(value)
     return valid and value or nil, err
 end
 
 -- Confirmation belongs here, never in the prompt-free lifecycle.
 function M.assign(target, mark)
-    local valid, validation_err = storage.validate_mark(mark)
+    local valid, validation_err = mark_rules.validate(mark)
     if not valid then
         return false, validation_err
     end

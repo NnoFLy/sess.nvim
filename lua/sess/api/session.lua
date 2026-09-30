@@ -1,6 +1,6 @@
 local catalog = require("sess.session")
 local opts = require("sess.api.opts")
-local transaction = require("sess.lifecycle.transaction")
+local scope = require("sess.lifecycle.operation_scope")
 local create = require("sess.lifecycle.create")
 local load = require("sess.lifecycle.load")
 local mutations = require("sess.lifecycle.mutations")
@@ -10,22 +10,93 @@ local marks = require("sess.lifecycle.marks")
 
 local M = {}
 
--- This module is intentionally only the public API surface. Lifecycle policy is
--- split between transaction, observer, target, save, and operation modules.
-M.create = transaction.wrap(create.run, true)
-M.load = transaction.wrap(load.run, true)
-M.last = transaction.wrap(load.last, true)
-M.save = transaction.wrap(save.save, true)
-M.unload = transaction.wrap(unload.run, true)
-M.delete = transaction.wrap(mutations.delete, true)
-M.restore = transaction.wrap(mutations.restore, true)
-M.rename = transaction.wrap(mutations.rename, true)
-M.toggle_pin = transaction.wrap(mutations.toggle_pin, true)
-M.set_mark = transaction.wrap(marks.set, true)
-M.clear_mark = transaction.wrap(marks.clear, true)
+-- Resolve configuration at the application boundary. Lifecycle modules receive
+-- immutable operation context and never reach back into the public API.
+local function context_for(options, allowed)
+    if options == nil then
+        return { hooks = opts.get().hooks }
+    end
+    if type(options) ~= "table" then
+        return nil, "options must be a table"
+    end
+
+    for key in pairs(options) do
+        if key ~= "hooks" and not (allowed and allowed[key]) then
+            return nil, "unknown operation option: " .. tostring(key)
+        end
+    end
+
+    if options.hooks ~= nil then
+        local valid, err = opts.validate_hooks(options.hooks)
+        if not valid then
+            return nil, err
+        end
+    end
+
+    return { hooks = vim.tbl_extend("force", opts.get().hooks, options.hooks or {}) }
+end
+
+local function invoke(operation, mutation, builder, context_position)
+    return function(...)
+        if not opts.is_setup() then
+            return false, "sess.nvim is not initialized; call setup() first"
+        end
+
+        local args, count = { ... }, select("#", ...)
+        local context, err = builder(unpack(args, 1, count))
+        if not context then
+            return false, err
+        end
+        args[context_position] = context
+
+        return scope.wrap(operation, mutation)(unpack(args, 1, context_position))
+    end
+end
+
+local function option_builder(position, allowed)
+    return function(...)
+        local args = { ... }
+        return context_for(args[position], allowed)
+    end
+end
+
+local default_context = function()
+    return context_for(nil)
+end
+
+M.create = invoke(create.run, true, option_builder(2, { name = true, id = true }), 3)
+M.load = invoke(load.run, true, option_builder(2), 3)
+M.last = invoke(load.last, true, option_builder(1), 2)
+M.save = function(...)
+    if select("#", ...) > 0 then
+        return false, "save() takes no arguments and saves only the current session"
+    end
+    if not opts.is_setup() then
+        return false, "sess.nvim is not initialized; call setup() first"
+    end
+    local context = default_context()
+    return scope.wrap(function() return save.save(context.hooks) end, true)()
+end
+M.unload = invoke(unload.run, true, function(destination, options)
+    if type(destination) == "table" and destination.id == nil and destination.metadata == nil and options == nil then
+        options = destination
+    end
+    return context_for(options, { confirm = true })
+end, 3)
+M.delete = invoke(mutations.delete, true, option_builder(2), 3)
+M.restore = invoke(mutations.restore, true, option_builder(2), 3)
+M.rename = invoke(mutations.rename, true, default_context, 3)
+M.toggle_pin = invoke(mutations.toggle_pin, true, default_context, 2)
+M.set_mark = invoke(marks.set, true, option_builder(3, { replace = true }), 4)
+M.clear_mark = invoke(marks.clear, true, default_context, 2)
 
 local function query(operation)
-    return transaction.wrap(operation, false)
+    return function(...)
+        if not opts.is_setup() then
+            return false, "sess.nvim is not initialized; call setup() first"
+        end
+        return scope.wrap(operation, false)(...)
+    end
 end
 
 M.resolve = query(function(target)

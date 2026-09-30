@@ -1,6 +1,7 @@
 local M = {}
 
 local consts = require("sess.consts")
+local mark = require("sess.mark")
 local path_utils = require("sess.path")
 
 ---@class Sess.SessionFiles
@@ -25,6 +26,9 @@ local TRASH_DIR = "trash"
 
 local METADATA_FILE = "metadata.json"
 local SESSION_FILE = "session.vim"
+
+-- Compatibility export; mark syntax itself is domain-owned by sess.mark.
+M.validate_mark = mark.validate
 
 -- Internal helpers
 local validate_id
@@ -293,11 +297,11 @@ function M.replace_snapshot(id, generate)
 
     vim.uv.fs_close(fd)
 
-    local ok, err = pcall(generate, temporary)
-    if not ok then
+    local called, generated, generate_err = pcall(generate, temporary)
+    if not called or generated == false then
         vim.uv.fs_unlink(temporary)
 
-        return false, tostring(err)
+        return false, tostring(called and generate_err or generated)
     end
 
     local renamed, rename_err = vim.uv.fs_rename(temporary, path)
@@ -344,12 +348,6 @@ function M.root()
 end
 
 -- Marks are a separate registry: reassignment never rewrites session records.
-function M.validate_mark(mark)
-    if type(mark) ~= "string" or not mark:match("^[a-z0-9]$") then
-        return false, "mark must be one lowercase ASCII letter or digit"
-    end
-    return true
-end
 
 local function validate_marks(data)
     if type(data) ~= "table" or data.version ~= 1 then
@@ -358,8 +356,8 @@ local function validate_marks(data)
     if type(data.marks) ~= "table" then
         return nil, "mark registry must contain a marks object"
     end
-    for mark, id in pairs(data.marks) do
-        local valid, err = M.validate_mark(mark)
+    for mark_value, id in pairs(data.marks) do
+        local valid, err = mark.validate(mark_value)
         if not valid then
             return nil, "invalid mark registry: " .. err
         end
@@ -751,6 +749,22 @@ function M.get_session_path(id)
     return session_paths(id).session
 end
 
+---@param id Sess.SessionId
+---@return boolean, string?
+function M.validate_snapshot(id)
+    local path, err = M.get_session_path(id)
+    if not path then
+        return false, err
+    end
+
+    local stat = vim.uv.fs_stat(path)
+    if not stat or stat.type ~= "file" or vim.fn.filereadable(path) == 0 then
+        return false, "session file is not readable: " .. path
+    end
+
+    return true
+end
+
 -- Session file
 
 ---@param id Sess.SessionId
@@ -787,6 +801,7 @@ for _, name in ipairs({
     "write_metadata",
     "create_with_metadata",
     "get_session_path",
+    "validate_snapshot",
     "read_session",
     "write_session",
 }) do

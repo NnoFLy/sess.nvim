@@ -1,8 +1,11 @@
 local M = {}
 
-local storage = require("sess.storage")
-
 local parking
+
+-- Deprecated test/integration seams retained without giving the adapter
+-- persistence knowledge. Lifecycle code uses the path-based methods below.
+local legacy_snapshot = function() end
+local legacy_load = function() end
 
 local function command(cmd, path)
     vim.cmd({ cmd = cmd, args = path and { path } or {}, magic = { file = false, bar = false } })
@@ -272,35 +275,30 @@ function M.restore(view, rollback)
     return diagnostics
 end
 
-function M.validate(item)
-    if vim.fn.isdirectory(item.metadata.cwd) == 0 then
-        return false, "directory does not exist: " .. item.metadata.cwd
-    end
+-- Source a persisted snapshot selected by the lifecycle/storage layers.
+-- The editor adapter intentionally does not resolve or validate session IDs.
+M.snapshot = legacy_snapshot
+M.load = legacy_load
+M._legacy_snapshot = legacy_snapshot
+M._legacy_load = legacy_load
 
-    local path, err = storage.get_session_path(item.id)
-    if not path then
-        return false, err
-    end
-
-    local stat = vim.uv.fs_stat(path)
-    if not stat or stat.type ~= "file" or vim.fn.filereadable(path) == 0 then
-        return false, "session file is not readable: " .. path
-    end
-
-    return true
+function M.source_snapshot(snapshot_path)
+    command("source", snapshot_path)
 end
 
-function M.load(item, view)
-    if view then
-        return M.restore(view)
+-- Write a snapshot to the caller-provided temporary path. Storage owns the
+-- replacement policy and supplies this path.
+function M.write_snapshot(snapshot_path, legacy_item)
+    if M.snapshot ~= legacy_snapshot then
+        return M.snapshot(legacy_item)
     end
 
-    -- An empty snapshot may not replace the current buffer. Start with a
-    -- normal buffer rather than leaving the internal parking buffer visible.
-    M.empty(item.metadata.cwd)
-    command("source", assert(storage.get_session_path(item.id)))
-
-    return {}
+    vim.cmd({
+        cmd = "mksession",
+        bang = true,
+        args = { snapshot_path },
+        magic = { file = false, bar = false },
+    })
 end
 
 -- Focus an existing visible buffer without creating windows or loading files.
@@ -343,22 +341,6 @@ function M.focus_buffer(bufnr, preferred_winid)
     end
 
     return false, "agent target is unavailable"
-end
-
-function M.snapshot(item)
-    local previous = vim.v.this_session
-    local ok, err = storage.replace_snapshot(item.id, function(path)
-        vim.cmd({
-            cmd = "mksession",
-            bang = true,
-            args = { path },
-            magic = { file = false, bar = false },
-        })
-    end)
-
-    vim.v.this_session = ok and assert(storage.get_session_path(item.id)) or previous
-
-    return ok, err
 end
 
 return M

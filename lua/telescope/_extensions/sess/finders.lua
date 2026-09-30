@@ -171,25 +171,22 @@ end
 function M.generate_active_finder(expanded_by_id, active_expand)
     expanded_by_id = expanded_by_id or {}
     active_expand = active_expand or "current"
-    local sessions = state.active()
-    local current = state.current()
+    local snapshot = api.active.snapshot()
+    local sessions = snapshot.sessions
     for _, session in ipairs(sessions) do
         if expanded_by_id[session.id] == nil then
-            expanded_by_id[session.id] = default_expanded(session.id, current and current.id, active_expand)
+            expanded_by_id[session.id] = default_expanded(session.id, snapshot.current_id, active_expand)
         end
     end
-    local marks_by_id = mark_columns()
-
-    local agents, focused = {}, {}
-    for _, session in ipairs(sessions) do
-        local ok, err, list, diagnostics = api.agent.list(session.id)
-        for _, diagnostic in ipairs(diagnostics or {}) do log.warn(diagnostic) end
-        if not ok then log.warn(err) end
-        agents[session.id] = list or {}
-        local _, _, focused_agent = api.agent.focused(session.id)
-        focused[session.id] = focused_agent and focused_agent.id or nil
-    end
-    local results = M.build_active_entries(sessions, agents, expanded_by_id, current and current.id, focused, marks_by_id)
+    for _, diagnostic in ipairs(snapshot.diagnostics or {}) do log.warn(diagnostic) end
+    local results = M.build_active_entries(
+        snapshot.sessions,
+        snapshot.agents_by_id,
+        expanded_by_id,
+        snapshot.current_id,
+        snapshot.focused_by_id,
+        snapshot.marks_by_id
+    )
     return finders.new_table({ results = results, entry_maker = function(entry)
         return { value = entry, display = entry.display, ordinal = entry.ordinal }
     end }), results

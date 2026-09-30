@@ -301,6 +301,12 @@ State getters:                                            *sess-api.state*
     Read-only defensive copies. vim.g.sess_current_session is the current name
     or nil. No public state setters exist.
 
+Active query:                                             *sess-api.active*
+    api.active.snapshot() returns one read-only application view containing
+    sessions, agents_by_id, focused_by_id, marks_by_id, current_id, and
+    diagnostics. Telescope and other UIs should format this snapshot rather
+    than repeatedly querying session, mark, and agent APIs.
+
 Picker items:                                             *sess-api.items*
     api.items.get_items() returns (items, err, diagnostics). Items include
     healthy sessions and configured directories. UI adapters report diagnostics.
@@ -329,8 +335,9 @@ Hooks may themselves change the editor; those changes are not transactional.
 
 after_operation runs after successful create/load/save/unload/delete/restore/rename/pin/mark/unmark,
 with committed state. Throwing only adds a diagnostic. Context records are
-copies. The transition guard remains held through observers; recursive mutations
-return an in-progress error. Read-only queries remain available.
+copies. The transition guard remains held through observers; recursive lifecycle and
+agent mutations (including focus) return an in-progress error. Read-only
+queries remain available.
 
 User events:                                                   *sess-events*
     SessCreated SessLoaded SessSaved SessUnloaded SessDeleted SessRestored SessRenamed
