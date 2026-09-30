@@ -373,6 +373,10 @@ Active query:                                             *sess-api.active*
     sessions, agents_by_id, focused_by_id, marks_by_id, current_id, and
     diagnostics. Telescope and other UIs should format this snapshot rather
     than repeatedly querying session, mark, and agent APIs.
+    api.active.snapshot_async(callback) builds the same view incrementally,
+    yielding between active sessions. It returns a cancellation function;
+    the callback receives the completed snapshot unless the operation is
+    cancelled.
 
 Picker items:                                             *sess-api.items*
     api.items.get_items() returns (items, err, diagnostics). Items include

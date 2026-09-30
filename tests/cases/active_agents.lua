@@ -20,13 +20,47 @@ package.loaded["telescope.finders"] = {
     end,
 }
 
-local finder = require("telescope._extensions.sess.finders").generate_active_finder({
+local finders = require("telescope._extensions.sess.finders")
+local finder = finders.generate_active_finder({
     [session.id] = true,
 })
 assert(#finder.results == 2, vim.inspect(finder.results))
 assert(finder.results[2].kind == "agent")
 assert(finder.results[2].agent.name == "codex")
 assert(finder.results[2].agent.target.bufnr == terminal)
+
+local async_done = false
+local cancel_async = finders.generate_active_finder_async(
+    {
+        [session.id] = true,
+    },
+    "all",
+    function(async_finder, async_rows)
+        assert(#async_finder.results == #async_rows)
+        async_done = true
+    end
+)
+assert(cancel_async)
+assert(
+    vim.wait(1000, function()
+        return async_done
+    end, 10),
+    "async active finder did not finish"
+)
+cancel_async()
+
+-- Active refreshes must not rescan the entire persistent catalog for each
+-- already-known active session.
+local catalog = require("sess.session")
+local original_list = catalog.list
+local catalog_lists = 0
+catalog.list = function(...)
+    catalog_lists = catalog_lists + 1
+    return original_list(...)
+end
+assert(api.active.snapshot())
+assert(catalog_lists == 0, "active snapshot rescanned the session catalog")
+catalog.list = original_list
 
 local ok, err, registered = api.agent.register(nil, {
     id = "pi",

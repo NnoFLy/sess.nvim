@@ -16,9 +16,15 @@ package.loaded["telescope.finders"] = {
     end,
 }
 
-local generate = require("telescope._extensions.sess.finders").generate_active_finder
+local sync_generate = require("telescope._extensions.sess.finders").generate_active_finder
 local expanded = { [session.id] = true }
-local finder, rows = generate(expanded)
+local finder, rows = sync_generate(expanded)
+local function generate(expanded_by_id, done)
+    vim.schedule(function()
+        local next_finder, next_rows = sync_generate(expanded_by_id)
+        done(next_finder, next_rows)
+    end)
+end
 local prompt = vim.api.nvim_create_buf(false, true)
 local win = vim.api.nvim_open_win(prompt, true, {
     relative = "editor", row = 1, col = 1, width = 20, height = 4,

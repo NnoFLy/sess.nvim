@@ -168,10 +168,7 @@ function M.build_active_entries(sessions, agents_by_id, expanded_by_id, current_
     return entries
 end
 
-function M.generate_active_finder(expanded_by_id, active_expand)
-    expanded_by_id = expanded_by_id or {}
-    active_expand = active_expand or "current"
-    local snapshot = api.active.snapshot()
+local function active_finder_from_snapshot(snapshot, expanded_by_id, active_expand)
     local sessions = snapshot.sessions
     for _, session in ipairs(sessions) do
         if expanded_by_id[session.id] == nil then
@@ -190,6 +187,20 @@ function M.generate_active_finder(expanded_by_id, active_expand)
     return finders.new_table({ results = results, entry_maker = function(entry)
         return { value = entry, display = entry.display, ordinal = entry.ordinal }
     end }), results
+end
+
+function M.generate_active_finder(expanded_by_id, active_expand)
+    expanded_by_id = expanded_by_id or {}
+    active_expand = active_expand or "current"
+    return active_finder_from_snapshot(api.active.snapshot(), expanded_by_id, active_expand)
+end
+
+function M.generate_active_finder_async(expanded_by_id, active_expand, callback)
+    expanded_by_id = expanded_by_id or {}
+    active_expand = active_expand or "current"
+    return api.active.snapshot_async(function(snapshot)
+        callback(active_finder_from_snapshot(snapshot, expanded_by_id, active_expand))
+    end)
 end
 
 function M.generate_deleted_finder()

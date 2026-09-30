@@ -155,6 +155,29 @@ local function all_agents(session_id)
     return result
 end
 
+-- Read the agent list and focused agent together. The active picker polls this
+-- frequently, so resolving and discovering the same session twice is costly.
+function M.snapshot(target)
+    local item, err, _, diagnostics = resolve(target)
+    if not item then
+        return false, err, nil, nil, diagnostics
+    end
+
+    local result = all_agents(item.id)
+    local focused_id = state.get_focused_agent_id(item.id)
+    local focused
+    if focused_id then
+        for _, agent in ipairs(result) do
+            if agent.id == focused_id then
+                focused = focused_id
+                break
+            end
+        end
+    end
+
+    return true, nil, vim.deepcopy(result), focused, diagnostics
+end
+
 function M.register(target, spec)
     if scope.is_busy() then return false, "session transition already in progress" end
     local item, err, _, diagnostics = resolve(target)

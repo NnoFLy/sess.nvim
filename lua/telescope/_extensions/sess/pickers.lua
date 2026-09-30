@@ -121,8 +121,12 @@ function M.active(opts)
     picker._sess_expanded = expanded
     picker._sess_active_expand = active_expand
     picker:find()
-    require("sess.ui.active_refresh").start(picker, function(expanded_by_id)
-        return finders.generate_active_finder(expanded_by_id, picker._sess_active_expand)
+    require("sess.ui.active_refresh").start(picker, function(expanded_by_id, done)
+        return finders.generate_active_finder_async(
+            expanded_by_id,
+            picker._sess_active_expand,
+            done
+        )
     end, rows)
 end
 

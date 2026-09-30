@@ -519,20 +519,21 @@ function M.resolve(target)
         return item, err, reason, diagnostics
     end
 
-    local items, err, diagnostics = M.list()
-    if err then
-        return nil, err, "storage"
-    end
-
+    -- IDs are unambiguous; look them up before scanning the catalog. This path
+    -- is also used by the active-agent status poller.
     if storage.validate_id(target) then
         local item, get_err = M.get(target)
         if item then
             return item
         end
-
         if get_err then
             return nil, get_err, "storage"
         end
+    end
+
+    local items, list_err, diagnostics = M.list()
+    if list_err then
+        return nil, list_err, "storage"
     end
 
     local name_match, name_err = lookup(
