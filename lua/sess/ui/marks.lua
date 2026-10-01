@@ -545,9 +545,11 @@ local function install_autocmds(popup)
     })
 end
 
-local function open_popup()
+local function open_popup(focus)
     if popup_valid(active_popup) then
-        vim.api.nvim_set_current_win(active_popup.window.win)
+        if focus then
+            vim.api.nvim_set_current_win(active_popup.window.win)
+        end
         return true
     end
     if active_popup then
@@ -570,7 +572,7 @@ local function open_popup()
     log.diagnostics(diagnostics)
 
     local options = api.opts.get().mark_window
-    local popup_window, open_err = window.open(options)
+    local popup_window, open_err = window.open(options, focus)
     if not popup_window then
         log.error(open_err)
         return false
@@ -617,17 +619,24 @@ end
 
 function M.goto_mark(value)
     if value == nil then
-        local key = read_key()
-        if key == nil or key == "\27" then
+        local open_key = api.opts.get().mark_window.keymap.open
+        if not open_popup(false) then
             return false
         end
-        local open_key = api.opts.get().mark_window.keymap.open
+        vim.cmd("redraw")
+
+        local key = read_key()
+        if key == nil or key == "\27" then
+            close_popup(true)
+            return false
+        end
         if key == keycode(open_key) then
-            return open_popup()
+            return open_popup(true)
         end
         local mark, err = M.parse(key)
         if not mark then
             log.error(err)
+            close_popup(true)
             return false
         end
         value = mark

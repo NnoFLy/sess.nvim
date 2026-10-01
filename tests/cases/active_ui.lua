@@ -104,6 +104,20 @@ assert(not active_rows[2].display:find("/tmp/project", 1, true))
 assert(active_rows[2].display:find(">", 1, true))
 assert(active_rows[2].ordinal:find("/tmp/project", 1, true))
 
+local session_finder = finders.generate_new_finder()
+local session_entry
+for _, raw in ipairs(session_finder.results) do
+    local entry = session_finder.entry_maker(raw)
+    if entry and entry.value.id == first.id then
+        session_entry = entry
+        break
+    end
+end
+assert(session_entry)
+assert(session_entry.display:find("○", 1, true))
+assert(session_entry.display:find("@s", 1, true))
+assert(session_entry.display:find("[last]", 1, true))
+
 local pickers = require("telescope._extensions.sess.pickers")
 pickers.sess()
 pickers.restore()

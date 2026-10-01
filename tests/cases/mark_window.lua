@@ -21,12 +21,22 @@ end
 local origin = vim.api.nvim_get_current_win()
 local getcharstr = vim.fn.getcharstr
 local function set_input(value)
-    vim.fn.getcharstr = function()
+    vim.fn.getcharstr = type(value) == "function" and value or function()
         return value
     end
 end
-set_input("\5")
+local popup_seen_before_input = false
+set_input(function()
+    for _, win in ipairs(vim.api.nvim_list_wins()) do
+        if win ~= origin and vim.api.nvim_win_get_config(win).relative ~= "" then
+            popup_seen_before_input = true
+            assert(vim.api.nvim_get_current_win() == origin)
+        end
+    end
+    return "\5"
+end)
 assert(sess.goto_mark())
+assert(popup_seen_before_input)
 vim.fn.getcharstr = getcharstr
 local popup = vim.api.nvim_get_current_win()
 local popup_config = vim.api.nvim_win_get_config(popup)

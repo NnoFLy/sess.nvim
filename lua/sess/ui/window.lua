@@ -324,7 +324,7 @@ local function cleanup(buf, win)
     return #errors == 0, #errors > 0 and table.concat(errors, "; ") or nil
 end
 
-function M.open(options)
+function M.open(options, focus)
     local resolved, resolve_err = normalize(options)
     if not resolved then
         return nil, resolve_err
@@ -342,7 +342,7 @@ function M.open(options)
         set_buffer_option(buf, "bufhidden", "wipe")
         set_buffer_option(buf, "swapfile", false)
         set_buffer_option(buf, "modifiable", true)
-        win = vim.api.nvim_open_win(buf, true, config)
+        win = vim.api.nvim_open_win(buf, focus ~= false, config)
         set_window_option(win, "number", false)
         set_window_option(win, "relativenumber", false)
         set_window_option(win, "signcolumn", "no")

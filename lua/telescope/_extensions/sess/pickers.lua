@@ -15,25 +15,32 @@ local function apply_mappings(map, mappings)
     end
 end
 
+local function picker_options()
+    local opts = vim.deepcopy(config.values)
+    if type(opts.theme) == "table" then
+        local theme_opts = opts.theme
+        opts.theme = nil
+        opts = vim.tbl_deep_extend("force", theme_opts, opts)
+    end
+    return opts
+end
+
 local function make_picker(opts, restore_picker)
     opts = opts or {}
 
-    local picker_opts = vim.deepcopy(config.values)
+    local picker_opts = picker_options()
 
     local current_session = state.current()
     if current_session then
         picker_opts.prompt_title = picker_opts.prompt_title .. " | " .. current_session.metadata.name
     end
 
-    if picker_opts.theme and type(picker_opts.theme) == "table" then
-        local theme_opts = picker_opts.theme
-        picker_opts.theme = nil
-        picker_opts = vim.tbl_deep_extend("force", theme_opts, picker_opts)
-    end
-
     picker_opts.finder = restore_picker and finders.generate_deleted_finder() or finders.generate_new_finder()
     if not restore_picker then
         local path_mode = false
+        picker_opts.get_status_text = picker_opts.get_status_text or function()
+            return "<Tab> pin/complete  <C-b> mark  <Enter> switch/load"
+        end
         picker_opts.on_input_filter_cb = function(prompt)
             if path.is_path(prompt) then
                 path_mode = true
@@ -93,7 +100,7 @@ end
 
 function M.active(opts)
     opts = opts or {}
-    local picker_opts = vim.deepcopy(config.values)
+    local picker_opts = picker_options()
     picker_opts.prompt_title = "Active Sessions"
     local active_expand = config.values.active_expand
     local expanded = {}
@@ -108,8 +115,8 @@ function M.active(opts)
     local finder, rows = finders.generate_active_finder(expanded, active_expand)
     picker_opts.finder = finder
     picker_opts.selection_strategy = "row"
-    picker_opts.get_status_text = function()
-        return "<Tab> expand/collapse  <S-Tab> all  <Enter> switch/focus"
+    picker_opts.get_status_text = picker_opts.get_status_text or function()
+        return "<Tab> expand/collapse  <S-Tab> all  <C-b> mark  <Enter> switch/focus"
     end
     picker_opts.mappings = nil
     picker_opts.attach_mappings = function(_, map)

@@ -108,8 +108,12 @@ COMMANDS                                                     *sess-commands*
 
 :Sess active                                                 *:Sess-active*
     Open the active-session picker. All Sess pickers display results
-    top-to-bottom with the input prompt at the top. Sessions are shown as
-    tree-style groups with their cwd and agents, and are expanded by default.
+    top-to-bottom with the input prompt at the top. Regular session rows share
+    the active-session layout: ● current, ○ active, · inactive, and + new
+    directory. Marks, names and paths stay aligned. [pinned], [last] and
+    [new session] mark pinned, last and new rows. The current session is
+    omitted from the regular picker. Active sessions are shown as tree-style
+    groups with their cwd and agents, and are expanded by default.
     Configure Telescope's active_expand option as "all", "current", or "none"
     to change the initial expansion. <Tab> expands/collapses the selected
     group; <S-Tab> expands/collapses all groups; <Enter> switches and focuses.
@@ -309,9 +313,10 @@ require("sess").set_mark(mark?)                  *sess.set_mark*
 require("sess").goto_mark(mark?)                 *sess.goto_mark*
     With an explicit mark, load it directly. A missing mark is assigned to the
     current session and reported to the user, preserving the direct-navigation
-    behavior. With no argument, read one key: a mark loads directly, the
-    configured mark_window.keymap.open key opens or focuses the popup, and
-    <Esc> cancels. The popup is a focusable read-only float. <Up>/<Down> move
+    behavior. With no argument, show the popup without changing focus, then
+    read one key: a mark loads directly, mark_window.keymap.open focuses the
+    popup, and <Esc> cancels. The popup is a focusable read-only float.
+    <Up>/<Down> move
     the selection, <Enter> loads it, and the load_prefix followed by a mark
     loads that mark directly. The configurable delete, undo, change_mark and
     rename keys manage assignments and sessions. <Esc> and <C-c> cancel.

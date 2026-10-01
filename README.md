@@ -170,9 +170,10 @@ registry, and can point to inactive sessions. Stale marks remain visible in
 `list_marks()` until explicitly replaced or removed. The core API never prompts;
 commands and Telescope confirm replacement. `:Sess load @s` resolves through the
 normal load lifecycle. `require("sess").goto_mark("s")` loads a mark directly.
-With no argument it reads one key: a mark loads directly, the configured
-`mark_window.keymap.open` key opens or focuses the mark manager, and `<Esc>`
-cancels. The popup is a focusable, read-only float, never creates marks, shows
+With no argument it opens the popup without changing focus, then reads one
+key: a mark loads directly, `mark_window.keymap.open` focuses the mark manager,
+and `<Esc>` cancels. The popup is a focusable, read-only float that never
+creates marks and shows
 stale assignments as unavailable, and can be cancelled with `<Esc>` or `<C-c>`.
 Its default actions are arrows for navigation, `<Enter>` to load, `g` plus a
 mark to load directly, `d` to delete an assignment, `u` to undo the latest mark
@@ -231,6 +232,10 @@ require("telescope").load_extension("sess")
 ```
 
 All Sess pickers display results top-to-bottom with the input prompt at the top.
+Regular session rows share the active picker’s layout: `●` is current,
+`○` is active, `·` is inactive, and `+` is a new directory. Marks, names,
+and paths stay aligned. `[pinned]`, `[last]`, and `[new session]` mark pinned,
+last, and new rows.
 Enter loads/creates. Ctrl-d (insert) or `dd` (normal) deletes with confirmation.
 `:Sess restore` opens a deleted-session picker; Enter restores the selected record.
 `:Sess active` shows active sessions as tree-style groups with their cwd and
