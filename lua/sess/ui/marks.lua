@@ -125,6 +125,40 @@ local function keycode(value)
     return vim.api.nvim_replace_termcodes(value, true, false, true)
 end
 
+function M.setup_keymap(keymap)
+    local mappings = {
+        {
+            lhs = keymap.prefix,
+            callback = M.goto_mark,
+            desc = "Sess: goto mark",
+        },
+        {
+            lhs = keymap.prefix .. keymap.set_mark,
+            callback = M.set_mark,
+            desc = "Sess: set mark",
+        },
+        {
+            lhs = keymap.prefix .. keymap.edit_marks,
+            callback = M.edit_marks,
+            desc = "Sess: edit marks",
+        },
+    }
+
+    local ok, err = pcall(function()
+        for _, mapping in ipairs(mappings) do
+            vim.keymap.set("n", mapping.lhs, mapping.callback, {
+                desc = mapping.desc,
+                noremap = true,
+                silent = true,
+            })
+        end
+    end)
+    if not ok then
+        return false, "Failed to install mark keymaps: " .. tostring(err)
+    end
+    return true
+end
+
 local function popup_active(popup)
     return popup ~= nil and active_popup == popup and not popup.closing
 end
@@ -604,6 +638,10 @@ local function open_popup(focus)
     return true
 end
 
+function M.edit_marks()
+    return open_popup(true)
+end
+
 function M.set_mark(value)
     local mark = read_mark(value)
     if not mark then
@@ -619,7 +657,9 @@ end
 
 function M.goto_mark(value)
     if value == nil then
-        local open_key = api.opts.get().mark_window.keymap.open
+        local keymap = api.opts.get().keymap
+        local edit_key = keycode(keymap.edit_marks)
+        local set_mark_key = keycode(keymap.set_mark)
         if not open_popup(false) then
             return false
         end
@@ -630,8 +670,12 @@ function M.goto_mark(value)
             close_popup(true)
             return false
         end
-        if key == keycode(open_key) then
+        if key == edit_key then
             return open_popup(true)
+        end
+        if key == set_mark_key then
+            close_popup(true)
+            return M.set_mark()
         end
         local mark, err = M.parse(key)
         if not mark then

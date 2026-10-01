@@ -87,6 +87,11 @@
 ---@field cwd string? Internal catalog only; public create accepts cwd as its first argument.
 ---@field id Sess.SessionId?
 
+---@class Sess.Keymap
+---@field prefix string
+---@field set_mark string
+---@field edit_marks string
+
 ---@class Sess.MarkWindowKeymap
 ---@field open string
 ---@field load_prefix string
@@ -114,4 +119,5 @@
 ---@field exclude_filetypes string[]
 ---@field hooks Sess.Hooks
 ---@field store_path Sess.DBPath
+---@field keymap Sess.Keymap
 ---@field mark_window Sess.MarkWindowOptions

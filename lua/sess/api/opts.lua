@@ -13,8 +13,52 @@ local defaults = {
     exclude_filetypes = { "gitcommit" },
     store_path = vim.fn.stdpath("data") .. "/sess.nvim",
     hooks = {},
+    keymap = {
+        prefix = "<C-q>",
+        set_mark = "<C-q>",
+        edit_marks = "<C-e>",
+    },
     mark_window = window.defaults(),
 }
+
+local function keycode(value)
+    return vim.api.nvim_replace_termcodes(value, true, false, true)
+end
+
+local function validate_keymap(keymap)
+    if type(keymap) ~= "table" then
+        return false, "keymap must be a table"
+    end
+
+    local seen = {}
+    for name, value in pairs(keymap) do
+        if name ~= "prefix" and name ~= "set_mark" and name ~= "edit_marks" then
+            return false, "unknown keymap option: " .. tostring(name)
+        end
+        if type(value) ~= "string" or value == "" then
+            return false, "keymap." .. name .. " must be a non-empty key specification"
+        end
+
+        local normalized = keycode(value)
+        if normalized == "" then
+            return false, "keymap." .. name .. " must be a non-empty key specification"
+        end
+        if name ~= "prefix" then
+            if seen[normalized] then
+                return false, "keymap entries conflict: " .. seen[normalized] .. " and " .. name
+            end
+            seen[normalized] = name
+        end
+    end
+
+    for _, name in ipairs({ "prefix", "set_mark", "edit_marks" }) do
+        if keymap[name] == nil then
+            return false, "keymap." .. name .. " must be a non-empty key specification"
+        end
+    end
+
+    return true
+end
 
 function M.validate_hooks(hooks)
     if type(hooks) ~= "table" then
@@ -60,6 +104,22 @@ function M.setup(user_opts)
         return false, window_err
     end
 
+    if type(candidate.keymap) ~= "table" then
+        return false, "keymap must be a table"
+    end
+
+    -- Keep the old popup `open` option useful as the edit action unless the
+    -- new top-level keymap explicitly overrides it.
+    local user_keymap = user_opts and user_opts.keymap
+    if not user_keymap or user_keymap.edit_marks == nil then
+        candidate.keymap.edit_marks = candidate.mark_window.keymap.open
+    end
+
+    local valid_keymap, keymap_err = validate_keymap(candidate.keymap)
+    if not valid_keymap then
+        return false, keymap_err
+    end
+
     for _, name in ipairs({ "paths", "exclude_filetypes" }) do
         if type(candidate[name]) ~= "table" or not vim.islist(candidate[name]) then
             return false, name .. " must be a list"
@@ -92,6 +152,11 @@ function M.setup(user_opts)
 
     if not ok then
         return false, storage_err
+    end
+
+    local installed, install_err = require("sess.ui.marks").setup_keymap(candidate.keymap)
+    if not installed then
+        return false, install_err
     end
 
     configured = candidate

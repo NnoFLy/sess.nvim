@@ -42,6 +42,11 @@ require("sess").setup({
     log_level = "info", -- debug | info | warn | error
     store_path = vim.fn.stdpath("data") .. "/sess.nvim",
     hooks = {}, -- optional before_transition and after_operation callbacks
+    keymap = {
+        prefix = "<C-q>", -- goto mark: <C-q><key>
+        set_mark = "<C-q>", -- set mark: <C-q><C-q><key>
+        edit_marks = "<C-e>", -- edit marks: <C-q><C-e>
+    },
     mark_window = {
         position = "right_bottom", -- left_top, center_top, right_top, etc.
         width = 48,
@@ -56,7 +61,6 @@ require("sess").setup({
             winhighlight = "",
         },
         keymap = {
-            open = "<C-e>",
             load_prefix = "g",
             delete = "d",
             undo = "u",
@@ -84,35 +88,31 @@ augroup for user autocmds.
 
 ## Usage
 
-| Command | Behavior |
-| --- | --- |
-| `:Sess create [path]` | Create a session, or load the existing one for that path |
-| `:Sess load [name/id/path/@mark]` | Load or create a session for the target; defaults to current cwd |
-| `:Sess mark @mark [target]` | Assign a persistent mark to the current or named session |
-| `:Sess unmark @mark` | Remove a persistent mark |
-| `:Sess save` | Save the current session |
-| `:Sess last` | Return to the previous session, or open the most recently used session after a fresh start |
-| `:Sess unload [name/id/path]` | Close a session's buffers and terminal jobs; defaults to current |
-| `:Sess pin [target]` | Toggle pin; defaults to current session |
-| `:Sess rename [target] [name]` | Rename; prompts for a missing name |
-| `:Sess delete [target]` | Move to private trash; defaults to current session |
-| `:Sess restore [target]` | Restore from trash, or open the deleted-session picker |
-| `:Sess list` | Open the session Telescope picker |
-| `:Sess active` | Open active runtime sessions and detected/registered agents |
+| Command                           | Behavior                                                                                   |
+| --------------------------------- | ------------------------------------------------------------------------------------------ |
+| `:Sess create [path]`             | Create a session, or load the existing one for that path                                   |
+| `:Sess load [name/id/path/@mark]` | Load or create a session for the target; defaults to current cwd                           |
+| `:Sess mark @mark [target]`       | Assign a persistent mark to the current or named session                                   |
+| `:Sess unmark @mark`              | Remove a persistent mark                                                                   |
+| `:Sess save`                      | Save the current session                                                                   |
+| `:Sess last`                      | Return to the previous session, or open the most recently used session after a fresh start |
+| `:Sess unload [name/id/path]`     | Close a session's buffers and terminal jobs; defaults to current                           |
+| `:Sess pin [target]`              | Toggle pin; defaults to current session                                                    |
+| `:Sess rename [target] [name]`    | Rename; prompts for a missing name                                                         |
+| `:Sess delete [target]`           | Move to private trash; defaults to current session                                         |
+| `:Sess restore [target]`          | Restore from trash, or open the deleted-session picker                                     |
+| `:Sess list`                      | Open the session Telescope picker                                                          |
+| `:Sess active`                    | Open active runtime sessions and detected/registered agents                                |
 
 ```lua
 vim.keymap.set("n", "<M-s>s", "<cmd>Sess save<cr>")
 vim.keymap.set("n", "<M-s>l", "<cmd>Sess list<cr>")
 vim.keymap.set("n", "<leader><C-^>", "<cmd>Sess last<cr>")
-vim.keymap.set("n", "<C-q>", require("sess").goto_mark, {
-    desc = "Sess: goto mark",
-    silent = true,
-})
-vim.keymap.set("n", "<C-q><C-q>", require("sess").set_mark, {
-    desc = "Sess: set mark",
-    silent = true,
-})
 ```
+
+The mark mappings are installed by `setup()`. By default, `<C-q><key>`
+navigates to a mark, `<C-q><C-q><key>` assigns a mark, and `<C-q><C-e>`
+opens the mark manager. Configure them with the top-level `keymap` option.
 
 ### Switching and saving
 
@@ -171,24 +171,27 @@ registry, and can point to inactive sessions. Stale marks remain visible in
 commands and Telescope confirm replacement. `:Sess load @s` resolves through the
 normal load lifecycle. `require("sess").goto_mark("s")` loads a mark directly.
 With no argument it opens the popup without changing focus, then reads one
-key: a mark loads directly, `mark_window.keymap.open` focuses the mark manager,
-and `<Esc>` cancels. The popup is a focusable, read-only float that never
-creates marks and shows
-stale assignments as unavailable, and can be cancelled with `<Esc>` or `<C-c>`.
-Its default actions are arrows for navigation, `<Enter>` to load, `g` plus a
-mark to load directly, `d` to delete an assignment, `u` to undo the latest mark
-mutation, `r` to change a mark key, and `R` to rename a session.
-`require("sess").set_mark()`
-continues to read one following key when called without an argument, assigns it
-to the current session, and confirms before replacement. Neither function
-installs a global mapping automatically.
+key: a mark loads directly, the configured `keymap.edit_marks` key focuses the
+mark manager, and `<Esc>` cancels. The popup is a focusable, read-only float
+that never creates marks and shows stale assignments as unavailable, and can
+be cancelled with `<Esc>` or `<C-c>`. Its default actions are arrows for
+navigation, `<Enter>` to load, `g` plus a mark to load directly, `d` to delete
+an assignment, `u` to undo the latest mark mutation, `r` to change a mark key,
+and `R` to rename a session. `require("sess").set_mark()` continues to read
+one following key when called without an argument, assigns it to the current
+session, and confirms before replacement. `setup()` installs the global mark
+mappings; the functions remain available for direct calls and custom mappings.
 
 The mark popup supports the nine positions `left_top`, `center_top`,
 `right_top`, `left_center`, `center`, `right_center`, `left_bottom`,
 `center_bottom`, and `right_bottom`. Width and height are content dimensions;
 the complete float, including its border and margin, is clamped to the editor.
-`mark_window.keymap` configures popup actions; key specifications must be
-non-empty and unique. Only the documented `mark_window.win_options` are accepted.
+The top-level `keymap` configures the global mark prefix and actions; key
+specifications must be non-empty, and `set_mark` and `edit_marks` must differ.
+`mark_window.keymap` configures popup actions. Its `open` key remains a
+fallback for `keymap.edit_marks` when
+that option is omitted. Only the documented `mark_window.win_options` are
+accepted.
 
 See [`:help sess-api`](doc/sessionizer.txt) for its contract and failure behavior.
 
@@ -262,7 +265,13 @@ Telescope and autocommands use the same lifecycle.
 the current session, `:Sess mark @s project-api` marks a specific session, and
 `:Sess unmark @s` removes it. Use `:Sess load @s`, the optional native
 `<C-q>{mark}` mapping to navigate, or `<C-q><C-q>{mark}` to set a mark on the
-current session. Setting a mark and navigating a mark are separate actions. Path targets beginning with `~/`, `/`, `./`, or `../` load their session or create one. Existing directories are resolved with `fs_realpath`, so symlinked paths share one session identity. Invalid or missing directories are rejected. Creating a session opens the default file explorer in the project root.
+current session. These mappings are installed by `setup()` and can be changed
+with the top-level `keymap` option. Setting a mark and navigating a mark are
+separate actions. Path targets beginning with `~/`, `/`, `./`, or `../` load
+their session or create one. Existing directories are resolved with
+`fs_realpath`, so symlinked paths share one session identity. Invalid or
+missing directories are rejected. Creating a session opens the default file
+explorer in the project root.
 
 In the Telescope session picker, a path prompt switches to immediate directory completion. `<Tab>` inserts the selected directory and a trailing slash while keeping the picker open. `<Enter>` loads or creates its session. Returning to a non-path prompt restores the normal session finder.
 

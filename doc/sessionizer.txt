@@ -21,6 +21,11 @@ setup() returns (ok, err) and logs failures. Call once. Unknown options fail. >
         log_level = "info", -- debug | info | warn | error
         store_path = vim.fn.stdpath("data") .. "/sess.nvim",
         hooks = {},
+        keymap = {
+            prefix = "<C-q>",
+            set_mark = "<C-q>",
+            edit_marks = "<C-e>",
+        },
         mark_window = {
             position = "right_bottom",
             width = 48,
@@ -35,7 +40,6 @@ setup() returns (ok, err) and logs failures. Call once. Unknown options fail. >
                 winhighlight = "",
             },
             keymap = {
-                open = "<C-e>",
                 load_prefix = "g",
                 delete = "d",
                 undo = "u",
@@ -303,19 +307,16 @@ require("sess").set_mark(mark?)                  *sess.set_mark*
     Assign a mark to the current session. With no argument, read one
     following key using getcharstr; <Esc>, interrupted input, invalid input,
     and multi-character input are harmless. Existing marks require
-    confirmation before replacement. This function does not install a
-    keymap. Example: >
-        vim.keymap.set("n", "<C-q><C-q>", require("sess").set_mark, {
-            desc = "Sess: set mark", silent = true,
-        })
+    confirmation before replacement. setup() installs the configured global
+    mark mappings, but this function remains available for custom mappings.
 <
 
 require("sess").goto_mark(mark?)                 *sess.goto_mark*
     With an explicit mark, load it directly. A missing mark is assigned to the
     current session and reported to the user, preserving the direct-navigation
     behavior. With no argument, show the popup without changing focus, then
-    read one key: a mark loads directly, mark_window.keymap.open focuses the
-    popup, and <Esc> cancels. The popup is a focusable read-only float.
+    read one key: a mark loads directly, keymap.edit_marks focuses the popup,
+    and <Esc> cancels. The popup is a focusable read-only float.
     <Up>/<Down> move
     the selection, <Enter> loads it, and the load_prefix followed by a mark
     loads that mark directly. The configurable delete, undo, change_mark and
@@ -324,11 +325,23 @@ require("sess").goto_mark(mark?)                 *sess.goto_mark*
     changing tabs cancels it. Selection closes the popup and restores the
     originating window before loading through the normal lifecycle. Popup
     selection errors and diagnostics are logged by this UI function. This
-    function does not install a global keymap. Example: >
-        vim.keymap.set("n", "<C-q>", require("sess").goto_mark, {
-            desc = "Sess: goto mark", silent = true,
-        })
+    function does not install a global keymap itself; setup() installs the
+    configured prefix mapping. The default mappings are <C-q>{mark} to load,
+    <C-q><C-q>{mark} to assign, and <C-q><C-e> to open the mark manager.
+
+Global mark keymap                                           *sess-keymap*
+    keymap.prefix is the main mark prefix. keymap.set_mark is appended to the
+    prefix for assignment, and keymap.edit_marks is read after the prefix to
+    focus the mark manager. All three values must be non-empty key
+    specifications, and set_mark and edit_marks must be distinct. Defaults: >
+        keymap = {
+            prefix = "<C-q>",
+            set_mark = "<C-q>",
+            edit_marks = "<C-e>",
+        }
 <
+    The legacy mark_window.keymap.open value is used for edit_marks when the
+    top-level option is omitted.
 
 Mark popup configuration                                      *sess-mark-window*
     mark_window is validated before storage or managed autocommands are

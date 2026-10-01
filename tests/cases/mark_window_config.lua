@@ -22,6 +22,13 @@ local conflicting, conflicting_err = opts.setup({
 assert(not conflicting and conflicting_err:match("conflict"))
 assert(vim.fn.isdirectory(fixture.root .. "/conflicting-keymap") == 0)
 
+local global_conflicting, global_conflicting_err = opts.setup({
+    store_path = fixture.root .. "/global-conflicting-keymap",
+    keymap = { set_mark = "x", edit_marks = "x" },
+})
+assert(not global_conflicting and global_conflicting_err:match("conflict"))
+assert(vim.fn.isdirectory(fixture.root .. "/global-conflicting-keymap") == 0)
+
 assert(opts.setup({
     store_path = fixture.root .. "/store",
     smart_auto_load = false,
@@ -33,6 +40,9 @@ assert(opts.setup({
     },
 }))
 local configured = opts.get()
+assert(configured.keymap.prefix == "<C-q>")
+assert(configured.keymap.set_mark == "<C-q>")
+assert(configured.keymap.edit_marks == "<C-y>")
 assert(configured.mark_window.position == "left_top")
 assert(configured.mark_window.width == 48)
 assert(configured.mark_window.win_options.cursorline == false)
