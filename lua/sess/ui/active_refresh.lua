@@ -65,10 +65,13 @@ function M.start(picker, generate, initial_rows)
         end
 
         local ok, err = pcall(function()
+            -- Collapsed rows can stay unchanged while a session status changes.
+            local snapshot_changed = snapshot ~= nil
+                and not vim.deep_equal(picker._sess_active_snapshot, snapshot)
             if snapshot then
                 picker._sess_active_snapshot = snapshot
             end
-            if not vim.deep_equal(rows, next_rows) then
+            if snapshot_changed or not vim.deep_equal(rows, next_rows) then
                 picker:refresh(finder, { reset_prompt = false })
                 rows = next_rows
             end

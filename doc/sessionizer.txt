@@ -117,10 +117,11 @@ COMMANDS                                                     *sess-commands*
     directory. Marks, names and paths stay aligned. [pinned], [last] and
     [new session] mark pinned, last and new rows. The current session is
     omitted from the regular picker. Active sessions are shown as tree-style
-    groups with their cwd and agents, and are expanded by default.
+    groups with their cwd and agents; sessions start collapsed.
     Configure Telescope's active_expand option as "all", "current", or "none"
     to change the initial expansion. <Tab> expands/collapses the selected
     group; <S-Tab> expands/collapses all groups; <Enter> switches and focuses.
+    Each session header ends with agent counts such as "agents 1 working 2 idle".
     Empty groups show a non-actionable "no agents" row. <C-b> prompts for a
     mark on the selected session. Marks appear on active session headers and
     regular picker rows. Known agent commands
@@ -502,7 +503,7 @@ TELESCOPE                                                   *sess-telescope*
 
 Install telescope.nvim and plenary.nvim, then: >
     require("telescope").setup({
-        extensions = { sess = { active_expand = "all" } },
+        extensions = { sess = { active_expand = "none" } },
     })
     require("telescope").load_extension("sess")
 <
@@ -510,7 +511,8 @@ The active_expand option accepts "all", "current", or "none". Unsupported
 values are rejected during Telescope setup. Regular picker mappings use
 `mappings`; active picker mappings use `active_mappings`. The active picker uses
 tree-style session/agent rows and a footer showing <Tab> expand/collapse, <S-Tab>
-expand/collapse all, and <Enter> switch/focus controls. Empty expanded sessions
+expand/collapse all. <Enter> switches and focuses. Each session header ends
+with agent counts such as `agents 1 working 2 idle`. Empty expanded sessions
 show a non-actionable "no agents" row. Manual expansion changes are preserved
 while the picker is open and across status refreshes. It shows session headers
 immediately, then asynchronously hydrates agents and marks. It reuses terminal

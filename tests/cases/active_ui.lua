@@ -29,6 +29,7 @@ package.loaded["telescope.config"] = {
 }
 
 local config = require("telescope._extensions.sess.config")
+assert(config.values.active_expand == "none")
 local invalid_config = pcall(config.setup, { active_expand = "invalid" })
 assert(not invalid_config)
 config.setup({ active_expand = "none" })
@@ -90,6 +91,8 @@ local active_rows = finders.build_active_entries(
     {
         fake = {
             { id = "pi", name = "pi", status = "working", info = "implementing auth" },
+            { id = "codex", name = "codex", status = "working" },
+            { id = "claude", name = "claude", status = "idle" },
         },
     },
     { fake = true },
@@ -97,6 +100,7 @@ local active_rows = finders.build_active_entries(
     { fake = "pi" }
 )
 assert(active_rows[1].display:find("/tmp/project", 1, true))
+assert(active_rows[1].display:find("agents 2 working 1 idle", 1, true))
 assert(active_rows[2].display:find("─", 1, true))
 assert(active_rows[2].display:find("working", 1, true))
 assert(active_rows[2].display:find("implementing auth", 1, true))
@@ -128,6 +132,8 @@ for _, options in ipairs(picker_options) do
 end
 
 local active_picker_options = picker_options[3]
+local status_text = active_picker_options.get_status_text()
+assert(status_text == "<Tab> expand/collapse  <S-Tab> all  <C-b> mark  <Enter> switch/focus")
 for _, row in ipairs(active_picker_options.finder.results) do
     assert(row.kind ~= "agent", "active picker should hydrate agents asynchronously")
 end

@@ -11,7 +11,7 @@ local active_expand_modes = {
 
 config.values = {
     prompt_title = "All Sessions",
-    active_expand = "all",
+    active_expand = "none",
     sorting_strategy = "ascending",
     layout_config = {
         prompt_position = "top",

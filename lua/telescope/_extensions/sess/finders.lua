@@ -33,8 +33,35 @@ local status_symbols = {
     working = "●",
 }
 
+local status_display_order = { "working", "idle", "blocked", "done", "unknown" }
+
 local function pad(value, width)
     return value .. string.rep(" ", math.max(0, width - vim.fn.strdisplaywidth(value)))
+end
+
+local function agent_status_text(agents)
+    local counts = {}
+    for _, agent in ipairs(agents or {}) do
+        local status = agent.status or "unknown"
+        if not status_symbols[status] then
+            status = "unknown"
+        end
+        counts[status] = (counts[status] or 0) + 1
+    end
+
+    if next(counts) == nil then
+        return "agents 0"
+    end
+
+    local parts = { "agents" }
+    for _, status in ipairs(status_display_order) do
+        local count = counts[status]
+        if count then
+            parts[#parts + 1] = tostring(count)
+            parts[#parts + 1] = status
+        end
+    end
+    return table.concat(parts, " ")
 end
 
 -- Keep session columns identical without implying expansion in the flat picker.
@@ -72,6 +99,9 @@ local function format_session_display(session, opts)
     end
     if not session.id then
         display = display .. "  [new session]"
+    end
+    if opts.agent_status then
+        display = display .. "  " .. opts.agent_status
     end
 
     return display
@@ -166,6 +196,7 @@ function M.build_active_entries(
                 mark = mark,
                 mark_width = mark_width,
                 name_width = session_name_width,
+                agent_status = agent_status_text(agents),
             }),
             ordinal = table.concat({
                 mark,
