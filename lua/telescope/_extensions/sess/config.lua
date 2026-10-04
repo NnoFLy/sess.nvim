@@ -1,5 +1,6 @@
 local actions = require("telescope._extensions.sess.actions")
 local conf = require("telescope.config").values
+local search = require("telescope._extensions.sess.search")
 
 local config = {}
 
@@ -54,6 +55,11 @@ config.values = {
         footer = true,
         descriptions = {},
     },
+    search = {
+        fields = { "name", "cwd", "mark", "agent", "status", "info" },
+        filters = true,
+        sort = "default",
+    },
     active_expand = "none",
     poll_interval = 1000,
     sorting_strategy = "ascending",
@@ -96,6 +102,17 @@ config.values = {
 }
 
 config.setup = function(ext_config)
+    local configured_search = ext_config and ext_config.search
+    if configured_search ~= nil then
+        if type(configured_search) ~= "table" then
+            error("sess.nvim: search must be a table")
+        end
+        local valid_search, search_err = search.validate(configured_search)
+        if not valid_search then
+            error("sess.nvim: " .. search_err)
+        end
+    end
+
     local active_expand = ext_config and ext_config.active_expand
     if active_expand ~= nil and not active_expand_modes[active_expand] then
         error('sess.nvim: active_expand must be "all", "current", or "none"')

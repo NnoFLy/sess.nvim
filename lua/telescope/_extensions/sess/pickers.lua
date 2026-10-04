@@ -3,6 +3,7 @@ local action_state = require("telescope.actions.state")
 
 local config = require("telescope._extensions.sess.config")
 local finders = require("telescope._extensions.sess.finders")
+local search = require("telescope._extensions.sess.search")
 local actions = require("telescope._extensions.sess.actions")
 local help = require("telescope._extensions.sess.help")
 local preview = require("telescope._extensions.sess.preview")
@@ -22,6 +23,8 @@ local function picker_options()
     local preview_config = opts.preview or {}
     opts.preview = nil
     opts.action_help = nil
+    opts.sorter = search.new_sorter(opts.sorter, opts.search or {})
+    opts.search = nil
     -- Telescope owns the preview buffer lifecycle. On narrow terminals the
     -- pane is omitted rather than taking space from the prompt and results.
     if preview_config.enabled ~= false and vim.o.columns >= 80 then

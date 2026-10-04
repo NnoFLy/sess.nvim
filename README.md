@@ -93,6 +93,11 @@ require("telescope").setup({
                 footer = true,
                 -- descriptions = { ["<C-x>"] = "Custom action" },
             },
+            search = {
+                fields = { "name", "cwd", "mark", "agent", "status", "info" },
+                filters = true,
+                sort = "default", -- default | recent | pinned | activity | name
+            },
             -- Override regular or active picker mappings when needed.
             -- mappings = { i = { ["<C-b>"] = ... } },
             -- active_mappings = { i = { ["<C-b>"] = ... } },
@@ -288,6 +293,16 @@ selection-aware list in insert or normal mode. Set the key to `false` or set
 `action_help.enabled` to `false` to disable it. Custom mapping descriptions can
 be supplied with `action_help.descriptions`; configured mappings always keep
 precedence over the help key.
+Search matches session names, working directories, marks, pinned/last labels,
+current/active state, and agent names, statuses, and info while retaining the
+complete data in each entry ordinal. Optional filters include `@a`,
+`path:frontend`, `status:working`, and `agent:pi`; malformed filters remain
+plain text. Configure `search.fields`, disable filter prefixes with
+`search.filters = false`, or opt into `search.sort` modes `recent`, `pinned`,
+`activity`, or `name` (the default preserves the existing order). Exact name
+and mark matches rank above loose path matches. A custom Telescope `sorter`
+continues to receive the enriched ordinal. Active-agent matches retain their
+parent session header. Plain paths, spaces, and Unicode remain searchable.
 Each session row ends with agent counts such as `agents 1 working 2 idle`;
 while hydration is pending it says `agents loading`, and a failed/stale probe is
 shown as `agents stale`. A failed probe keeps the last usable rows and reports a

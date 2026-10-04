@@ -157,7 +157,19 @@ missing or hidden target is a successful operation with an unavailable-target
 diagnostic. Agent records disappear only after a successful unload or delete
 and are never restored from disk.
 
-The session Telescope picker normally shows available sessions. <C-b> prompts
+The session Telescope picker normally shows available sessions. Search covers
+names, working directories, marks, pinned/last labels, current/active state,
+and agent name, status, and info. Each entry keeps the complete searchable
+record in its ordinal, so custom sorters can use the same data. Exact name and
+mark matches rank above loose path matches. Optional prefixes are `@a`,
+`path:frontend`, `status:working`, and `agent:pi`; prefixes preserve spaces and
+shell-like characters, and invalid syntax is treated as ordinary text. Configure
+`search.fields`, `search.filters`, and `search.sort` (`default`, `recent`,
+`pinned`, `activity`, or `name`) in the Telescope extension. The default order
+is unchanged. Active agent matches keep their parent session visible. A custom
+`sorter` receives the enriched ordinal.
+
+<C-b> prompts
 for and assigns a mark to the selected session. A prompt
 beginning with `~/`, `/`, `./`, or `../` switches to immediate directory
 completion and includes a `./` entry for the typed directory. In path mode,
@@ -534,6 +546,11 @@ Install telescope.nvim and plenary.nvim, then: >
                     key = "?",
                     footer = true,
                     -- descriptions = { ["<C-x>"] = "Custom action" },
+                },
+                search = {
+                    fields = { "name", "cwd", "mark", "agent", "status", "info" },
+                    filters = true,
+                    sort = "default", -- default | recent | pinned | activity | name
                 },
             },
         },

@@ -19,6 +19,7 @@ local api = require("sess.api")
 local log = require("sess.log")
 local path = require("sess.ui.path")
 local path_utils = require("sess.path")
+local search = require("telescope._extensions.sess.search")
 
 local items = api.items
 local state = api.state
@@ -167,6 +168,23 @@ local function configured_display_options()
         options.available_width = vim.o.columns
     end
     return options
+end
+
+local function configured_search_options()
+    local ok, config = pcall(require, "telescope._extensions.sess.config")
+    return vim.deepcopy(ok and config.values.search or {})
+end
+
+-- Regular entries include agent fields for active sessions without changing
+-- lifecycle state. The active snapshot owns the defensive, read-only probes.
+local function active_agents_for_search()
+    local called, snapshot = pcall(api.active.snapshot, { marks = false })
+    if not called then
+        log.warn("agent search hydration failed: " .. tostring(snapshot))
+        return {}
+    end
+    log.diagnostics(snapshot and snapshot.diagnostics)
+    return snapshot and snapshot.agents_by_id or {}
 end
 
 local function path_for_display(path_value, style)
@@ -348,6 +366,18 @@ function M.build_active_entries(
     expanded_by_id = expanded_by_id or {}
     marks_by_id = marks_by_id or {}
     local display = vim.tbl_deep_extend("force", configured_display_options(), display_opts or {})
+    local search_options = configured_search_options()
+    local previous = previous_id and { id = previous_id } or nil
+    sessions = search.sort_sessions(sessions, search_options.sort, function(session)
+        local session_agents = agents_by_id[session.id] or {}
+        return {
+            mark = marks_by_id[session.id],
+            current = current_id == session.id,
+            active = true,
+            previous = previous and previous.id == session.id,
+            agents = session_agents,
+        }
+    end)
     local entries = {}
     local session_name_width, name_width, status_width, mark_width = 0, 0, 0, 2
     for _, mark in pairs(marks_by_id) do
@@ -367,20 +397,17 @@ function M.build_active_entries(
     for _, session in ipairs(sessions or {}) do
         local expanded = expanded_by_id[session.id] == true
         local agents = agents_by_id[session.id] or {}
-        local searchable = {}
-        for _, agent in ipairs(agents) do
-            local status = agent.status or "unknown"
-            searchable[#searchable + 1] = table.concat({
-                agent.id,
-                agent.name,
-                agent.info or "",
-                status,
-            }, " ")
-        end
         local mark = marks_by_id[session.id] or ""
         local current = current_id == session.id
         local stale = stale_by_id and stale_by_id[session.id] == true
         local loaded = agents_loaded_by_id == nil or agents_loaded_by_id[session.id] == true
+        local search_fields = search.fields_for_session(session, {
+            mark = mark,
+            current = current,
+            active = true,
+            previous = previous and previous.id == session.id,
+            agents = agents,
+        })
         local session_parts = session_display_parts(session, {
             expandable = true,
             expanded = expanded,
@@ -403,12 +430,8 @@ function M.build_active_entries(
             expanded = expanded,
             display = display_parts_text(session_parts),
             display_parts = session_parts,
-            ordinal = table.concat({
-                mark,
-                session.metadata.name,
-                session.metadata.cwd,
-                table.concat(searchable, " "),
-            }, " "),
+            search_fields = search_fields,
+            ordinal = search.ordinal(search_fields),
         }
         if expanded then
             if #agents == 0 then
@@ -451,6 +474,13 @@ function M.build_active_entries(
                         },
                         { text = info, highlight = agent_highlight },
                     }
+                    local agent_search_fields = search.fields_for_session(session, {
+                        mark = mark,
+                        current = current,
+                        active = true,
+                        previous = previous and previous.id == session.id,
+                        agents = { agent },
+                    })
                     entries[#entries + 1] = {
                         kind = "agent",
                         session_id = session.id,
@@ -458,15 +488,8 @@ function M.build_active_entries(
                         agent = vim.deepcopy(agent),
                         display = display_parts_text(agent_parts),
                         display_parts = agent_parts,
-                        ordinal = table.concat({
-                            marks_by_id[session.id] or "",
-                            session.metadata.name,
-                            session.metadata.cwd,
-                            agent.id,
-                            agent.name,
-                            agent.info or "",
-                            status,
-                        }, " "),
+                        search_fields = agent_search_fields,
+                        ordinal = search.ordinal(agent_search_fields),
                     }
                 end
             end
@@ -520,6 +543,7 @@ local function active_finder_from_snapshot(
                 value = entry,
                 display = highlighted_display(entry.display_parts, entry.display),
                 ordinal = entry.ordinal,
+                search_fields = entry.search_fields,
             }
         end,
     })
@@ -564,15 +588,19 @@ function M.generate_deleted_finder()
     for _, diagnostic in ipairs(diagnostics or {}) do
         log.warn(diagnostic)
     end
+    local search_options = configured_search_options()
+    entries = search.sort_results(entries or {}, search_options.sort)
     return finders.new_table({
-        results = entries or {},
+        results = entries,
         entry_maker = function(entry)
             local deleted_at = os.date("%Y-%m-%d %H:%M", entry.deleted_at)
+            local search_fields = search.fields_for_session(entry)
             local display = entry.metadata.name .. "  " .. entry.metadata.cwd .. "  " .. deleted_at
             return {
                 value = entry,
                 display = display,
-                ordinal = display .. " " .. entry.id .. " " .. entry.key,
+                search_fields = search_fields,
+                ordinal = search.ordinal(search_fields) .. " " .. entry.id .. " " .. entry.key .. " " .. deleted_at,
             }
         end,
     })
@@ -617,6 +645,8 @@ function M.generate_directory_finder(prompt)
     end
 
     local results = {}
+    local search_options = configured_search_options()
+    local agents_by_id = active_agents_for_search()
     for _, candidate in ipairs(candidates) do
         local candidate_path = path_utils.identity(candidate.path) or candidate.path
         local session = by_path[candidate_path]
@@ -640,10 +670,6 @@ function M.generate_directory_finder(prompt)
             name_width = name_width,
             display = display,
         })
-        local ordinal_display = (candidate.is_self and "./" or candidate.name)
-            .. "  " .. candidate.path
-            .. (session and "  [" .. metadata.name .. "]" or "  [new session]")
-
         results[#results + 1] = {
             path = candidate.path,
             prompt = candidate.prompt,
@@ -653,13 +679,23 @@ function M.generate_directory_finder(prompt)
             metadata = metadata,
             display = display_parts_text(display_parts),
             display_parts = display_parts,
-            ordinal = table.concat({
-                candidate.prompt,
-                mark_by_id[session and session.id] or "",
-                ordinal_display,
-            }, " "),
+            search_fields = search.fields_for_session(display_session, {
+                mark = mark_by_id[session and session.id],
+                current = current and session and current.id == session.id,
+                active = session and active_by_id[session.id] == true,
+                previous = previous and session and previous.id == session.id,
+                agents = session and agents_by_id[session.id],
+            }),
+            ordinal = search.ordinal(search.fields_for_session(display_session, {
+                mark = mark_by_id[session and session.id],
+                current = current and session and current.id == session.id,
+                active = session and active_by_id[session.id] == true,
+                previous = previous and session and previous.id == session.id,
+                agents = session and agents_by_id[session.id],
+            })),
         }
     end
+    results = search.sort_results(results, search_options.sort)
 
     return finders.new_table({
         results = results,
@@ -668,6 +704,7 @@ function M.generate_directory_finder(prompt)
                 value = entry,
                 display = highlighted_display(entry.display_parts, entry.display),
                 ordinal = entry.ordinal,
+                search_fields = entry.search_fields,
             }
         end,
     })
@@ -692,13 +729,31 @@ function M.generate_new_finder()
     end
     local previous = state.prev()
     local display = configured_display_options()
+    local search_options = configured_search_options()
+    local agents_by_id = active_agents_for_search()
     for _, entry in ipairs(results) do
+        entry.search_fields = search.fields_for_session({
+            id = entry.id,
+            metadata = entry.metadata or {
+                name = entry.name,
+                cwd = entry.path,
+                pinned = entry.pinned,
+            },
+        }, {
+            mark = mark_by_id[entry.id],
+            current = current and entry.id == current.id,
+            active = active_by_id[entry.id] == true,
+            previous = previous and entry.id == previous.id,
+            agents = agents_by_id[entry.id],
+        })
         -- The current session is omitted from this picker, including column sizing.
         if not current or entry.id ~= current.id then
             local name = entry.metadata and entry.metadata.name or entry.name
             name_width = math.max(name_width, vim.fn.strdisplaywidth(name))
         end
     end
+
+    results = search.sort_results(results, search_options.sort)
 
     return finders.new_table({
         results = results,
@@ -749,17 +804,19 @@ function M.generate_new_finder()
             })
 
             ---@type Sess.TelescopeFinderReturn
+            local search_fields = search.fields_for_session(session, {
+                mark = mark_by_id[session.id],
+                current = current and session.id == current.id,
+                active = active_by_id[session.id] == true,
+                previous = previous and session.id == previous.id,
+                agents = agents_by_id[session.id],
+            })
             return {
                 value = session,
                 display = display_parts_text(display_parts),
                 display_parts = display_parts,
-                ordinal = table.concat({
-                    mark_by_id[session.id] or "",
-                    session.metadata.name,
-                    session.metadata.cwd,
-                    session.metadata.pinned and "pinned" or "",
-                    previous and previous.id == session.id and "last" or "",
-                }, " "),
+                search_fields = search_fields,
+                ordinal = search.ordinal(search_fields),
             }
         end,
     })
