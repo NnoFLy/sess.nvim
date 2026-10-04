@@ -141,6 +141,24 @@ M.list_deleted = query(function()
     return err == nil, err, items, diagnostics
 end)
 
+-- Read-only preview information. This checks snapshot availability without
+-- sourcing the session file or invoking any lifecycle operation.
+M.preview = query(function(target)
+    local item, err, _, diagnostics = catalog.resolve(target)
+    if not item then
+        return false, err, nil, diagnostics or {}
+    end
+
+    local storage = require("sess.storage")
+    local snapshot_status, snapshot_err = storage.inspect_snapshot(item.id)
+    return true, nil, {
+        session = item,
+        snapshot_status = snapshot_status,
+        snapshot_available = snapshot_status == "available",
+        snapshot_error = snapshot_err,
+    }, diagnostics or {}
+end)
+
 for name, catalog_query in pairs({
     get_by_id = catalog.get,
     get_by_name = catalog.get_by_name,

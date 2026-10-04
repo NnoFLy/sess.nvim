@@ -35,6 +35,12 @@ config.values = {
         path_style = "full",
         highlights = default_highlights,
     },
+    preview = {
+        enabled = true,
+        width = 0.35,
+        show_snapshot_summary = true,
+        show_agents = true,
+    },
     active_expand = "none",
     poll_interval = 1000,
     sorting_strategy = "ascending",
@@ -92,6 +98,29 @@ config.setup = function(ext_config)
         )
     then
         error("sess.nvim: poll_interval must be a positive integer in milliseconds")
+    end
+
+    local preview = ext_config and ext_config.preview
+    if preview ~= nil then
+        if type(preview) ~= "table" then
+            error("sess.nvim: preview must be a table")
+        end
+        for _, key in ipairs({ "enabled", "show_snapshot_summary", "show_agents" }) do
+            if preview[key] ~= nil and type(preview[key]) ~= "boolean" then
+                error("sess.nvim: preview." .. key .. " must be a boolean")
+            end
+        end
+        if preview.width ~= nil then
+            if
+                type(preview.width) ~= "number"
+                or preview.width ~= preview.width
+                or preview.width <= 0
+                or preview.width > 1
+                or preview.width == math.huge
+            then
+                error("sess.nvim: preview.width must be a number between 0 and 1")
+            end
+        end
     end
 
     local display = ext_config and ext_config.display

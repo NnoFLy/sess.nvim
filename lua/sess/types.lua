@@ -49,6 +49,12 @@
 ---@field metadata Sess.SessionMetadata
 ---@field deleted_at Sess.Timestamp
 
+---@class Sess.Preview
+---@field session Sess.Session
+---@field snapshot_status "available"|"invalid"|"unavailable"
+---@field snapshot_available boolean
+---@field snapshot_error string?
+
 ---@class Sess.Operation
 ---@field operation "create"|"load"|"save"|"unload"|"delete"|"rename"|"pin"|"restore"|"mark"|"unmark"
 ---@field session Sess.Session? Nil when clearing a stale mark.

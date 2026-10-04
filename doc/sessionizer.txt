@@ -399,6 +399,12 @@ Active query:                                             *sess-api.active*
     refreshes; callers can reuse loaded marks. api.active.initial_snapshot()
     returns the inexpensive session-header view used while a UI hydrates data.
 
+api.session.preview(target) returns read-only metadata and
+{ session, snapshot_status, snapshot_available, snapshot_error }. It never
+sources the snapshot or runs a lifecycle operation; missing/unreadable snapshots
+have status unavailable, corrupt/incompatible snapshots have status invalid, and
+snapshot_error explains the status while the query itself remains successful.
+
 Picker items:                                             *sess-api.items*
     api.items.get_items() returns (items, err, diagnostics). Items include
     healthy sessions and configured directories. UI adapters report diagnostics.
@@ -512,6 +518,12 @@ Install telescope.nvim and plenary.nvim, then: >
                     show_agent_summary = true,
                     path_style = "full", -- full | relative | short
                 },
+                preview = {
+                    enabled = true,
+                    width = 0.35,
+                    show_snapshot_summary = true,
+                    show_agents = true,
+                },
             },
         },
     })
@@ -530,7 +542,16 @@ mark/name alignment. Telescope semantic highlight groups are used when the
 entry display module is available; plain text remains readable otherwise.
 Override the semantic groups with display.highlights keys current, active,
 inactive, new, mark, name, cwd, metadata, and agent. Regular picker mappings use `mappings`; active picker mappings use
-`active_mappings`. The active picker uses
+`active_mappings`. The optional preview pane is controlled by `preview.enabled`
+and uses `preview.width` as a fraction of the picker width. It is hidden on
+narrow terminals, and `show_snapshot_summary` and `show_agents` control its
+sections. Preview rendering uses a private scratch buffer that is cleaned up
+with the picker; it only consumes read-only metadata and snapshots, never
+sources a session file or invokes lifecycle operations. Missing/unreadable
+snapshots are shown as unavailable, corrupt/incompatible snapshots as invalid,
+deleted records show their deletion time
+and restore key, and active agents show loading or stale when data is not ready.
+The active picker uses
 tree-style session/agent rows and a footer showing <Tab> expand/collapse, <S-Tab>
 expand/collapse all. <Enter> switches and focuses. Each session header ends
 with agent counts such as `agents 1 working 2 idle`. Empty expanded sessions

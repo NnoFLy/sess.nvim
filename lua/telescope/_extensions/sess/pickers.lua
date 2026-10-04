@@ -4,6 +4,7 @@ local action_state = require("telescope.actions.state")
 local config = require("telescope._extensions.sess.config")
 local finders = require("telescope._extensions.sess.finders")
 local actions = require("telescope._extensions.sess.actions")
+local preview = require("telescope._extensions.sess.preview")
 local path = require("sess.ui.path")
 local state = require("sess.api").state
 
@@ -17,6 +18,21 @@ end
 
 local function picker_options()
     local opts = vim.deepcopy(config.values)
+    local preview_config = opts.preview or {}
+    opts.preview = nil
+    -- Telescope owns the preview buffer lifecycle. On narrow terminals the
+    -- pane is omitted rather than taking space from the prompt and results.
+    if preview_config.enabled ~= false and vim.o.columns >= 80 then
+        local previewer = preview.new(preview_config)
+        if previewer then
+            opts.previewer = previewer
+            opts.layout_config = vim.tbl_deep_extend(
+                "force",
+                opts.layout_config or {},
+                { preview_width = preview_config.width or 0.35 }
+            )
+        end
+    end
     if type(opts.theme) == "table" then
         local theme_opts = opts.theme
         opts.theme = nil
@@ -135,12 +151,17 @@ function M.active(opts)
     picker._sess_expanded = expanded
     picker._sess_active_expand = active_expand
     picker._sess_active_snapshot = initial_snapshot
+    picker._sess_active_loading = true
     picker:find()
     require("sess.ui.active_refresh").start(picker, function(expanded_by_id, done)
+        picker._sess_active_loading = true
         return finders.generate_active_finder_async(
             expanded_by_id,
             picker._sess_active_expand,
-            done,
+            function(finder, next_rows, snapshot)
+                picker._sess_active_loading = false
+                done(finder, next_rows, snapshot)
+            end,
             picker._sess_active_snapshot
         )
     end, rows, picker_opts.poll_interval)

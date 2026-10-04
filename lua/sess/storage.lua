@@ -767,6 +767,41 @@ function M.validate_snapshot(id)
     return true
 end
 
+-- Inspect the mksession envelope without sourcing or otherwise executing the
+-- Vimscript. This is intentionally separate from validate_snapshot(), which
+-- remains the lifecycle readability check.
+---@param id Sess.SessionId
+---@return "available"|"invalid"|"unavailable", string?
+function M.inspect_snapshot(id)
+    local path, path_err = M.get_session_path(id)
+    if not path then
+        return "unavailable", path_err
+    end
+
+    local stat = vim.uv.fs_stat(path)
+    if not stat or stat.type ~= "file" or vim.fn.filereadable(path) == 0 then
+        return "unavailable", "session file is not readable: " .. path
+    end
+
+    local content, read_err = read_file(path)
+    if not content then
+        return "unavailable", "failed to read session file: " .. tostring(read_err)
+    end
+    if content:find("%z") then
+        return "invalid", "invalid session snapshot: contains NUL bytes"
+    end
+
+    local has_header = content:match("^let%s+SessionLoad%s*=%s*1%s*[\r\n]")
+        or content:match("\nlet%s+SessionLoad%s*=%s*1%s*[\r\n]")
+    local has_footer = content:match("^unlet%s+SessionLoad%s*$")
+        or content:match("\nunlet%s+SessionLoad%s*[\r\n]")
+    if not has_header or not has_footer then
+        return "invalid", "invalid session snapshot: missing Vim session envelope"
+    end
+
+    return "available"
+end
+
 -- Session file
 
 ---@param id Sess.SessionId
@@ -804,6 +839,7 @@ for _, name in ipairs({
     "create_with_metadata",
     "get_session_path",
     "validate_snapshot",
+    "inspect_snapshot",
     "read_session",
     "write_session",
 }) do
@@ -811,7 +847,12 @@ for _, name in ipairs({
     M[name] = function(id, ...)
         local valid, err = validate_id(id)
         if not valid then
-            if name == "read_metadata" or name == "get_session_path" or name == "read_session" then
+            if
+                name == "read_metadata"
+                or name == "get_session_path"
+                or name == "read_session"
+                or name == "inspect_snapshot"
+            then
                 return nil, err
             end
 

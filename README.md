@@ -81,6 +81,12 @@ require("telescope").setup({
                 show_agent_summary = true,
                 path_style = "full", -- full | relative | short
             },
+            preview = {
+                enabled = true,
+                width = 0.35,
+                show_snapshot_summary = true,
+                show_agents = true,
+            },
             -- Override regular or active picker mappings when needed.
             -- mappings = { i = { ["<C-b>"] = ... } },
             -- active_mappings = { i = { ["<C-b>"] = ... } },
@@ -146,6 +152,8 @@ local active = api.state.active()
 local ok, err, sessions, diagnostics = api.session.list()
 local ok, err, deleted, diagnostics = api.session.list_deleted()
 api.session.restore("name-or-id-or-trash-key")
+local ok, err, preview, diagnostics = api.session.preview("my-project")
+-- preview is read-only: { session, snapshot_status, snapshot_available, snapshot_error }
 local ok, err, marked, diagnostics = api.session.get_by_mark("s")
 local ok, err, marks, diagnostics = api.session.list_marks()
 api.session.set_mark("project", "s", { replace = true })
@@ -263,7 +271,15 @@ to control status polling in milliseconds. Polling stops when the picker closes.
 groups. The footer shows these controls; `<Enter>` switches and focuses an agent.
 Each session row ends with agent counts such as `agents 1 working 2 idle`.
 Active picker mappings use `active_mappings`, while
-regular picker mappings use `mappings`. Empty groups show a non-actionable `no agents` row. `<C-b>` prompts for
+regular picker mappings use `mappings`. The optional preview pane is enabled by
+`preview.enabled` (it is hidden on narrow terminals), with a fractional
+`preview.width`; `show_snapshot_summary` and `show_agents` control its sections.
+The pane is read-only, uses a private scratch buffer, and is cleaned up with the
+picker. It never sources session files or runs lifecycle operations. Missing or
+unreadable snapshots are shown as unavailable, corrupt/incompatible snapshots
+as invalid, and deleted records show their deletion timestamp and restore key;
+active agent data is marked loading or stale when appropriate.
+Empty groups show a non-actionable `no agents` row. `<C-b>` prompts for
 a mark on the selected session in both regular and active pickers. Marks are
 shown in a stable leading column on regular rows and on active session
 headers. It detects known agent commands running in terminal buffers, including

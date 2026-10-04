@@ -54,7 +54,8 @@ local function refresh(prompt_bufnr, finder)
     local selected = action_state.get_selected_entry()
     local key = selection_key(selected and selected.value)
     local next_finder = finder or finders.generate_new_finder()
-    current_picker:refresh(next_finder, { reset_prompt = true })
+    -- Mutations redraw the preview and rows without discarding user input.
+    current_picker:refresh(next_finder, { reset_prompt = false })
     restore_selection(current_picker, next_finder, key)
 end
 

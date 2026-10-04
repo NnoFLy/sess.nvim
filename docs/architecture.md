@@ -98,6 +98,14 @@ Storage failures must be visible to callers. Corrupt records are skipped with di
 
 Commands and Telescope provide input, target selection, confirmation, notifications, and presentation. They should call the shared API/lifecycle implementation so command and picker behavior remain consistent. The UI load-or-create helper validates a directory, then delegates to `api.session.load()` or `api.session.create()` without changing the low-level API contract. The active picker shows headers from `api.active.initial_snapshot()`, then hydrates through `api.active.snapshot_async()` and formats rows. It does not compose marks, agents, focus, or diagnostics. Status-only refreshes reuse loaded marks and cached terminal probes. Session row formatting is pure presentation: state, tree, mark, name, cwd, and metadata are separate logical columns measured in display cells. A truncated cwd is never used as an ordinal or an action value; full searchable fields remain in each finder ordinal. Command completion and Telescope share read-only directory enumeration.
 
+The optional Telescope preview pane formats a defensive selected-entry value and
+read-only active snapshot. `api.session.preview()` checks metadata and snapshot
+availability without sourcing the Vimscript snapshot or entering lifecycle code.
+The preview uses Telescope's private nofile scratch buffer, and Telescope owns
+its cleanup with the picker. Agent hydration is shown as loading or stale; a
+preview error is content in the pane and never prevents picker filtering or
+refresh. Narrow terminals omit the pane.
+
 The mark popup has two private UI owners. `ui/window.lua` validates its
 supported floating-window options and action keymap, computes editor-relative
 geometry, and owns only the focusable scratch buffer and float. It clamps the
