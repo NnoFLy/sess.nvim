@@ -52,7 +52,10 @@ function M.start(picker, generate, initial_rows, poll_interval)
     end
 
     local function fail(err)
-        stop()
+        -- A best-effort status probe must not close an otherwise usable picker.
+        -- Keep the last committed rows and let the next poll retry it.
+        refreshing = false
+        cancel_refresh = nil
         require("sess.log").warn("Active picker refresh failed: " .. tostring(err))
     end
 
@@ -98,6 +101,7 @@ function M.start(picker, generate, initial_rows, poll_interval)
                 end
                 picker:refresh(finder, { reset_prompt = false })
                 if selected_key and type(picker.set_selection) == "function" then
+                    local restored = false
                     for index, row in ipairs(next_rows or {}) do
                         local value = row.value or row
                         local id = value.id or value.session_id
@@ -107,7 +111,27 @@ function M.start(picker, generate, initial_rows, poll_interval)
                             and value.agent_id == selected_key.agent_id
                         then
                             pcall(picker.set_selection, picker, index)
+                            restored = true
                             break
+                        end
+                    end
+                    if not restored then
+                        -- A disappearing agent can no longer be selected. Keep
+                        -- the parent session selected when it remains visible;
+                        -- otherwise choose the first valid row.
+                        for index, row in ipairs(next_rows or {}) do
+                            local value = row.value or row
+                            if
+                                value.session_id == selected_key.id
+                                and value.kind == "session"
+                            then
+                                pcall(picker.set_selection, picker, index)
+                                restored = true
+                                break
+                            end
+                        end
+                        if not restored and #(next_rows or {}) > 0 then
+                            pcall(picker.set_selection, picker, 1)
                         end
                     end
                 end

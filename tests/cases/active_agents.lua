@@ -84,4 +84,28 @@ assert(list_ok, list_err)
 assert(#listed == 1)
 assert(listed[1].name == "pi")
 
+-- A failed subsequent probe keeps the last usable agent row while reporting
+-- stale data and a diagnostic.
+local previous_snapshot = api.active.snapshot({ marks = false })
+assert(#previous_snapshot.agents_by_id[session.id] == 1)
+assert(previous_snapshot.agents_by_id[session.id][1].name == "pi")
+local original_snapshot_active = api.agent.snapshot_active
+api.agent.snapshot_active = function()
+    error("detector unavailable")
+end
+local failed_snapshot
+api.active.snapshot_async(function(snapshot)
+    failed_snapshot = snapshot
+end, {
+    marks = false,
+    previous_snapshot = previous_snapshot,
+})
+assert(vim.wait(1000, function() return failed_snapshot ~= nil end, 10))
+assert(failed_snapshot.stale_by_id[session.id])
+assert(failed_snapshot.agents_loaded_by_id[session.id])
+assert(failed_snapshot.diagnostics[1]:find("detector unavailable", 1, true))
+assert(#failed_snapshot.agents_by_id[session.id] == 1)
+assert(failed_snapshot.agents_by_id[session.id][1].name == "pi")
+api.agent.snapshot_active = original_snapshot_active
+
 vim.fn.job_info = original_job_info

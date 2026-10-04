@@ -25,6 +25,13 @@ local default_highlights = {
     cwd = "TelescopeResultsComment",
     metadata = "TelescopeResultsComment",
     agent = "TelescopeResultsIdentifier",
+    working = "TelescopeResultsIdentifier",
+    idle = "TelescopeResultsComment",
+    blocked = "TelescopeResultsWarning",
+    done = "TelescopeResultsSpecialComment",
+    unknown = "TelescopeResultsWarning",
+    focused = "TelescopeResultsIdentifier",
+    stale = "TelescopeResultsWarning",
 }
 
 config.values = {

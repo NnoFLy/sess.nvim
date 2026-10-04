@@ -40,16 +40,27 @@ assert(config.values.sorting_strategy == "ascending")
 assert(config.values.layout_config.prompt_position == "top")
 
 local picker_options = {}
+local created_pickers = {}
 local active_poll_interval
+local active_generate
 package.loaded["telescope.pickers"] = {
     new = function(options)
         picker_options[#picker_options + 1] = options
-        return { find = function() end }
+        local picker = {
+            layout = { prompt = { border = {} } },
+            find = function() end,
+        }
+        function picker.layout.prompt.border:change_title(title)
+            self.title = title
+        end
+        created_pickers[#created_pickers + 1] = picker
+        return picker
     end,
 }
 package.loaded["sess.ui.active_refresh"] = {
-    start = function(_, _, _, poll_interval)
+    start = function(_, generate, _, poll_interval)
         active_poll_interval = poll_interval
+        active_generate = generate
     end,
 }
 
@@ -141,11 +152,64 @@ end
 local restore_picker_options = picker_options[2]
 assert(restore_picker_options.get_status_text() == "<CR> restore   ? actions")
 local active_picker_options = picker_options[3]
+assert(active_picker_options.prompt_title == "ACTIVE SESSIONS · 2 sessions · 0 agents")
 local status_text = active_picker_options.get_status_text()
 assert(status_text == "<C-b> mark   <CR> switch/focus   <S-Tab> all   <Tab> expand   ? actions")
 for _, row in ipairs(active_picker_options.finder.results) do
     assert(row.kind ~= "agent", "active picker should hydrate agents asynchronously")
+    if row.kind == "session" then
+        assert(row.display:find("agents loading", 1, true))
+    end
 end
+
+local hydrated_snapshot = {
+    sessions = { { id = "one" }, { id = "two" } },
+    agents_by_id = {
+        one = { { id = "working", status = "working" }, { id = "blocked", status = "blocked" } },
+        two = { { id = "idle", status = "idle" } },
+    },
+    agents_loaded_by_id = { one = true, two = true },
+}
+local original_generate_active_finder_async = finders.generate_active_finder_async
+finders.generate_active_finder_async = function(_, _, callback)
+    callback({}, {}, hydrated_snapshot)
+end
+active_generate({}, function() end)
+finders.generate_active_finder_async = original_generate_active_finder_async
+assert(
+    created_pickers[3].layout.prompt.border.title
+        == "ACTIVE SESSIONS · 2 sessions · 3 agents"
+)
+
+local dashboard = finders.active_dashboard_summary({
+    sessions = { { id = "one" }, { id = "two" } },
+    agents_by_id = {
+        one = { { id = "working", status = "working" }, { id = "blocked", status = "blocked" } },
+        two = { { id = "idle", status = "idle" } },
+    },
+    agents_loaded_by_id = { one = true, two = true },
+})
+assert(dashboard.session_count == 2)
+assert(dashboard.agent_count == 3)
+assert(dashboard.status_counts.working == 1)
+assert(
+    finders.active_dashboard_title({ sessions = {}, agents_by_id = {} })
+        == "ACTIVE SESSIONS · 0 sessions · 0 agents"
+)
+
+local stale_rows = finders.build_active_entries(
+    { { id = "stale", metadata = { name = "stale", cwd = "/tmp/stale" } } },
+    { stale = {} },
+    {},
+    nil,
+    {},
+    {},
+    nil,
+    nil,
+    { stale = true },
+    { stale = true }
+)
+assert(stale_rows[1].display:find("agents stale", 1, true))
 
 local refresh_count = 0
 local active_picker = {

@@ -77,13 +77,21 @@ local function truncate_middle(value, width)
     return left .. "…" .. right
 end
 
-local function agent_status_text(agents)
+local function normalized_status(status)
+    return status_symbols[status] and status or "unknown"
+end
+
+local function agent_status_text(agents, loaded, stale)
+    if not loaded then
+        return "agents loading"
+    end
+    if stale then
+        return "agents stale"
+    end
+
     local counts = {}
     for _, agent in ipairs(agents or {}) do
-        local status = agent.status or "unknown"
-        if not status_symbols[status] then
-            status = "unknown"
-        end
+        local status = normalized_status(agent.status)
         counts[status] = (counts[status] or 0) + 1
     end
 
@@ -100,6 +108,50 @@ local function agent_status_text(agents)
         end
     end
     return table.concat(parts, " ")
+end
+
+local function count_agents(snapshot)
+    local total = 0
+    local status_counts = {}
+    for _, agents in pairs(snapshot.agents_by_id or {}) do
+        for _, agent in ipairs(agents or {}) do
+            local status = normalized_status(agent.status)
+            total = total + 1
+            status_counts[status] = (status_counts[status] or 0) + 1
+        end
+    end
+    return total, status_counts
+end
+
+-- Compact dashboard counts use the same stable status order as each session
+-- header. This keeps the title useful while asynchronous agent data loads.
+function M.active_dashboard_summary(snapshot)
+    local total, status_counts = count_agents(snapshot or {})
+    local sessions = snapshot and snapshot.sessions or {}
+    return {
+        session_count = #sessions,
+        agent_count = total,
+        status_counts = status_counts,
+        loading = snapshot ~= nil
+            and #sessions > 0
+            and (function()
+                for _, session in ipairs(sessions) do
+                    if not (snapshot.agents_loaded_by_id or {})[session.id] then
+                        return true
+                    end
+                end
+                return false
+            end)(),
+    }
+end
+
+function M.active_dashboard_title(snapshot)
+    local summary = M.active_dashboard_summary(snapshot)
+    return string.format(
+        "ACTIVE SESSIONS · %d sessions · %d agents",
+        summary.session_count,
+        summary.agent_count
+    )
 end
 
 local function configured_display_options()
@@ -188,10 +240,13 @@ local function session_display_parts(session, opts)
         { text = " " },
         { text = pad(opts.mark or "", opts.mark_width or 2), highlight = highlights.mark },
         { text = " " },
-        { text = pad(name, opts.name_width or 0), highlight = highlights.name },
+        {
+            text = pad(name, opts.name_width or 0),
+            highlight = opts.name_highlight or highlights.name,
+        },
         { text = "  " },
         { text = cwd, highlight = highlights.cwd },
-        { text = suffix, highlight = highlights.metadata },
+        { text = suffix, highlight = opts.status_highlight or highlights.metadata },
     }
 end
 
@@ -275,6 +330,8 @@ end
 ---@param marks_by_id table<string, string>?
 ---@param previous_id string?
 ---@param display_opts table?
+---@param agents_loaded_by_id table<string, boolean>?
+---@param stale_by_id table<string, boolean>?
 ---@return table[]
 function M.build_active_entries(
     sessions,
@@ -284,7 +341,9 @@ function M.build_active_entries(
     focused_by_id,
     marks_by_id,
     previous_id,
-    display_opts
+    display_opts,
+    agents_loaded_by_id,
+    stale_by_id
 )
     expanded_by_id = expanded_by_id or {}
     marks_by_id = marks_by_id or {}
@@ -319,6 +378,9 @@ function M.build_active_entries(
             }, " ")
         end
         local mark = marks_by_id[session.id] or ""
+        local current = current_id == session.id
+        local stale = stale_by_id and stale_by_id[session.id] == true
+        local loaded = agents_loaded_by_id == nil or agents_loaded_by_id[session.id] == true
         local session_parts = session_display_parts(session, {
             expandable = true,
             expanded = expanded,
@@ -328,7 +390,10 @@ function M.build_active_entries(
             mark = mark,
             mark_width = mark_width,
             name_width = session_name_width,
-            agent_status = agent_status_text(agents),
+            name_highlight = current and (display.highlights.current or display.highlights.name)
+                or display.highlights.active,
+            status_highlight = stale and display.highlights.stale or nil,
+            agent_status = agent_status_text(agents, loaded, stale),
             display = display,
         })
         entries[#entries + 1] = {
@@ -359,11 +424,11 @@ function M.build_active_entries(
                 }
             else
                 for index, agent in ipairs(agents) do
-                    local status = agent.status or "unknown"
+                    local status = normalized_status(agent.status)
                     local branch = index == #agents and "└─" or "├─"
                     local focused = focused_by_id and focused_by_id[session.id] == agent.id
                     local focus_marker = focused and ">" or " "
-                    local status_symbol = status_symbols[status] or "?"
+                    local status_symbol = status_symbols[status]
                     local info = agent.info and agent.info ~= "" and "  " .. agent.info or ""
                     local agent_highlight = display.highlights and display.highlights.agent
                     local agent_parts = {
@@ -375,10 +440,15 @@ function M.build_active_entries(
                                 .. " "
                                 .. status_symbol
                                 .. " ",
+                            highlight = focused and (display.highlights.focused or agent_highlight)
+                                or agent_highlight,
                         },
                         { text = pad(agent.name, name_width), highlight = agent_highlight },
                         { text = "  " },
-                        { text = pad(status, status_width), highlight = agent_highlight },
+                        {
+                            text = pad(status, status_width),
+                            highlight = display.highlights[status] or agent_highlight,
+                        },
                         { text = info, highlight = agent_highlight },
                     }
                     entries[#entries + 1] = {
@@ -438,7 +508,10 @@ local function active_finder_from_snapshot(
         snapshot.current_id,
         snapshot.focused_by_id,
         snapshot.marks_by_id,
-        previous and previous.id or nil
+        previous and previous.id or nil,
+        nil,
+        snapshot.agents_loaded_by_id,
+        snapshot.stale_by_id
     )
     local finder = finders.new_table({
         results = results,
@@ -477,7 +550,10 @@ function M.generate_active_finder_async(expanded_by_id, active_expand, callback,
             previous_snapshot
         )
         callback(finder, rows, snapshot)
-    end, { marks = load_marks })
+    end, {
+        marks = load_marks,
+        previous_snapshot = previous_snapshot,
+    })
 end
 
 function M.generate_deleted_finder()

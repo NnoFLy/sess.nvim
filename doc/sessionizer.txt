@@ -111,25 +111,30 @@ COMMANDS                                                     *sess-commands*
     Open the Telescope picker.
 
 :Sess active                                                 *:Sess-active*
-    Open the active-session picker. All Sess pickers display results
+    Open the active-session dashboard. All Sess pickers display results
     top-to-bottom with the input prompt at the top. Regular session rows share
     the active-session layout: ● current, ○ active, · inactive, and + new
     directory. Marks, names and paths stay aligned. [pinned], [last] and
     [new session] mark pinned, last and new rows. The current session is
     omitted from the regular picker. Active sessions are shown as tree-style
-    groups with their cwd and agents; sessions start collapsed.
+    groups with strongly distinguished headers and agent rows; the title and
+    headers include compact session/agent counts. Sessions start collapsed.
     Configure Telescope's active_expand option as "all", "current", or "none"
     to change the initial expansion. <Tab> expands/collapses the selected
     group; <S-Tab> expands/collapses all groups; <Enter> switches and focuses.
-    Each session header ends with agent counts such as "agents 1 working 2 idle".
-    Empty groups show a non-actionable "no agents" row. <C-b> prompts for a
+    Each session header ends with agent counts such as "agents 1 working 2 idle";
+    loading and stale probes are shown explicitly. Current headers, focused
+    agents, blocked/unknown statuses, and stale data have distinct visual
+    treatment. Empty groups show a non-actionable "no agents" row. <C-b> prompts for a
     mark on the selected session. Marks appear on active session headers and
     regular picker rows. Known agent commands
     running in terminal buffers (including pi, codex, claude, and opencode) are
     detected; integrations may also register agents explicitly. Enter loads
-    the parent and focuses the selected agent's existing visible buffer. This
-    picker is runtime-only; it never starts processes, creates windows, or
-    persists agent state.
+    the parent and focuses the selected agent's existing visible buffer. Status
+    refresh is best-effort: a failed probe leaves the last rows usable and emits
+    a diagnostic, while a selected agent that disappears falls back to its
+    parent session. This picker is runtime-only; it never starts processes,
+    creates windows, or persists agent state.
 
 Tab completion supports subcommands, marks, session names, deleted-session names/ids/keys,
 create paths, and load directory paths. `load` accepts existing `@mark` targets;
@@ -547,7 +552,8 @@ Regular and active session identity columns are shared, including Unicode-safe
 mark/name alignment. Telescope semantic highlight groups are used when the
 entry display module is available; plain text remains readable otherwise.
 Override the semantic groups with display.highlights keys current, active,
-inactive, new, mark, name, cwd, metadata, and agent. Regular picker mappings use `mappings`; active picker mappings use
+inactive, new, mark, name, cwd, metadata, agent, working, idle, blocked,
+done, unknown, focused, and stale. Regular picker mappings use `mappings`; active picker mappings use
 `active_mappings`. Action footers are generated from those mappings, with
 separate insert and normal-mode descriptions. Regular, active, and restore
 pickers have separate action sets. Row-specific actions are marked unavailable;
@@ -570,10 +576,14 @@ deleted records show their deletion time
 and restore key, and active agents show loading or stale when data is not ready.
 The active picker uses
 tree-style session/agent rows and a footer showing <Tab> expand/collapse, <S-Tab>
-expand/collapse all. <Enter> switches and focuses. Each session header ends
+expand/collapse all. <Enter> switches and focuses. Its title and session headers
+show stable compact counts; current headers, focused agents, blocked/unknown
+statuses, and stale/loading data are visually distinct. Each session header ends
 with agent counts such as `agents 1 working 2 idle`. Empty expanded sessions
-show a non-actionable "no agents" row. Manual expansion changes are preserved
-while the picker is open and across status refreshes. It shows session headers
+show a non-actionable "no agents" row. Manual expansion and selection are
+preserved while the picker is open and across status refreshes. A selected agent
+that disappears falls back to its parent session. Failed best-effort probes keep
+the last rows usable and report a diagnostic. It shows session headers
 immediately, then asynchronously hydrates agents and marks. It reuses terminal
 identity and output when they are unchanged between probes.
 

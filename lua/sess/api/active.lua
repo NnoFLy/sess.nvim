@@ -13,6 +13,8 @@ local function new_snapshot()
         focused_by_id = {},
         marks_by_id = {},
         marks_loaded = false,
+        agents_loaded_by_id = {},
+        stale_by_id = {},
         current_id = current and current.id or nil,
         diagnostics = {},
     }
@@ -38,12 +40,38 @@ local function add_marks(result)
     result.marks_loaded = true
 end
 
-local function add_agents(result, session)
-    local listed, list_err, found, focused_id, diagnostics = agents.snapshot_active(session.id)
-    if not listed then result.diagnostics[#result.diagnostics + 1] = list_err end
-    for _, diagnostic in ipairs(diagnostics or {}) do result.diagnostics[#result.diagnostics + 1] = diagnostic end
-    result.agents_by_id[session.id] = found or {}
-    result.focused_by_id[session.id] = focused_id
+local function add_agents(result, session, previous)
+    local called, listed, list_err, found, focused_id, diagnostics = pcall(
+        agents.snapshot_active,
+        session.id
+    )
+    local stale = false
+    if not called then
+        result.diagnostics[#result.diagnostics + 1] = string.format(
+            "agent status probe failed for %s: %s",
+            session.id,
+            tostring(listed)
+        )
+        stale = true
+    elseif not listed then
+        result.diagnostics[#result.diagnostics + 1] = list_err
+        stale = true
+    end
+    for _, diagnostic in ipairs(diagnostics or {}) do
+        result.diagnostics[#result.diagnostics + 1] = diagnostic
+        stale = true
+    end
+    result.stale_by_id[session.id] = stale or nil
+    if stale and previous then
+        result.agents_by_id[session.id] = vim.deepcopy(
+            (previous.agents_by_id or {})[session.id] or {}
+        )
+        result.focused_by_id[session.id] = (previous.focused_by_id or {})[session.id]
+    else
+        result.agents_by_id[session.id] = found or {}
+        result.focused_by_id[session.id] = focused_id
+    end
+    result.agents_loaded_by_id[session.id] = true
 end
 
 -- Compose the active-session view once at the application boundary. UI
@@ -78,7 +106,7 @@ function M.snapshot_async(callback, options)
                 if cancelled or async.is_closing() then
                     return
                 end
-                add_agents(result, session)
+                add_agents(result, session, options.previous_snapshot)
                 async.sleep(0)
             end
             if not cancelled and not async.is_closing() then
@@ -103,7 +131,7 @@ function M.snapshot_async(callback, options)
             return
         end
 
-        add_agents(result, session)
+        add_agents(result, session, options.previous_snapshot)
         vim.schedule(step)
     end
 

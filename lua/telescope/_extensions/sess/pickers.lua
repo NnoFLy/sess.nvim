@@ -168,7 +168,6 @@ end
 function M.active(opts)
     opts = opts or {}
     local picker_opts = picker_options()
-    picker_opts.prompt_title = "Active Sessions"
     local active_expand = config.values.active_expand
     local expanded = {}
     local current = state.current()
@@ -187,6 +186,7 @@ function M.active(opts)
         expanded,
         active_expand
     )
+    picker_opts.prompt_title = finders.active_dashboard_title(initial_snapshot)
     picker_opts.finder = finder
     picker_opts.selection_strategy = "row"
     local active_mappings = opts.active_mappings or config.values.active_mappings
@@ -244,6 +244,14 @@ function M.active(opts)
             picker._sess_active_expand,
             function(finder, next_rows, snapshot)
                 picker._sess_active_loading = false
+                local title = finders.active_dashboard_title(snapshot)
+                picker.prompt_title = title
+                local prompt_border = picker.layout
+                    and picker.layout.prompt
+                    and picker.layout.prompt.border
+                if prompt_border and type(prompt_border.change_title) == "function" then
+                    prompt_border:change_title(title)
+                end
                 done(finder, next_rows, snapshot)
             end,
             picker._sess_active_snapshot

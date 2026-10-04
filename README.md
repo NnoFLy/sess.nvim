@@ -264,7 +264,8 @@ middle when the picker is narrow; the complete path remains searchable.
 Display metadata and agent summaries can be disabled with the Telescope
 extension `display` options. Override semantic groups with
 `display.highlights` (`current`, `active`, `inactive`, `new`, `mark`, `name`,
-`cwd`, `metadata`, or `agent`). State, mark, name, path, metadata, and agent
+`cwd`, `metadata`, `agent`, `working`, `idle`, `blocked`, `done`, `unknown`,
+`focused`, or `stale`). State, mark, name, path, metadata, and agent
 columns use Telescope-style semantic highlights when available, with readable
 plain text as a fallback.
 Enter loads/creates. Ctrl-d (insert) or `dd` (normal) deletes with confirmation.
@@ -273,18 +274,24 @@ Each picker footer is generated from its configured mappings. Regular pickers sh
 switch, pin, mark, rename, unload, and delete; restore pickers show restore; the
 active picker shows switch/focus, expansion, expand-all, and mark. The footer uses
 short labels on narrow terminals and marks row-specific actions unavailable.
-`:Sess active` shows active sessions as tree-style groups with their cwd and
-agents; sessions start collapsed. Configure the Telescope extension's
-`active_expand` option as `"all"`, `"current"`, or `"none"`. Set `poll_interval`
-to control status polling in milliseconds. Polling stops when the picker closes.
+`:Sess active` opens a dashboard of active sessions as tree-style groups with
+strongly distinguished session headers and agent rows. Its title includes stable
+session and agent counts; each header also summarizes working, idle, blocked, done,
+or unknown agents. Current headers, focused agents (`>`), blocked/unknown status,
+and stale/loading data use distinct visual treatment. Sessions start collapsed.
+Configure the Telescope extension's `active_expand` option as `"all"`, `"current"`,
+or `"none"`. Set `poll_interval` to control status polling in milliseconds;
+refreshing is best-effort and polling stops when the picker closes.
 `<Tab>` expands/collapses the selected group and `<S-Tab>` expands/collapses all
 groups. Press the configured `action_help.key` (default `?`) for a compact,
 selection-aware list in insert or normal mode. Set the key to `false` or set
 `action_help.enabled` to `false` to disable it. Custom mapping descriptions can
 be supplied with `action_help.descriptions`; configured mappings always keep
 precedence over the help key.
-Each session row ends with agent counts such as `agents 1 working 2 idle`.
-Active picker mappings use `active_mappings`, while
+Each session row ends with agent counts such as `agents 1 working 2 idle`;
+while hydration is pending it says `agents loading`, and a failed/stale probe is
+shown as `agents stale`. A failed probe keeps the last usable rows and reports a
+warning. Active picker mappings use `active_mappings`, while
 regular picker mappings use `mappings`. The optional preview pane is enabled by
 `preview.enabled` (it is hidden on narrow terminals), with a fractional
 `preview.width`; `show_snapshot_summary` and `show_agents` control its sections.
