@@ -173,6 +173,19 @@ function M.active_enter(prompt_bufnr)
     end
 end
 
+function M.show_action_help(prompt_bufnr, kind, mappings, options)
+    local help = require("telescope._extensions.sess.help")
+    if not kind or not mappings then
+        local picker = action_state.get_current_picker(prompt_bufnr)
+        kind = kind or (picker and picker._sess_help_kind) or "regular"
+        mappings = mappings or (picker and picker._sess_help_mappings)
+        options = options or (picker and picker._sess_help_options)
+    end
+    if mappings then
+        help.show(prompt_bufnr, kind, mappings, options or {})
+    end
+end
+
 function M.complete_path(prompt_bufnr)
     local value = selected_value()
     if not value or not value.directory or not value.prompt then

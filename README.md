@@ -87,6 +87,12 @@ require("telescope").setup({
                 show_snapshot_summary = true,
                 show_agents = true,
             },
+            action_help = {
+                enabled = true,
+                key = "?",
+                footer = true,
+                -- descriptions = { ["<C-x>"] = "Custom action" },
+            },
             -- Override regular or active picker mappings when needed.
             -- mappings = { i = { ["<C-b>"] = ... } },
             -- active_mappings = { i = { ["<C-b>"] = ... } },
@@ -263,12 +269,20 @@ columns use Telescope-style semantic highlights when available, with readable
 plain text as a fallback.
 Enter loads/creates. Ctrl-d (insert) or `dd` (normal) deletes with confirmation.
 `:Sess restore` opens a deleted-session picker; Enter restores the selected record.
+Each picker footer is generated from its configured mappings. Regular pickers show
+switch, pin, mark, rename, unload, and delete; restore pickers show restore; the
+active picker shows switch/focus, expansion, expand-all, and mark. The footer uses
+short labels on narrow terminals and marks row-specific actions unavailable.
 `:Sess active` shows active sessions as tree-style groups with their cwd and
 agents; sessions start collapsed. Configure the Telescope extension's
 `active_expand` option as `"all"`, `"current"`, or `"none"`. Set `poll_interval`
 to control status polling in milliseconds. Polling stops when the picker closes.
 `<Tab>` expands/collapses the selected group and `<S-Tab>` expands/collapses all
-groups. The footer shows these controls; `<Enter>` switches and focuses an agent.
+groups. Press the configured `action_help.key` (default `?`) for a compact,
+selection-aware list in insert or normal mode. Set the key to `false` or set
+`action_help.enabled` to `false` to disable it. Custom mapping descriptions can
+be supplied with `action_help.descriptions`; configured mappings always keep
+precedence over the help key.
 Each session row ends with agent counts such as `agents 1 working 2 idle`.
 Active picker mappings use `active_mappings`, while
 regular picker mappings use `mappings`. The optional preview pane is enabled by

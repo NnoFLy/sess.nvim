@@ -524,6 +524,12 @@ Install telescope.nvim and plenary.nvim, then: >
                     show_snapshot_summary = true,
                     show_agents = true,
                 },
+                action_help = {
+                    enabled = true,
+                    key = "?",
+                    footer = true,
+                    -- descriptions = { ["<C-x>"] = "Custom action" },
+                },
             },
         },
     })
@@ -542,8 +548,19 @@ mark/name alignment. Telescope semantic highlight groups are used when the
 entry display module is available; plain text remains readable otherwise.
 Override the semantic groups with display.highlights keys current, active,
 inactive, new, mark, name, cwd, metadata, and agent. Regular picker mappings use `mappings`; active picker mappings use
-`active_mappings`. The optional preview pane is controlled by `preview.enabled`
-and uses `preview.width` as a fraction of the picker width. It is hidden on
+`active_mappings`. Action footers are generated from those mappings, with
+separate insert and normal-mode descriptions. Regular, active, and restore
+pickers have separate action sets. Row-specific actions are marked unavailable;
+unknown custom mappings are shown with their key and a generic action label.
+The optional `action_help` table enables a compact selection-aware action list.
+Its `key` defaults to `?`, `footer` controls the footer, and `descriptions` may
+map a key or action function to a custom label. Set `key = false` or
+`enabled = false` to disable help. A configured action always keeps precedence
+when its key conflicts with the help key; Sess never overwrites it. Help opens
+inside the picker lifecycle in both insert and normal mode without changing the
+prompt, selection, or filter. Narrow footers use a compact fallback.
+The optional preview pane is controlled by `preview.enabled` and uses
+`preview.width` as a fraction of the picker width. It is hidden on
 narrow terminals, and `show_snapshot_summary` and `show_agents` control its
 sections. Preview rendering uses a private scratch buffer that is cleaned up
 with the picker; it only consumes read-only metadata and snapshots, never

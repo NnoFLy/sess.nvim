@@ -4,6 +4,7 @@ local action_state = require("telescope.actions.state")
 local config = require("telescope._extensions.sess.config")
 local finders = require("telescope._extensions.sess.finders")
 local actions = require("telescope._extensions.sess.actions")
+local help = require("telescope._extensions.sess.help")
 local preview = require("telescope._extensions.sess.preview")
 local path = require("sess.ui.path")
 local state = require("sess.api").state
@@ -20,6 +21,7 @@ local function picker_options()
     local opts = vim.deepcopy(config.values)
     local preview_config = opts.preview or {}
     opts.preview = nil
+    opts.action_help = nil
     -- Telescope owns the preview buffer lifecycle. On narrow terminals the
     -- pane is omitted rather than taking space from the prompt and results.
     if preview_config.enabled ~= false and vim.o.columns >= 80 then
@@ -45,6 +47,16 @@ local function make_picker(opts, restore_picker)
     opts = opts or {}
 
     local picker_opts = picker_options()
+    local kind = restore_picker and "restore" or "regular"
+    local mappings = restore_picker and {
+        i = { ["<CR>"] = actions.restore_session },
+        n = { ["<CR>"] = actions.restore_session },
+    } or opts.mappings or config.values.mappings
+    local action_help = opts.action_help
+    if action_help == nil then
+        action_help = config.values.action_help
+    end
+    local help_options = { action_help = action_help }
 
     local current_session = state.current()
     if current_session then
@@ -54,8 +66,15 @@ local function make_picker(opts, restore_picker)
     picker_opts.finder = restore_picker and finders.generate_deleted_finder() or finders.generate_new_finder()
     if not restore_picker then
         local path_mode = false
-        picker_opts.get_status_text = picker_opts.get_status_text or function()
-            return "<Tab> pin/complete  <C-b> mark  <Enter> switch/load"
+        if opts.get_status_text == nil then
+            picker_opts.get_status_text = function()
+                local selected
+                local ok, action_state_value = pcall(action_state.get_selected_entry)
+                if ok and action_state_value then
+                    selected = action_state_value.value
+                end
+                return help.footer(kind, vim.fn.mode(1), mappings, help_options, selected)
+            end
         end
         picker_opts.on_input_filter_cb = function(prompt)
             if path.is_path(prompt) then
@@ -70,26 +89,50 @@ local function make_picker(opts, restore_picker)
 
             return {}
         end
+    elseif opts.get_status_text == nil then
+        picker_opts.get_status_text = function()
+            local selected
+            local ok, action_state_value = pcall(action_state.get_selected_entry)
+            if ok and action_state_value then
+                selected = action_state_value.value
+            end
+            return help.footer(kind, vim.fn.mode(1), mappings, help_options, selected)
+        end
     end
 
-    picker_opts.attach_mappings = function(_, map)
-        if restore_picker then
-            map("i", "<CR>", actions.restore_session)
-            map("n", "<CR>", actions.restore_session)
-        else
-            for mode, mappings in pairs(config.values.mappings or {}) do
-                for key, action in pairs(mappings) do
-                    local mapped_action = action
-                    if key == "<Tab>" and type(action) == "function" then
-                        local default_action = action
-                        mapped_action = function(prompt_bufnr)
-                            if path.is_path(action_state.get_current_line()) then
-                                return actions.complete_path(prompt_bufnr)
-                            end
-                            return default_action(prompt_bufnr)
+    picker_opts.attach_mappings = function(prompt_bufnr, map)
+        for mode, mode_mappings in pairs(mappings or {}) do
+            for key, action in pairs(mode_mappings) do
+                local mapped_action = action
+                if
+                    not restore_picker
+                    and key == "<Tab>"
+                    and type(action) == "function"
+                then
+                    local default_action = action
+                    mapped_action = function(current_prompt_bufnr)
+                        if path.is_path(action_state.get_current_line()) then
+                            return actions.complete_path(current_prompt_bufnr)
                         end
+                        return default_action(current_prompt_bufnr)
                     end
-                    map(mode, key, mapped_action)
+                end
+                map(mode, key, mapped_action)
+            end
+        end
+
+        local key = help.help_key(help_options)
+        if key then
+            for _, mode in ipairs({ "i", "n" }) do
+                if not (mappings[mode] and mappings[mode][key] ~= nil) then
+                    map(mode, key, function(current_prompt_bufnr)
+                        actions.show_action_help(
+                            current_prompt_bufnr,
+                            kind,
+                            mappings,
+                            help_options
+                        )
+                    end)
                 end
             end
         end
@@ -100,8 +143,16 @@ local function make_picker(opts, restore_picker)
 
     ---@diagnostic disable-next-line: cast-local-type
     picker_opts = vim.tbl_deep_extend("force", picker_opts, opts)
+    -- Mappings are installed by attach_mappings so the help key can never
+    -- replace a configured action.
+    picker_opts.mappings = nil
+    picker_opts.action_help = nil
 
-    pickers.new(picker_opts):find()
+    local picker = pickers.new(picker_opts)
+    picker._sess_help_kind = kind
+    picker._sess_help_mappings = mappings
+    picker._sess_help_options = help_options
+    picker:find()
 end
 
 local M = {}
@@ -138,16 +189,49 @@ function M.active(opts)
     )
     picker_opts.finder = finder
     picker_opts.selection_strategy = "row"
-    picker_opts.get_status_text = picker_opts.get_status_text or function()
-        return "<Tab> expand/collapse  <S-Tab> all  <C-b> mark  <Enter> switch/focus"
+    local active_mappings = opts.active_mappings or config.values.active_mappings
+    local active_action_help = opts.action_help
+    if active_action_help == nil then
+        active_action_help = config.values.action_help
+    end
+    local active_help_options = { action_help = active_action_help }
+    if opts.get_status_text == nil then
+        picker_opts.get_status_text = function()
+            local selected
+            local ok, action_state_value = pcall(action_state.get_selected_entry)
+            if ok and action_state_value then
+                selected = action_state_value.value
+            end
+            return help.footer("active", vim.fn.mode(1), active_mappings, active_help_options, selected)
+        end
     end
     picker_opts.mappings = nil
     picker_opts.attach_mappings = function(_, map)
-        apply_mappings(map, config.values.active_mappings)
+        apply_mappings(map, active_mappings)
+        local key = help.help_key(active_help_options)
+        if key then
+            for _, mode in ipairs({ "i", "n" }) do
+                if not (active_mappings[mode] and active_mappings[mode][key] ~= nil) then
+                    map(mode, key, function(prompt_bufnr)
+                        actions.show_action_help(
+                            prompt_bufnr,
+                            "active",
+                            active_mappings,
+                            active_help_options
+                        )
+                    end)
+                end
+            end
+        end
         return true
     end
     picker_opts = vim.tbl_deep_extend("force", picker_opts, opts)
+    picker_opts.mappings = nil
+    picker_opts.action_help = nil
     local picker = pickers.new(picker_opts)
+    picker._sess_help_kind = "active"
+    picker._sess_help_mappings = active_mappings
+    picker._sess_help_options = active_help_options
     picker._sess_expanded = expanded
     picker._sess_active_expand = active_expand
     picker._sess_active_snapshot = initial_snapshot

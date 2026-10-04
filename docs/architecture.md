@@ -106,6 +106,19 @@ its cleanup with the picker. Agent hydration is shown as loading or stale; a
 preview error is content in the pane and never prevents picker filtering or
 refresh. Narrow terminals omit the pane.
 
+Telescope action discoverability is owned by a small presentation adapter beside
+picker construction. It derives footer and help entries from the configured
+mapping tables and action identities, rather than duplicating key descriptions
+or inspecting function source. Regular, active, and restore pickers provide
+separate action sets; insert and normal mappings are rendered independently.
+The adapter filters row-specific actions using the selected finder value and
+marks unavailable footer actions without invoking lifecycle code. A configurable
+help key is installed only when that key is not already configured in the mode,
+so custom mappings remain authoritative. The help list is a temporary floating
+scratch buffer tied to the picker prompt buffer; closing the picker closes the
+list and restores the prompt window. It never changes prompt text, selection, or
+filter state.
+
 The mark popup has two private UI owners. `ui/window.lua` validates its
 supported floating-window options and action keymap, computes editor-relative
 geometry, and owns only the focusable scratch buffer and float. It clamps the

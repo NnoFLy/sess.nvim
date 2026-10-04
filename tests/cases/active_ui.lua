@@ -138,9 +138,11 @@ for _, options in ipairs(picker_options) do
     assert(options.layout_config.prompt_position == "top")
 end
 
+local restore_picker_options = picker_options[2]
+assert(restore_picker_options.get_status_text() == "<CR> restore   ? actions")
 local active_picker_options = picker_options[3]
 local status_text = active_picker_options.get_status_text()
-assert(status_text == "<Tab> expand/collapse  <S-Tab> all  <C-b> mark  <Enter> switch/focus")
+assert(status_text == "<C-b> mark   <CR> switch/focus   <S-Tab> all   <Tab> expand   ? actions")
 for _, row in ipairs(active_picker_options.finder.results) do
     assert(row.kind ~= "agent", "active picker should hydrate agents asynchronously")
 end

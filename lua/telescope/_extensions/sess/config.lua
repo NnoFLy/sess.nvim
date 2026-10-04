@@ -41,6 +41,12 @@ config.values = {
         show_snapshot_summary = true,
         show_agents = true,
     },
+    action_help = {
+        enabled = true,
+        key = "?",
+        footer = true,
+        descriptions = {},
+    },
     active_expand = "none",
     poll_interval = 1000,
     sorting_strategy = "ascending",
@@ -120,6 +126,28 @@ config.setup = function(ext_config)
             then
                 error("sess.nvim: preview.width must be a number between 0 and 1")
             end
+        end
+    end
+
+    local action_help = ext_config and ext_config.action_help
+    if action_help ~= nil and action_help ~= false then
+        if type(action_help) ~= "table" then
+            error("sess.nvim: action_help must be a table or false")
+        end
+        for _, key in ipairs({ "enabled", "footer" }) do
+            if action_help[key] ~= nil and type(action_help[key]) ~= "boolean" then
+                error("sess.nvim: action_help." .. key .. " must be a boolean")
+            end
+        end
+        if
+            action_help.key ~= nil
+            and action_help.key ~= false
+            and (type(action_help.key) ~= "string" or action_help.key == "")
+        then
+            error("sess.nvim: action_help.key must be a non-empty string, false, or nil")
+        end
+        if action_help.descriptions ~= nil and type(action_help.descriptions) ~= "table" then
+            error("sess.nvim: action_help.descriptions must be a table")
         end
     end
 
