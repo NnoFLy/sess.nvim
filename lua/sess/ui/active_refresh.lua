@@ -1,11 +1,19 @@
 local M = {}
 
-local POLL_INTERVAL = 1000
+local DEFAULT_POLL_INTERVAL = 1000
 
 -- Poll only while this picker is open, and redraw only when its rows change.
 -- The generator receives a completion callback and may yield between probes.
-function M.start(picker, generate, initial_rows)
+function M.start(picker, generate, initial_rows, poll_interval)
     local prompt = picker.prompt_bufnr
+    poll_interval = poll_interval or DEFAULT_POLL_INTERVAL
+    if
+        type(poll_interval) ~= "number"
+        or poll_interval <= 0
+        or poll_interval % 1 ~= 0
+    then
+        error("sess.nvim: poll_interval must be a positive integer in milliseconds")
+    end
     if not prompt or not vim.api.nvim_buf_is_valid(prompt) then
         return
     end
@@ -18,7 +26,7 @@ function M.start(picker, generate, initial_rows)
     local refreshing = false
     local scheduled = false
     local snapshot_at_refresh
-    local cleanup
+    local autocmds = {}
 
     local function stop()
         if stopped then
@@ -37,9 +45,10 @@ function M.start(picker, generate, initial_rows)
             cancel_refresh()
             cancel_refresh = nil
         end
-        if cleanup then
-            pcall(vim.api.nvim_del_autocmd, cleanup)
+        for _, autocmd in ipairs(autocmds) do
+            pcall(vim.api.nvim_del_autocmd, autocmd)
         end
+        autocmds = {}
     end
 
     local function fail(err)
@@ -89,6 +98,10 @@ function M.start(picker, generate, initial_rows)
             stop()
             return
         end
+        if picker.prompt_win and not vim.api.nvim_win_is_valid(picker.prompt_win) then
+            stop()
+            return
+        end
 
         refreshing = true
         snapshot_at_refresh = picker._sess_active_snapshot
@@ -106,10 +119,16 @@ function M.start(picker, generate, initial_rows)
         end
     end
 
-    cleanup = vim.api.nvim_create_autocmd({ "BufHidden", "BufWipeout" }, {
+    autocmds[#autocmds + 1] = vim.api.nvim_create_autocmd({ "BufHidden", "BufWipeout" }, {
         buffer = prompt,
         callback = stop,
     })
+    if picker.prompt_win then
+        autocmds[#autocmds + 1] = vim.api.nvim_create_autocmd("WinClosed", {
+            pattern = tostring(picker.prompt_win),
+            callback = stop,
+        })
+    end
 
     -- Hydrate after the lightweight picker is visible; the timer only schedules
     -- later status refreshes.
@@ -118,7 +137,7 @@ function M.start(picker, generate, initial_rows)
     if vim.async then
         task = vim.async.run(function()
             while not vim.async.is_closing() and not stopped do
-                vim.async.sleep(POLL_INTERVAL)
+                vim.async.sleep(poll_interval)
                 if vim.async.is_closing() or stopped then
                     return
                 end
@@ -127,7 +146,7 @@ function M.start(picker, generate, initial_rows)
         end)
     else
         timer = assert(vim.uv.new_timer())
-        timer:start(POLL_INTERVAL, POLL_INTERVAL, function()
+        timer:start(poll_interval, poll_interval, function()
             if stopped or refreshing or scheduled then
                 return
             end

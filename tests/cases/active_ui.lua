@@ -32,20 +32,26 @@ local config = require("telescope._extensions.sess.config")
 assert(config.values.active_expand == "none")
 local invalid_config = pcall(config.setup, { active_expand = "invalid" })
 assert(not invalid_config)
-config.setup({ active_expand = "none" })
+assert(not pcall(config.setup, { poll_interval = 0 }))
+config.setup({ active_expand = "none", poll_interval = 250 })
 assert(config.values.active_expand == "none")
 config.setup({ active_expand = "all" })
 assert(config.values.sorting_strategy == "ascending")
 assert(config.values.layout_config.prompt_position == "top")
 
 local picker_options = {}
+local active_poll_interval
 package.loaded["telescope.pickers"] = {
     new = function(options)
         picker_options[#picker_options + 1] = options
         return { find = function() end }
     end,
 }
-package.loaded["sess.ui.active_refresh"] = { start = function() end }
+package.loaded["sess.ui.active_refresh"] = {
+    start = function(_, _, _, poll_interval)
+        active_poll_interval = poll_interval
+    end,
+}
 
 local finders = require("telescope._extensions.sess.finders")
 local function session_headers(rows)
@@ -126,6 +132,7 @@ local pickers = require("telescope._extensions.sess.pickers")
 pickers.sess()
 pickers.restore()
 pickers.active()
+assert(active_poll_interval == 250)
 for _, options in ipairs(picker_options) do
     assert(options.sorting_strategy == "ascending")
     assert(options.layout_config.prompt_position == "top")

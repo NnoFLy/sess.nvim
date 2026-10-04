@@ -75,6 +75,7 @@ require("telescope").setup({
     extensions = {
         sess = {
             active_expand = "none", -- all | current | none
+            poll_interval = 1000, -- polling interval (ms)
             -- Override regular or active picker mappings when needed.
             -- mappings = { i = { ["<C-b>"] = ... } },
             -- active_mappings = { i = { ["<C-b>"] = ... } },
@@ -243,9 +244,10 @@ Enter loads/creates. Ctrl-d (insert) or `dd` (normal) deletes with confirmation.
 `:Sess restore` opens a deleted-session picker; Enter restores the selected record.
 `:Sess active` shows active sessions as tree-style groups with their cwd and
 agents; sessions start collapsed. Configure the Telescope extension's
-`active_expand` option as `"all"`, `"current"`, or `"none"`. `<Tab>`
-expands/collapses the selected group and `<S-Tab>` expands/collapses all groups.
-The footer shows these controls; `<Enter>` switches and focuses an agent.
+`active_expand` option as `"all"`, `"current"`, or `"none"`. Set `poll_interval`
+to control status polling in milliseconds. Polling stops when the picker closes.
+`<Tab>` expands/collapses the selected group and `<S-Tab>` expands/collapses all
+groups. The footer shows these controls; `<Enter>` switches and focuses an agent.
 Each session row ends with agent counts such as `agents 1 working 2 idle`.
 Active picker mappings use `active_mappings`, while
 regular picker mappings use `mappings`. Empty groups show a non-actionable `no agents` row. `<C-b>` prompts for

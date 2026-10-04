@@ -503,11 +503,19 @@ TELESCOPE                                                   *sess-telescope*
 
 Install telescope.nvim and plenary.nvim, then: >
     require("telescope").setup({
-        extensions = { sess = { active_expand = "none" } },
+        extensions = {
+            sess = {
+                active_expand = "none",
+                poll_interval = 1000, -- polling interval (ms)
+            },
+        },
     })
     require("telescope").load_extension("sess")
 <
-The active_expand option accepts "all", "current", or "none". Unsupported
+The active_expand option accepts "all", "current", or "none". The
+poll_interval option sets the active picker polling interval in
+milliseconds and must be a positive integer. Polling stops when the picker
+closes. Unsupported
 values are rejected during Telescope setup. Regular picker mappings use
 `mappings`; active picker mappings use `active_mappings`. The active picker uses
 tree-style session/agent rows and a footer showing <Tab> expand/collapse, <S-Tab>

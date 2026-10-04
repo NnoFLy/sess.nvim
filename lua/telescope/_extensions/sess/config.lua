@@ -12,6 +12,7 @@ local active_expand_modes = {
 config.values = {
     prompt_title = "All Sessions",
     active_expand = "none",
+    poll_interval = 1000,
     sorting_strategy = "ascending",
     layout_config = {
         prompt_position = "top",
@@ -55,6 +56,18 @@ config.setup = function(ext_config)
     local active_expand = ext_config and ext_config.active_expand
     if active_expand ~= nil and not active_expand_modes[active_expand] then
         error('sess.nvim: active_expand must be "all", "current", or "none"')
+    end
+
+    local poll_interval = ext_config and ext_config.poll_interval
+    if
+        poll_interval ~= nil
+        and (
+            type(poll_interval) ~= "number"
+            or poll_interval <= 0
+            or poll_interval % 1 ~= 0
+        )
+    then
+        error("sess.nvim: poll_interval must be a positive integer in milliseconds")
     end
 
     config.values = vim.tbl_deep_extend("force", config.values, ext_config or {})

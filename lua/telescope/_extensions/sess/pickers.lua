@@ -143,7 +143,7 @@ function M.active(opts)
             done,
             picker._sess_active_snapshot
         )
-    end, rows)
+    end, rows, picker_opts.poll_interval)
 end
 
 return M

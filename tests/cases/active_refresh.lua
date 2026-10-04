@@ -32,6 +32,7 @@ local win = vim.api.nvim_open_win(prompt, true, {
 local refreshes = 0
 local picker = {
     prompt_bufnr = prompt,
+    prompt_win = win,
     _sess_expanded = expanded,
     finder = finder,
     refresh = function(self, next_finder, opts)
@@ -40,7 +41,7 @@ local picker = {
         self.finder = next_finder
     end,
 }
-local stop = require("sess.ui.active_refresh").start(picker, generate, rows)
+local stop = require("sess.ui.active_refresh").start(picker, generate, rows, 100)
 assert(stop)
 
 vim.api.nvim_chan_send(channel, "\27[2J\27[HWorking...")
