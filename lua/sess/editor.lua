@@ -11,6 +11,28 @@ local function command(cmd, path)
     vim.cmd({ cmd = cmd, args = path and { path } or {}, magic = { file = false, bar = false } })
 end
 
+-- Neovim's ui2 windows are owned by the editor, not by a session. Keep them
+-- out of captured views and do not close them while changing sessions.
+local ui2
+local function is_ui2_window(win)
+    if ui2 == nil then
+        local ok, module = pcall(require, "vim._core.ui2")
+        ui2 = ok and module or false
+    end
+
+    if not ui2 then
+        return false
+    end
+
+    for _, target in pairs(ui2.wins or {}) do
+        if target == win then
+            return true
+        end
+    end
+
+    return false
+end
+
 -- Capture live buffer identities, not their contents. Unnamed/terminal buffers
 -- can only be resumed in this process; persisted Vimscript cannot preserve jobs.
 function M.capture()
@@ -43,7 +65,7 @@ function M.capture()
         for _, win in ipairs(vim.api.nvim_tabpage_list_wins(tab)) do
             local config = vim.api.nvim_win_get_config(win)
             local buf = vim.api.nvim_win_get_buf(win)
-            if not vim.b[buf].sess_mark_window then
+            if not is_ui2_window(win) and not vim.b[buf].sess_mark_window then
                 view.buffers[buf] = true
 
                 local saved = vim.api.nvim_win_call(win, function()
@@ -64,7 +86,10 @@ function M.capture()
             elseif entry.current == win then
                 for _, candidate in ipairs(vim.api.nvim_tabpage_list_wins(tab)) do
                     local candidate_buf = vim.api.nvim_win_get_buf(candidate)
-                    if not vim.b[candidate_buf].sess_mark_window then
+                    if
+                        not is_ui2_window(candidate)
+                        and not vim.b[candidate_buf].sess_mark_window
+                    then
                         entry.current = candidate
                         break
                     end
@@ -132,13 +157,31 @@ function M.hide()
     -- Close views, not buffers. No bang: errors must not force-discard data.
     for _, win in ipairs(vim.api.nvim_list_wins()) do
         local config = vim.api.nvim_win_get_config(win)
-        if config.relative ~= "" or config.external then
+        if (config.relative ~= "" or config.external) and not is_ui2_window(win) then
             vim.api.nvim_win_close(win, false)
         end
     end
 
     vim.cmd("silent tabonly")
-    vim.cmd("silent only")
+
+    local current_tab = vim.api.nvim_get_current_tabpage()
+    local keep
+    for _, win in ipairs(vim.api.nvim_tabpage_list_wins(current_tab)) do
+        local config = vim.api.nvim_win_get_config(win)
+        if config.relative == "" and not config.external and not is_ui2_window(win) then
+            keep = win
+            break
+        end
+    end
+
+    if keep then
+        vim.api.nvim_set_current_win(keep)
+        for _, win in ipairs(vim.api.nvim_tabpage_list_wins(current_tab)) do
+            if win ~= keep and not is_ui2_window(win) then
+                vim.api.nvim_win_close(win, false)
+            end
+        end
+    end
 
     if not parking or not vim.api.nvim_buf_is_valid(parking) then
         parking = vim.api.nvim_create_buf(false, true)

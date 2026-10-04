@@ -112,7 +112,14 @@ function M.active(opts)
         end
         expanded[session.id] = should_expand
     end
-    local finder, rows = finders.generate_active_finder(expanded, active_expand)
+    -- Show session headers before hydrating agents and marks so large active
+    -- session sets stay responsive.
+    local initial_snapshot = require("sess.api").active.initial_snapshot()
+    local finder, rows = finders.generate_active_finder_from_snapshot(
+        initial_snapshot,
+        expanded,
+        active_expand
+    )
     picker_opts.finder = finder
     picker_opts.selection_strategy = "row"
     picker_opts.get_status_text = picker_opts.get_status_text or function()
@@ -127,12 +134,14 @@ function M.active(opts)
     local picker = pickers.new(picker_opts)
     picker._sess_expanded = expanded
     picker._sess_active_expand = active_expand
+    picker._sess_active_snapshot = initial_snapshot
     picker:find()
     require("sess.ui.active_refresh").start(picker, function(expanded_by_id, done)
         return finders.generate_active_finder_async(
             expanded_by_id,
             picker._sess_active_expand,
-            done
+            done,
+            picker._sess_active_snapshot
         )
     end, rows)
 end

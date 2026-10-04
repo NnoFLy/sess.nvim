@@ -10,7 +10,9 @@ vim.b[terminal].terminal_job_id = 99
 vim.api.nvim_win_set_buf(0, terminal)
 
 local original_job_info = vim.fn.job_info
+local job_info_call_count = 0
 vim.fn.job_info = function()
+    job_info_call_count = job_info_call_count + 1
     return { status = "run", cmd = { "codex" } }
 end
 
@@ -60,6 +62,12 @@ catalog.list = function(...)
 end
 assert(api.active.snapshot())
 assert(catalog_lists == 0, "active snapshot rescanned the session catalog")
+local calls_after_first_snapshot = job_info_call_count
+assert(api.active.snapshot())
+assert(
+    job_info_call_count == calls_after_first_snapshot,
+    "active snapshots should reuse terminal identity within the cache window"
+)
 catalog.list = original_list
 
 local ok, err, registered = api.agent.register(nil, {

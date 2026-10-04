@@ -8,6 +8,17 @@ function M.get_view(id)
     return views[id] and vim.deepcopy(views[id]) or nil
 end
 
+-- Narrow read helpers for high-frequency runtime queries. Keep the full view
+-- defensive-copying API above for callers that need the complete record.
+function M.get_view_buffers(id)
+    local view = views[id]
+    return vim.tbl_keys(view and view.buffers or {})
+end
+
+function M.is_current_session(id)
+    return state.current_session ~= nil and state.current_session.id == id
+end
+
 function M.set_view(id, view)
     views[id] = view and vim.deepcopy(view) or nil
 end
@@ -50,6 +61,10 @@ end
 
 function M.get_current_session()
     return state.current_session and vim.deepcopy(state.current_session) or nil
+end
+
+function M.get_current_session_id()
+    return state.current_session and state.current_session.id or nil
 end
 
 function M.get_active_sessions()

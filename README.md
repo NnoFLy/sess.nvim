@@ -255,11 +255,13 @@ headers. It detects known agent commands running in terminal buffers, including
 and `opencode`; integrations can also register agents through
 `api.agent.register()`. Known terminal agents show a best-effort `idle`,
 `working`, `blocked`, or `unknown` status based on recent terminal output. The
-active picker polls and redraws changed statuses while it is open. Explicit
-status updates remain authoritative. Enter loads the selected session and
-focuses its existing agent buffer when visible. Agents are runtime-only: this
-picker never starts processes, creates windows, or persists agent data. Commands,
-Telescope and autocommands use the same lifecycle.
+active picker shows session headers immediately, then asynchronously hydrates
+agents and marks. While open, it polls for changed statuses and caches unchanged
+terminal identity and output. Explicit status updates remain authoritative. Enter
+loads the selected session and focuses its existing agent buffer when visible.
+Agents are runtime-only: this picker never starts processes, creates windows, or
+persists agent data. Commands, Telescope and autocommands use the same
+lifecycle.
 
 `:Sess load` defaults to the current working directory. `:Sess mark @s` marks
 the current session, `:Sess mark @s project-api` marks a specific session, and

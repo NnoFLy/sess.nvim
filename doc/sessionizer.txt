@@ -394,7 +394,9 @@ Active query:                                             *sess-api.active*
     api.active.snapshot_async(callback) builds the same view incrementally,
     yielding between active sessions. It returns a cancellation function;
     the callback receives the completed snapshot unless the operation is
-    cancelled.
+    cancelled. Pass { marks = false } to skip mark discovery for status-only
+    refreshes; callers can reuse loaded marks. api.active.initial_snapshot()
+    returns the inexpensive session-header view used while a UI hydrates data.
 
 Picker items:                                             *sess-api.items*
     api.items.get_items() returns (items, err, diagnostics). Items include
@@ -510,7 +512,9 @@ values are rejected during Telescope setup. Regular picker mappings use
 tree-style session/agent rows and a footer showing <Tab> expand/collapse, <S-Tab>
 expand/collapse all, and <Enter> switch/focus controls. Empty expanded sessions
 show a non-actionable "no agents" row. Manual expansion changes are preserved
-while the picker is open and across status refreshes.
+while the picker is open and across status refreshes. It shows session headers
+immediately, then asynchronously hydrates agents and marks. It reuses terminal
+identity and output when they are unchanged between probes.
 
 Enter loads/creates. Ctrl-d (insert)/dd (normal) deletes with confirmation.
 Ctrl-r (insert)/rr (normal) renames. Ctrl-u (insert)/uu (normal) unloads the

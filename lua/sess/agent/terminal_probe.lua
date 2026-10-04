@@ -11,6 +11,11 @@ function M.name(bufnr)
     return value:match("([^:]+)$")
 end
 
+function M.changedtick(bufnr)
+    local ok, value = pcall(vim.api.nvim_buf_get_changedtick, bufnr)
+    return ok and value or nil
+end
+
 function M.lines(bufnr)
     local ok, count = pcall(vim.api.nvim_buf_line_count, bufnr)
     if not ok then return nil end

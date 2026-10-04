@@ -56,10 +56,14 @@ end
 ---@return nil
 local function refresh_active(prompt_bufnr, expanded)
     local picker = action_state.get_current_picker(prompt_bufnr)
-    picker:refresh(
-        finders.generate_active_finder(expanded, picker._sess_active_expand),
-        { reset_prompt = false }
+    local snapshot = picker._sess_active_snapshot or api.active.snapshot()
+    picker._sess_active_snapshot = snapshot
+    local finder = finders.generate_active_finder_from_snapshot(
+        snapshot,
+        expanded,
+        picker._sess_active_expand
     )
+    picker:refresh(finder, { reset_prompt = false })
 end
 
 function M.toggle_active(prompt_bufnr)
@@ -79,7 +83,8 @@ end
 function M.toggle_all_active(prompt_bufnr)
     local picker = action_state.get_current_picker(prompt_bufnr)
     local expanded = picker._sess_expanded or {}
-    local sessions = api.state.active()
+    local active_snapshot = picker._sess_active_snapshot
+    local sessions = active_snapshot and active_snapshot.sessions or api.state.active()
     local any_expanded = false
     for _, session in ipairs(sessions) do
         if expanded[session.id] then
@@ -239,7 +244,11 @@ function M.mark_session(prompt_bufnr)
         end
         log.diagnostics(diagnostics)
         if is_active then
-            refresh_active(prompt_bufnr, action_state.get_current_picker(prompt_bufnr)._sess_expanded or {})
+            local picker = action_state.get_current_picker(prompt_bufnr)
+            -- Force one complete snapshot after a mark mutation; subsequent
+            -- status polls can reuse the refreshed mark map.
+            picker._sess_active_snapshot = nil
+            refresh_active(prompt_bufnr, picker._sess_expanded or {})
         else
             refresh(prompt_bufnr)
         end

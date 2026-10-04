@@ -222,7 +222,7 @@ function M.build_active_entries(
     return entries
 end
 
-local function active_finder_from_snapshot(snapshot, expanded_by_id, active_expand)
+local function active_finder_from_snapshot(snapshot, expanded_by_id, active_expand, previous_snapshot)
     local sessions = snapshot.sessions
     for _, session in ipairs(sessions) do
         if expanded_by_id[session.id] == nil then
@@ -230,6 +230,14 @@ local function active_finder_from_snapshot(snapshot, expanded_by_id, active_expa
         end
     end
     for _, diagnostic in ipairs(snapshot.diagnostics or {}) do log.warn(diagnostic) end
+
+    -- Status-only snapshots reuse the last complete mark map to avoid rereading
+    -- the persistent mark registry.
+    if previous_snapshot and not snapshot.marks_loaded then
+        snapshot.marks_by_id = previous_snapshot.marks_by_id
+        snapshot.marks_loaded = previous_snapshot.marks_loaded
+    end
+
     local previous = state.prev()
     local results = M.build_active_entries(
         snapshot.sessions,
@@ -240,9 +248,19 @@ local function active_finder_from_snapshot(snapshot, expanded_by_id, active_expa
         snapshot.marks_by_id,
         previous and previous.id or nil
     )
-    return finders.new_table({ results = results, entry_maker = function(entry)
-        return { value = entry, display = entry.display, ordinal = entry.ordinal }
-    end }), results
+    local finder = finders.new_table({
+        results = results,
+        entry_maker = function(entry)
+            return { value = entry, display = entry.display, ordinal = entry.ordinal }
+        end,
+    })
+    return finder, results, snapshot
+end
+
+function M.generate_active_finder_from_snapshot(snapshot, expanded_by_id, active_expand)
+    expanded_by_id = expanded_by_id or {}
+    active_expand = active_expand or "current"
+    return active_finder_from_snapshot(snapshot, expanded_by_id, active_expand)
 end
 
 function M.generate_active_finder(expanded_by_id, active_expand)
@@ -251,12 +269,19 @@ function M.generate_active_finder(expanded_by_id, active_expand)
     return active_finder_from_snapshot(api.active.snapshot(), expanded_by_id, active_expand)
 end
 
-function M.generate_active_finder_async(expanded_by_id, active_expand, callback)
+function M.generate_active_finder_async(expanded_by_id, active_expand, callback, previous_snapshot)
     expanded_by_id = expanded_by_id or {}
     active_expand = active_expand or "current"
+    local load_marks = not (previous_snapshot and previous_snapshot.marks_loaded)
     return api.active.snapshot_async(function(snapshot)
-        callback(active_finder_from_snapshot(snapshot, expanded_by_id, active_expand))
-    end)
+        local finder, rows = active_finder_from_snapshot(
+            snapshot,
+            expanded_by_id,
+            active_expand,
+            previous_snapshot
+        )
+        callback(finder, rows, snapshot)
+    end, { marks = load_marks })
 end
 
 function M.generate_deleted_finder()

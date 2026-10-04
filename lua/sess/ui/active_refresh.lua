@@ -17,6 +17,7 @@ function M.start(picker, generate, initial_rows)
     local stopped = false
     local refreshing = false
     local scheduled = false
+    local snapshot_at_refresh
     local cleanup
 
     local function stop()
@@ -46,14 +47,27 @@ function M.start(picker, generate, initial_rows)
         require("sess.log").warn("Active picker refresh failed: " .. tostring(err))
     end
 
-    local function finish(finder, next_rows)
+    local function finish(finder, next_rows, snapshot)
         if stopped or not refreshing then
             return
         end
         refreshing = false
         cancel_refresh = nil
 
+        -- Ignore probes started before a user mutation replaced the cached
+        -- snapshot while the probe was yielding.
+        if
+            snapshot
+            and snapshot_at_refresh
+            and picker._sess_active_snapshot ~= snapshot_at_refresh
+        then
+            return
+        end
+
         local ok, err = pcall(function()
+            if snapshot then
+                picker._sess_active_snapshot = snapshot
+            end
             if not vim.deep_equal(rows, next_rows) then
                 picker:refresh(finder, { reset_prompt = false })
                 rows = next_rows
@@ -74,6 +88,7 @@ function M.start(picker, generate, initial_rows)
         end
 
         refreshing = true
+        snapshot_at_refresh = picker._sess_active_snapshot
         local ok, handle, next_rows = pcall(generate, picker._sess_expanded, finish)
         if not ok then
             fail(handle)
@@ -92,6 +107,10 @@ function M.start(picker, generate, initial_rows)
         buffer = prompt,
         callback = stop,
     })
+
+    -- Hydrate after the lightweight picker is visible; the timer only schedules
+    -- later status refreshes.
+    refresh()
 
     if vim.async then
         task = vim.async.run(function()

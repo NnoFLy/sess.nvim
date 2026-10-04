@@ -123,7 +123,7 @@ local function validate(spec, partial, old)
     return true, result
 end
 
-local function all_agents(session_id)
+local function all_agents(session_id, use_cache)
     local by_id = state.get_agents(session_id)
     local by_buffer = {}
     for _, agent in pairs(by_id) do
@@ -132,7 +132,8 @@ local function all_agents(session_id)
         end
     end
 
-    for _, agent in ipairs(detector.list(session_id)) do
+    local probe_options = { cache = use_cache == true }
+    for _, agent in ipairs(detector.list(session_id, probe_options)) do
         if not by_id[agent.id] and not by_buffer[agent.target.bufnr] then
             by_id[agent.id] = agent
             by_buffer[agent.target.bufnr] = true
@@ -145,7 +146,7 @@ local function all_agents(session_id)
         -- without one gets the same screen-based fallback as auto-detected
         -- terminal agents.
         if not agent.status and agent.target and agent.target.bufnr then
-            agent.status = detector.status(agent.target.bufnr, agent.name)
+            agent.status = detector.status(agent.target.bufnr, agent.name, probe_options)
         end
         result[#result + 1] = agent
     end
@@ -153,6 +154,22 @@ local function all_agents(session_id)
         return a.id < b.id
     end)
     return result
+end
+
+local function snapshot_for_id(session_id, use_cache)
+    local result = all_agents(session_id, use_cache)
+    local focused_id = state.get_focused_agent_id(session_id)
+    local focused
+    if focused_id then
+        for _, agent in ipairs(result) do
+            if agent.id == focused_id then
+                focused = agent.id
+                break
+            end
+        end
+    end
+
+    return vim.deepcopy(result), focused
 end
 
 -- Read the agent list and focused agent together. The active picker polls this
@@ -163,19 +180,19 @@ function M.snapshot(target)
         return false, err, nil, nil, diagnostics
     end
 
-    local result = all_agents(item.id)
-    local focused_id = state.get_focused_agent_id(item.id)
-    local focused
-    if focused_id then
-        for _, agent in ipairs(result) do
-            if agent.id == focused_id then
-                focused = focused_id
-                break
-            end
-        end
+    local result, focused = snapshot_for_id(item.id, false)
+    return true, nil, result, focused, diagnostics
+end
+
+-- The active-session query already owns a validated runtime session record.
+-- Avoid resolving that ID through the persistent catalog on every poll.
+function M.snapshot_active(session_id)
+    if type(session_id) ~= "string" or vim.trim(session_id) == "" then
+        return false, "invalid active session id", nil, nil, {}
     end
 
-    return true, nil, vim.deepcopy(result), focused, diagnostics
+    local result, focused = snapshot_for_id(session_id, true)
+    return true, nil, result, focused, {}
 end
 
 function M.register(target, spec)

@@ -127,12 +127,40 @@ for _, options in ipairs(picker_options) do
     assert(options.layout_config.prompt_position == "top")
 end
 
-selected = { value = { kind = "placeholder", session_id = first.id } }
+local active_picker_options = picker_options[3]
+for _, row in ipairs(active_picker_options.finder.results) do
+    assert(row.kind ~= "agent", "active picker should hydrate agents asynchronously")
+end
+
+local refresh_count = 0
+local active_picker = {
+    _sess_expanded = { [first.id] = true },
+    _sess_active_expand = "all",
+    _sess_active_snapshot = require("sess.api").active.initial_snapshot(),
+    refresh = function()
+        refresh_count = refresh_count + 1
+    end,
+}
+package.loaded["telescope.actions.state"].get_current_picker = function()
+    return active_picker
+end
+selected = { value = { kind = "session", session_id = first.id } }
 local actions = require("telescope._extensions.sess.actions")
 assert(config.values.mappings.i["<C-b>"] == actions.mark_session)
 assert(config.values.mappings.n["<C-b>"] == actions.mark_session)
 assert(config.values.active_mappings.i["<C-b>"] == actions.mark_session)
 assert(config.values.active_mappings.n["<C-b>"] == actions.mark_session)
+local original_snapshot = require("sess.api").active.snapshot
+local snapshot_calls = 0
+require("sess.api").active.snapshot = function(...)
+    snapshot_calls = snapshot_calls + 1
+    return original_snapshot(...)
+end
 actions.toggle_active(1)
+assert(refresh_count == 1)
+assert(snapshot_calls == 0, "expansion should reuse the active snapshot")
+require("sess.api").active.snapshot = original_snapshot
+
+selected = { value = { kind = "placeholder", session_id = first.id } }
 actions.active_enter(1)
 assert(not closed)
