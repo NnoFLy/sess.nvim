@@ -9,11 +9,53 @@ local finders = require("telescope._extensions.sess.finders")
 local load_or_create = require("sess.ui.load_or_create")
 local marks = require("sess.ui.marks")
 
+local function selection_key(value)
+    if not value then
+        return nil
+    end
+    local id = value.id or value.session_id
+    if not id then
+        return nil
+    end
+    return {
+        id = id,
+        kind = value.kind,
+        agent_id = value.agent_id,
+    }
+end
+
+local function same_selection_key(left, right)
+    return left
+        and right
+        and left.id == right.id
+        and left.kind == right.kind
+        and left.agent_id == right.agent_id
+end
+
+local function restore_selection(picker, finder, key)
+    if not key or type(picker.set_selection) ~= "function" then
+        return
+    end
+    for index, row in ipairs(finder.results or {}) do
+        if
+            same_selection_key(selection_key(row), key)
+            or same_selection_key(selection_key(row.value), key)
+        then
+            pcall(picker.set_selection, picker, index)
+            return
+        end
+    end
+end
+
 ---@param prompt_bufnr number
 ---@return nil
 local function refresh(prompt_bufnr, finder)
     local current_picker = action_state.get_current_picker(prompt_bufnr)
-    current_picker:refresh(finder or finders.generate_new_finder(), { reset_prompt = true })
+    local selected = action_state.get_selected_entry()
+    local key = selection_key(selected and selected.value)
+    local next_finder = finder or finders.generate_new_finder()
+    current_picker:refresh(next_finder, { reset_prompt = true })
+    restore_selection(current_picker, next_finder, key)
 end
 
 ---@return Sess.TelescopeSessionEntry | nil
@@ -56,6 +98,8 @@ end
 ---@return nil
 local function refresh_active(prompt_bufnr, expanded)
     local picker = action_state.get_current_picker(prompt_bufnr)
+    local selected = action_state.get_selected_entry()
+    local key = selection_key(selected and selected.value)
     local snapshot = picker._sess_active_snapshot or api.active.snapshot()
     picker._sess_active_snapshot = snapshot
     local finder = finders.generate_active_finder_from_snapshot(
@@ -64,6 +108,7 @@ local function refresh_active(prompt_bufnr, expanded)
         picker._sess_active_expand
     )
     picker:refresh(finder, { reset_prompt = false })
+    restore_selection(picker, finder, key)
 end
 
 function M.toggle_active(prompt_bufnr)

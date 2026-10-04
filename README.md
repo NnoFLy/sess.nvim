@@ -76,6 +76,11 @@ require("telescope").setup({
         sess = {
             active_expand = "none", -- all | current | none
             poll_interval = 1000, -- polling interval (ms)
+            display = {
+                show_metadata = true,
+                show_agent_summary = true,
+                path_style = "full", -- full | relative | short
+            },
             -- Override regular or active picker mappings when needed.
             -- mappings = { i = { ["<C-b>"] = ... } },
             -- active_mappings = { i = { ["<C-b>"] = ... } },
@@ -237,9 +242,17 @@ require("telescope").load_extension("sess")
 
 All Sess pickers display results top-to-bottom with the input prompt at the top.
 Regular session rows share the active picker’s layout: `●` is current,
-`○` is active, `·` is inactive, and `+` is a new directory. Marks, names,
-and paths stay aligned. `[pinned]`, `[last]`, and `[new session]` mark pinned,
-last, and new rows.
+`○` is active, `·` is inactive, and `+` is a new directory. Expansion/state,
+marks, names, and paths are separate display columns and stay aligned using
+screen-cell widths, including for Unicode. Long paths are shortened in the
+middle when the picker is narrow; the complete path remains searchable.
+`[pinned]`, `[last]`, and `[new session]` mark pinned, last, and new rows.
+Display metadata and agent summaries can be disabled with the Telescope
+extension `display` options. Override semantic groups with
+`display.highlights` (`current`, `active`, `inactive`, `new`, `mark`, `name`,
+`cwd`, `metadata`, or `agent`). State, mark, name, path, metadata, and agent
+columns use Telescope-style semantic highlights when available, with readable
+plain text as a fallback.
 Enter loads/creates. Ctrl-d (insert) or `dd` (normal) deletes with confirmation.
 `:Sess restore` opens a deleted-session picker; Enter restores the selected record.
 `:Sess active` shows active sessions as tree-style groups with their cwd and

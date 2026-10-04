@@ -81,7 +81,36 @@ function M.start(picker, generate, initial_rows, poll_interval)
                 picker._sess_active_snapshot = snapshot
             end
             if snapshot_changed or not vim.deep_equal(rows, next_rows) then
+                local selected_key
+                if type(picker.get_selection) == "function" then
+                    local selected = picker:get_selection()
+                    local value = selected and selected.value or selected
+                    if value then
+                        local id = value.id or value.session_id
+                        if id then
+                            selected_key = {
+                                id = id,
+                                kind = value.kind,
+                                agent_id = value.agent_id,
+                            }
+                        end
+                    end
+                end
                 picker:refresh(finder, { reset_prompt = false })
+                if selected_key and type(picker.set_selection) == "function" then
+                    for index, row in ipairs(next_rows or {}) do
+                        local value = row.value or row
+                        local id = value.id or value.session_id
+                        if
+                            id == selected_key.id
+                            and value.kind == selected_key.kind
+                            and value.agent_id == selected_key.agent_id
+                        then
+                            pcall(picker.set_selection, picker, index)
+                            break
+                        end
+                    end
+                end
                 rows = next_rows
             end
         end)

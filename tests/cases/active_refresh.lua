@@ -35,6 +35,14 @@ local picker = {
     prompt_win = win,
     _sess_expanded = expanded,
     finder = finder,
+    selected_value = rows[2].value or rows[2],
+    get_selection = function(self)
+        return { value = self.selected_value }
+    end,
+    set_selection = function(self, index)
+        self.selected_index = index
+        self.selected_value = self.finder.results[index].value or self.finder.results[index]
+    end,
     refresh = function(self, next_finder, opts)
         assert(opts.reset_prompt == false)
         refreshes = refreshes + 1
@@ -48,6 +56,9 @@ vim.api.nvim_chan_send(channel, "\27[2J\27[HWorking...")
 assert(vim.wait(2000, function()
     return picker.finder.results[2].display:find("working", 1, true)
 end, 10), "picker did not refresh after terminal output")
+assert(picker.selected_index == 2)
+assert(picker.selected_value.kind == "agent")
+assert(picker.selected_value.agent_id == rows[2].agent_id)
 local before = refreshes
 vim.wait(600, function() return false end, 10)
 assert(refreshes == before, "unchanged rows must not redraw")

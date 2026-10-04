@@ -507,6 +507,11 @@ Install telescope.nvim and plenary.nvim, then: >
             sess = {
                 active_expand = "none",
                 poll_interval = 1000, -- polling interval (ms)
+                display = {
+                    show_metadata = true,
+                    show_agent_summary = true,
+                    path_style = "full", -- full | relative | short
+                },
             },
         },
     })
@@ -516,8 +521,16 @@ The active_expand option accepts "all", "current", or "none". The
 poll_interval option sets the active picker polling interval in
 milliseconds and must be a positive integer. Polling stops when the picker
 closes. Unsupported
-values are rejected during Telescope setup. Regular picker mappings use
-`mappings`; active picker mappings use `active_mappings`. The active picker uses
+values are rejected during Telescope setup. The optional display table accepts
+show_metadata and show_agent_summary booleans, plus path_style "full",
+"relative", or "short". Rows use screen-cell widths, retain complete
+searchable ordinals, and shorten long paths without hiding state or names.
+Regular and active session identity columns are shared, including Unicode-safe
+mark/name alignment. Telescope semantic highlight groups are used when the
+entry display module is available; plain text remains readable otherwise.
+Override the semantic groups with display.highlights keys current, active,
+inactive, new, mark, name, cwd, metadata, and agent. Regular picker mappings use `mappings`; active picker mappings use
+`active_mappings`. The active picker uses
 tree-style session/agent rows and a footer showing <Tab> expand/collapse, <S-Tab>
 expand/collapse all. <Enter> switches and focuses. Each session header ends
 with agent counts such as `agents 1 working 2 idle`. Empty expanded sessions

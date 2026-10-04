@@ -35,8 +35,46 @@ local status_symbols = {
 
 local status_display_order = { "working", "idle", "blocked", "done", "unknown" }
 
+local function display_width(value)
+    return vim.fn.strdisplaywidth(value or "")
+end
+
 local function pad(value, width)
-    return value .. string.rep(" ", math.max(0, width - vim.fn.strdisplaywidth(value)))
+    value = value or ""
+    return value .. string.rep(" ", math.max(0, width - display_width(value)))
+end
+
+-- Truncate at character boundaries and measure both halves in screen cells. This
+-- deliberately keeps the complete value in the ordinal; it is only a display
+-- concern.
+local function truncate_middle(value, width)
+    value = value or ""
+    if width == nil or display_width(value) <= width then
+        return value
+    end
+    if width <= 0 then
+        return ""
+    elseif width == 1 then
+        return "…"
+    end
+
+    local chars = vim.fn.strchars(value)
+    local left_width = math.floor((width - 1) / 2)
+    local right_width = width - 1 - left_width
+    local left_chars = chars
+    while left_chars > 0 and display_width(vim.fn.strcharpart(value, 0, left_chars)) > left_width do
+        left_chars = left_chars - 1
+    end
+    local right_chars = chars
+    while right_chars > 0
+        and display_width(vim.fn.strcharpart(value, chars - right_chars, right_chars)) > right_width
+    do
+        right_chars = right_chars - 1
+    end
+
+    local left = vim.fn.strcharpart(value, 0, left_chars)
+    local right = vim.fn.strcharpart(value, chars - right_chars, right_chars)
+    return left .. "…" .. right
 end
 
 local function agent_status_text(agents)
@@ -64,8 +102,45 @@ local function agent_status_text(agents)
     return table.concat(parts, " ")
 end
 
--- Keep session columns identical without implying expansion in the flat picker.
-local function format_session_display(session, opts)
+local function configured_display_options()
+    local ok, config = pcall(require, "telescope._extensions.sess.config")
+    local options = ok and config.values.display or {}
+    options = vim.deepcopy(options or {})
+    if options.highlights == nil then
+        options.highlights = {}
+    end
+    -- A formatter can be used independently in tests and by integrations; a
+    -- picker invocation defaults to the current editor width.
+    if options.available_width == nil then
+        options.available_width = vim.o.columns
+    end
+    return options
+end
+
+local function path_for_display(path_value, style)
+    if style == "short" then
+        return vim.fn.fnamemodify(path_value, ":~")
+    elseif style == "relative" then
+        return vim.fn.fnamemodify(path_value, ":~:.")
+    end
+    return path_value
+end
+
+local function state_for_session(session, opts)
+    if not session.id then
+        return "+", "new"
+    elseif opts.current_id == session.id then
+        return "●", "current"
+    elseif opts.active then
+        return "○", "active"
+    end
+    return "·", "inactive"
+end
+
+local function session_display_parts(session, opts)
+    opts = opts or {}
+    local display = opts.display or {}
+    local highlights = display.highlights or {}
     local tree = "  "
     if opts.expandable and opts.expanded then
         tree = "▾ "
@@ -73,38 +148,94 @@ local function format_session_display(session, opts)
         tree = "▸ "
     end
 
-    local marker
-    if not session.id then
-        marker = "+"
-    elseif opts.current_id == session.id then
-        marker = "●"
-    elseif opts.active then
-        marker = "○"
-    else
-        marker = "·"
+    local marker, state = state_for_session(session, opts)
+    local name = session.metadata.name or ""
+    local cwd = path_for_display(session.metadata.cwd or "", display.path_style)
+    local metadata = {}
+    if display.show_metadata ~= false then
+        if session.metadata.pinned then
+            metadata[#metadata + 1] = "[pinned]"
+        end
+        if session.id and opts.previous_id == session.id then
+            metadata[#metadata + 1] = "[last]"
+        end
+        if not session.id then
+            metadata[#metadata + 1] = "[new session]"
+        end
+    end
+    if display.show_agent_summary ~= false and opts.agent_status then
+        metadata[#metadata + 1] = opts.agent_status
     end
 
-    local display = tree
+    local prefix = tree
         .. marker .. " "
         .. pad(opts.mark or "", opts.mark_width or 2) .. " "
-        .. pad(session.metadata.name, opts.name_width or 0)
+        .. pad(name, opts.name_width or 0)
         .. "  "
-        .. session.metadata.cwd
+    local suffix = #metadata > 0 and "  " .. table.concat(metadata, "  ") or ""
+    local path_width = opts.path_width
+    if path_width == nil and display.available_width then
+        path_width = math.max(
+            0,
+            display.available_width - display_width(prefix) - display_width(suffix)
+        )
+    end
+    cwd = truncate_middle(cwd, path_width)
 
-    if session.metadata.pinned then
-        display = display .. "  [pinned]"
+    return {
+        { text = tree },
+        { text = marker, highlight = highlights[state] },
+        { text = " " },
+        { text = pad(opts.mark or "", opts.mark_width or 2), highlight = highlights.mark },
+        { text = " " },
+        { text = pad(name, opts.name_width or 0), highlight = highlights.name },
+        { text = "  " },
+        { text = cwd, highlight = highlights.cwd },
+        { text = suffix, highlight = highlights.metadata },
+    }
+end
+
+local function display_parts_text(parts)
+    local values = {}
+    for _, part in ipairs(parts) do
+        values[#values + 1] = part.text
     end
-    if session.id and opts.previous_id == session.id then
-        display = display .. "  [last]"
+    return table.concat(values)
+end
+
+local function highlighted_display(parts, fallback)
+    if type(parts) ~= "table" then
+        return fallback
     end
-    if not session.id then
-        display = display .. "  [new session]"
-    end
-    if opts.agent_status then
-        display = display .. "  " .. opts.agent_status
+    local ok, entry_display = pcall(require, "telescope.pickers.entry_display")
+    if not ok or type(entry_display.create) ~= "function" then
+        return fallback
     end
 
-    return display
+    local items = {}
+    for index, part in ipairs(parts) do
+        items[index] = { width = math.max(1, display_width(part.text)) }
+    end
+    local ok_displayer, displayer = pcall(entry_display.create, {
+        separator = "",
+        items = items,
+    })
+    if not ok_displayer then
+        return fallback
+    end
+
+    return function()
+        local values = {}
+        for index, part in ipairs(parts) do
+            values[index] = { part.text, part.highlight }
+        end
+        return displayer(values)
+    end
+end
+
+-- Keep session columns identical without implying expansion in the flat picker.
+function M.format_session_display(session, opts)
+    return display_parts_text(session_display_parts(session, opts))
 end
 
 local function mark_columns()
@@ -143,6 +274,7 @@ end
 ---@param focused_by_id table<string, string>?
 ---@param marks_by_id table<string, string>?
 ---@param previous_id string?
+---@param display_opts table?
 ---@return table[]
 function M.build_active_entries(
     sessions,
@@ -151,17 +283,22 @@ function M.build_active_entries(
     current_id,
     focused_by_id,
     marks_by_id,
-    previous_id
+    previous_id,
+    display_opts
 )
     expanded_by_id = expanded_by_id or {}
     marks_by_id = marks_by_id or {}
+    local display = vim.tbl_deep_extend("force", configured_display_options(), display_opts or {})
     local entries = {}
     local session_name_width, name_width, status_width, mark_width = 0, 0, 0, 2
     for _, mark in pairs(marks_by_id) do
         mark_width = math.max(mark_width, vim.fn.strdisplaywidth(mark))
     end
     for _, session in ipairs(sessions or {}) do
-        session_name_width = math.max(session_name_width, vim.fn.strdisplaywidth(session.metadata.name))
+        session_name_width = math.max(
+            session_name_width,
+            vim.fn.strdisplaywidth(session.metadata.name)
+        )
         for _, agent in ipairs(agents_by_id[session.id] or {}) do
             name_width = math.max(name_width, vim.fn.strdisplaywidth(agent.name))
             status_width = math.max(status_width, vim.fn.strdisplaywidth(agent.status or "unknown"))
@@ -182,22 +319,25 @@ function M.build_active_entries(
             }, " ")
         end
         local mark = marks_by_id[session.id] or ""
+        local session_parts = session_display_parts(session, {
+            expandable = true,
+            expanded = expanded,
+            active = true,
+            current_id = current_id,
+            previous_id = previous_id,
+            mark = mark,
+            mark_width = mark_width,
+            name_width = session_name_width,
+            agent_status = agent_status_text(agents),
+            display = display,
+        })
         entries[#entries + 1] = {
             kind = "session",
             session_id = session.id,
             session = vim.deepcopy(session),
             expanded = expanded,
-            display = format_session_display(session, {
-                expandable = true,
-                expanded = expanded,
-                active = true,
-                current_id = current_id,
-                previous_id = previous_id,
-                mark = mark,
-                mark_width = mark_width,
-                name_width = session_name_width,
-                agent_status = agent_status_text(agents),
-            }),
+            display = display_parts_text(session_parts),
+            display_parts = session_parts,
             ordinal = table.concat({
                 mark,
                 session.metadata.name,
@@ -212,7 +352,10 @@ function M.build_active_entries(
                     session_id = session.id,
                     session = vim.deepcopy(session),
                     display = "  └─ no agents",
-                    ordinal = table.concat({ session.metadata.name, session.metadata.cwd, "no agents" }, " "),
+                    ordinal = table.concat(
+                        { session.metadata.name, session.metadata.cwd, "no agents" },
+                        " "
+                    ),
                 }
             else
                 for index, agent in ipairs(agents) do
@@ -222,20 +365,29 @@ function M.build_active_entries(
                     local focus_marker = focused and ">" or " "
                     local status_symbol = status_symbols[status] or "?"
                     local info = agent.info and agent.info ~= "" and "  " .. agent.info or ""
+                    local agent_highlight = display.highlights and display.highlights.agent
+                    local agent_parts = {
+                        {
+                            text = "  "
+                                .. branch
+                                .. " "
+                                .. focus_marker
+                                .. " "
+                                .. status_symbol
+                                .. " ",
+                        },
+                        { text = pad(agent.name, name_width), highlight = agent_highlight },
+                        { text = "  " },
+                        { text = pad(status, status_width), highlight = agent_highlight },
+                        { text = info, highlight = agent_highlight },
+                    }
                     entries[#entries + 1] = {
                         kind = "agent",
                         session_id = session.id,
                         agent_id = agent.id,
                         agent = vim.deepcopy(agent),
-                        display = string.format(
-                            "  %s %s %s %s  %s%s",
-                            branch,
-                            focus_marker,
-                            status_symbol,
-                            pad(agent.name, name_width),
-                            pad(status, status_width),
-                            info
-                        ),
+                        display = display_parts_text(agent_parts),
+                        display_parts = agent_parts,
                         ordinal = table.concat({
                             marks_by_id[session.id] or "",
                             session.metadata.name,
@@ -253,11 +405,20 @@ function M.build_active_entries(
     return entries
 end
 
-local function active_finder_from_snapshot(snapshot, expanded_by_id, active_expand, previous_snapshot)
+local function active_finder_from_snapshot(
+    snapshot,
+    expanded_by_id,
+    active_expand,
+    previous_snapshot
+)
     local sessions = snapshot.sessions
     for _, session in ipairs(sessions) do
         if expanded_by_id[session.id] == nil then
-            expanded_by_id[session.id] = default_expanded(session.id, snapshot.current_id, active_expand)
+            expanded_by_id[session.id] = default_expanded(
+                session.id,
+                snapshot.current_id,
+                active_expand
+            )
         end
     end
     for _, diagnostic in ipairs(snapshot.diagnostics or {}) do log.warn(diagnostic) end
@@ -282,7 +443,11 @@ local function active_finder_from_snapshot(snapshot, expanded_by_id, active_expa
     local finder = finders.new_table({
         results = results,
         entry_maker = function(entry)
-            return { value = entry, display = entry.display, ordinal = entry.ordinal }
+            return {
+                value = entry,
+                display = highlighted_display(entry.display_parts, entry.display),
+                ordinal = entry.ordinal,
+            }
         end,
     })
     return finder, results, snapshot
@@ -353,6 +518,7 @@ function M.generate_directory_finder(prompt)
         log.warn(diagnostic)
     end
 
+    local display = configured_display_options()
     local by_path = {}
     local mark_by_id, mark_width = mark_columns()
     local active_by_id = {}
@@ -389,13 +555,14 @@ function M.generate_directory_finder(prompt)
             id = session and session.id,
             metadata = metadata,
         }
-        local display = format_session_display(display_session, {
+        local display_parts = session_display_parts(display_session, {
             active = session and active_by_id[session.id] == true,
             current_id = current and current.id,
             previous_id = previous and previous.id,
             mark = session and mark_by_id[session.id],
             mark_width = mark_width,
             name_width = name_width,
+            display = display,
         })
         local ordinal_display = (candidate.is_self and "./" or candidate.name)
             .. "  " .. candidate.path
@@ -408,8 +575,13 @@ function M.generate_directory_finder(prompt)
             directory = true,
             id = session and session.id or nil,
             metadata = metadata,
-            display = display,
-            ordinal = candidate.prompt .. " " .. ordinal_display,
+            display = display_parts_text(display_parts),
+            display_parts = display_parts,
+            ordinal = table.concat({
+                candidate.prompt,
+                mark_by_id[session and session.id] or "",
+                ordinal_display,
+            }, " "),
         }
     end
 
@@ -418,7 +590,7 @@ function M.generate_directory_finder(prompt)
         entry_maker = function(entry)
             return {
                 value = entry,
-                display = entry.display,
+                display = highlighted_display(entry.display_parts, entry.display),
                 ordinal = entry.ordinal,
             }
         end,
@@ -443,6 +615,7 @@ function M.generate_new_finder()
         active_by_id[active.id] = true
     end
     local previous = state.prev()
+    local display = configured_display_options()
     for _, entry in ipairs(results) do
         -- The current session is omitted from this picker, including column sizing.
         if not current or entry.id ~= current.id then
@@ -489,23 +662,27 @@ function M.generate_new_finder()
                 return nil
             end
 
-            local display = format_session_display(session, {
+            local display_parts = session_display_parts(session, {
                 active = active_by_id[session.id] == true,
                 current_id = current and current.id,
                 previous_id = previous and previous.id,
                 mark = mark_by_id[session.id],
                 mark_width = mark_width,
                 name_width = name_width,
+                display = display,
             })
 
             ---@type Sess.TelescopeFinderReturn
             return {
                 value = session,
-                display = display,
+                display = display_parts_text(display_parts),
+                display_parts = display_parts,
                 ordinal = table.concat({
                     mark_by_id[session.id] or "",
                     session.metadata.name,
                     session.metadata.cwd,
+                    session.metadata.pinned and "pinned" or "",
+                    previous and previous.id == session.id and "last" or "",
                 }, " "),
             }
         end,

@@ -9,8 +9,32 @@ local active_expand_modes = {
     none = true,
 }
 
+local path_styles = {
+    full = true,
+    relative = true,
+    short = true,
+}
+
+local default_highlights = {
+    current = "TelescopeResultsIdentifier",
+    active = "TelescopeResultsIdentifier",
+    inactive = "TelescopeResultsComment",
+    new = "TelescopeResultsSpecialComment",
+    mark = "TelescopeResultsNumber",
+    name = "TelescopeResultsNormal",
+    cwd = "TelescopeResultsComment",
+    metadata = "TelescopeResultsComment",
+    agent = "TelescopeResultsIdentifier",
+}
+
 config.values = {
     prompt_title = "All Sessions",
+    display = {
+        show_metadata = true,
+        show_agent_summary = true,
+        path_style = "full",
+        highlights = default_highlights,
+    },
     active_expand = "none",
     poll_interval = 1000,
     sorting_strategy = "ascending",
@@ -68,6 +92,31 @@ config.setup = function(ext_config)
         )
     then
         error("sess.nvim: poll_interval must be a positive integer in milliseconds")
+    end
+
+    local display = ext_config and ext_config.display
+    if display ~= nil then
+        if type(display) ~= "table" then
+            error("sess.nvim: display must be a table")
+        end
+        for _, key in ipairs({ "show_metadata", "show_agent_summary" }) do
+            if display[key] ~= nil and type(display[key]) ~= "boolean" then
+                error("sess.nvim: display." .. key .. " must be a boolean")
+            end
+        end
+        if display.path_style ~= nil and not path_styles[display.path_style] then
+            error('sess.nvim: display.path_style must be "full", "relative", or "short"')
+        end
+        if display.highlights ~= nil then
+            if type(display.highlights) ~= "table" then
+                error("sess.nvim: display.highlights must be a table")
+            end
+            for name, group in pairs(display.highlights) do
+                if type(name) ~= "string" or type(group) ~= "string" or group == "" then
+                    error("sess.nvim: display highlight groups must be non-empty strings")
+                end
+            end
+        end
     end
 
     config.values = vim.tbl_deep_extend("force", config.values, ext_config or {})
