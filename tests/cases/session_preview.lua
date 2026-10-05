@@ -139,6 +139,23 @@ assert(active_text:find("Session:%s+frontend"))
 assert(active_text:find("pi%s+working%s+reviewing UI"))
 assert(not active_text:find("No session selected", 1, true))
 
+-- A failed active-data probe is represented by an empty agent list plus a
+-- stale marker. The preview must not render that empty list as authoritative.
+local stale_snapshot = {
+    sessions = { session },
+    agents_by_id = { [session.id] = {} },
+    focused_by_id = {},
+    marks_by_id = {},
+    stale_by_id = { [session.id] = true },
+    current_id = session.id,
+}
+preview_definition.define_preview(preview_self, active_entry, {
+    picker = { _sess_active_snapshot = stale_snapshot, _sess_active_loading = false },
+})
+local stale_text = table.concat(vim.api.nvim_buf_get_lines(preview_buffer, 0, -1, false), "\n")
+assert(stale_text:find("unavailable (stale)", 1, true))
+assert(not stale_text:find("  none", 1, true))
+
 -- Deleted finder entries are already complete records. Previewing them must
 -- not ask the live-session query to resolve their id.
 local _, _, deleted_item = api.session.create(fixture.directory("deleted-preview"), {

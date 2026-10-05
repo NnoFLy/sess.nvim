@@ -184,7 +184,8 @@ local function selected_context(picker, value, options)
         end
         context.mark = snapshot.marks_by_id and snapshot.marks_by_id[value.id]
         context.active_loading = picker._sess_active_loading == true
-        context.active_stale = context.agents == nil and not context.active_loading
+        context.active_stale = (snapshot.stale_by_id or {})[value.id] == true
+            and not context.active_loading
         add_snapshot_status(context, value)
     else
         local called, current, active = pcall(function()
