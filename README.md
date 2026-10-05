@@ -84,6 +84,7 @@ require("telescope").setup({
             preview = {
                 enabled = true,
                 width = 0.35,
+                min_width = 80, -- hide preview below this result width
                 show_snapshot_summary = true,
                 show_agents = true,
             },
@@ -260,6 +261,13 @@ require("telescope").load_extension("sess")
 ```
 
 All Sess pickers display results top-to-bottom with the input prompt at the top.
+Rows measure Telescope’s result window in screen cells and recompute after a
+terminal resize. At normal widths names, marks, paths, and compact metadata stay
+aligned; paths shorten from the middle and verbose agent info shortens from the
+end. Narrow rows retain the state marker and session name, then the mark and
+path as space permits; secondary labels collapse to symbols or disappear. The
+configured preview `min_width` (default 80) hides the preview when the result
+area is too small, avoiding horizontal scrolling.
 Regular session rows share the active picker’s layout: `●` is current,
 `○` is active, `·` is inactive, and `+` is a new directory. Expansion/state,
 marks, names, and paths are separate display columns and stay aligned using

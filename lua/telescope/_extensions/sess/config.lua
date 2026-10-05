@@ -46,6 +46,7 @@ config.values = {
     preview = {
         enabled = true,
         width = 0.35,
+        min_width = 80,
         show_snapshot_summary = true,
         show_agents = true,
     },
@@ -138,6 +139,18 @@ config.setup = function(ext_config)
         for _, key in ipairs({ "enabled", "show_snapshot_summary", "show_agents" }) do
             if preview[key] ~= nil and type(preview[key]) ~= "boolean" then
                 error("sess.nvim: preview." .. key .. " must be a boolean")
+            end
+        end
+        if preview.min_width ~= nil then
+            if
+                type(preview.min_width) ~= "number"
+                or preview.min_width ~= preview.min_width
+                or preview.min_width == math.huge
+                or preview.min_width == -math.huge
+                or preview.min_width < 1
+                or preview.min_width % 1 ~= 0
+            then
+                error("sess.nvim: preview.min_width must be a positive integer")
             end
         end
         if preview.width ~= nil then

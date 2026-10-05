@@ -20,6 +20,7 @@ local log = require("sess.log")
 local path = require("sess.ui.path")
 local path_utils = require("sess.path")
 local search = require("telescope._extensions.sess.search")
+local layout = require("telescope._extensions.sess.layout")
 
 local items = api.items
 local state = api.state
@@ -36,46 +37,9 @@ local status_symbols = {
 
 local status_display_order = { "working", "idle", "blocked", "done", "unknown" }
 
-local function display_width(value)
-    return vim.fn.strdisplaywidth(value or "")
-end
-
 local function pad(value, width)
     value = value or ""
-    return value .. string.rep(" ", math.max(0, width - display_width(value)))
-end
-
--- Truncate at character boundaries and measure both halves in screen cells. This
--- deliberately keeps the complete value in the ordinal; it is only a display
--- concern.
-local function truncate_middle(value, width)
-    value = value or ""
-    if width == nil or display_width(value) <= width then
-        return value
-    end
-    if width <= 0 then
-        return ""
-    elseif width == 1 then
-        return "…"
-    end
-
-    local chars = vim.fn.strchars(value)
-    local left_width = math.floor((width - 1) / 2)
-    local right_width = width - 1 - left_width
-    local left_chars = chars
-    while left_chars > 0 and display_width(vim.fn.strcharpart(value, 0, left_chars)) > left_width do
-        left_chars = left_chars - 1
-    end
-    local right_chars = chars
-    while right_chars > 0
-        and display_width(vim.fn.strcharpart(value, chars - right_chars, right_chars)) > right_width
-    do
-        right_chars = right_chars - 1
-    end
-
-    local left = vim.fn.strcharpart(value, 0, left_chars)
-    local right = vim.fn.strcharpart(value, chars - right_chars, right_chars)
-    return left .. "…" .. right
+    return value .. string.rep(" ", math.max(0, width - layout.display_width(value)))
 end
 
 local function normalized_status(status)
@@ -207,10 +171,23 @@ local function state_for_session(session, opts)
     return "·", "inactive"
 end
 
+local function compact_metadata(value, width)
+    if not width or width >= 60 then
+        return value
+    end
+    local compact = {
+        ["[pinned]"] = "★",
+        ["[last]"] = "←",
+        ["[new session]"] = "+",
+    }
+    return compact[value] or value
+end
+
 local function session_display_parts(session, opts)
     opts = opts or {}
     local display = opts.display or {}
     local highlights = display.highlights or {}
+    local width = display.available_width
     local tree = "  "
     if opts.expandable and opts.expanded then
         tree = "▾ "
@@ -237,35 +214,50 @@ local function session_display_parts(session, opts)
         metadata[#metadata + 1] = opts.agent_status
     end
 
-    local prefix = tree
-        .. marker .. " "
-        .. pad(opts.mark or "", opts.mark_width or 2) .. " "
-        .. pad(name, opts.name_width or 0)
-        .. "  "
-    local suffix = #metadata > 0 and "  " .. table.concat(metadata, "  ") or ""
-    local path_width = opts.path_width
-    if path_width == nil and display.available_width then
-        path_width = math.max(
-            0,
-            display.available_width - display_width(prefix) - display_width(suffix)
-        )
+    if opts.path_width then
+        cwd = layout.truncate_middle(cwd, opts.path_width)
     end
-    cwd = truncate_middle(cwd, path_width)
-
-    return {
+    local parts = {
         { text = tree },
-        { text = marker, highlight = highlights[state] },
-        { text = " " },
-        { text = pad(opts.mark or "", opts.mark_width or 2), highlight = highlights.mark },
-        { text = " " },
+        { text = marker .. " ", highlight = highlights[state] },
+        {
+            text = pad(opts.mark or "", opts.mark_width or 2) .. " ",
+            highlight = highlights.mark,
+            omit_priority = 2,
+        },
         {
             text = pad(name, opts.name_width or 0),
             highlight = opts.name_highlight or highlights.name,
+            shrink_priority = 3,
+            min_width = 1,
         },
         { text = "  " },
-        { text = cwd, highlight = highlights.cwd },
-        { text = suffix, highlight = opts.status_highlight or highlights.metadata },
+        {
+            text = cwd,
+            highlight = highlights.cwd,
+            truncate = "middle",
+            shrink_priority = 1,
+            min_width = 1,
+            expendable = true,
+            -- An explicitly requested path width is useful to pure callers and
+            -- should not disappear merely because the rest is very narrow.
+            omit_priority = opts.path_width == nil and 3 or nil,
+        },
     }
+    for _, value in ipairs(metadata) do
+        parts[#parts + 1] = {
+            text = "  " .. compact_metadata(value, width),
+            highlight = opts.status_highlight or highlights.metadata,
+            omit_priority = value:match("^agents ") and 4 or 5,
+        }
+    end
+
+    local fit_width = width
+    if opts.path_width then
+        fit_width = nil
+    end
+    local fitted = layout.fit_parts(parts, fit_width)
+    return fitted
 end
 
 local function display_parts_text(parts)
@@ -285,9 +277,22 @@ local function highlighted_display(parts, fallback)
         return fallback
     end
 
+    -- Telescope pads every configured item to its declared width. Omitted
+    -- parts must therefore be left out of both the displayer definition and
+    -- its values, or an empty part would still consume a cell.
+    local rendered_parts = {}
+    for _, part in ipairs(parts) do
+        if layout.display_width(part.text) > 0 then
+            rendered_parts[#rendered_parts + 1] = part
+        end
+    end
+    if #rendered_parts == 0 then
+        return fallback
+    end
+
     local items = {}
-    for index, part in ipairs(parts) do
-        items[index] = { width = math.max(1, display_width(part.text)) }
+    for index, part in ipairs(rendered_parts) do
+        items[index] = { width = layout.display_width(part.text) }
     end
     local ok_displayer, displayer = pcall(entry_display.create, {
         separator = "",
@@ -299,7 +304,7 @@ local function highlighted_display(parts, fallback)
 
     return function()
         local values = {}
-        for index, part in ipairs(parts) do
+        for index, part in ipairs(rendered_parts) do
             values[index] = { part.text, part.highlight }
         end
         return displayer(values)
@@ -435,11 +440,19 @@ function M.build_active_entries(
         }
         if expanded then
             if #agents == 0 then
+                local placeholder_parts = layout.fit_parts({
+                    {
+                        text = display.available_width and display.available_width < 40 and "└─ "
+                            or "  └─ ",
+                    },
+                    { text = "no agents", shrink_priority = 1, min_width = 1 },
+                }, display.available_width)
                 entries[#entries + 1] = {
                     kind = "placeholder",
                     session_id = session.id,
                     session = vim.deepcopy(session),
-                    display = "  └─ no agents",
+                    display = display_parts_text(placeholder_parts),
+                    display_parts = placeholder_parts,
                     ordinal = table.concat(
                         { session.metadata.name, session.metadata.cwd, "no agents" },
                         " "
@@ -454,9 +467,10 @@ function M.build_active_entries(
                     local status_symbol = status_symbols[status]
                     local info = agent.info and agent.info ~= "" and "  " .. agent.info or ""
                     local agent_highlight = display.highlights and display.highlights.agent
-                    local agent_parts = {
+                    local indent = display.available_width and display.available_width < 40 and "" or "  "
+                    local agent_parts = layout.fit_parts({
                         {
-                            text = "  "
+                            text = indent
                                 .. branch
                                 .. " "
                                 .. focus_marker
@@ -466,14 +480,27 @@ function M.build_active_entries(
                             highlight = focused and (display.highlights.focused or agent_highlight)
                                 or agent_highlight,
                         },
-                        { text = pad(agent.name, name_width), highlight = agent_highlight },
+                        {
+                            text = pad(agent.name, name_width),
+                            highlight = agent_highlight,
+                            shrink_priority = 3,
+                            min_width = 1,
+                        },
                         { text = "  " },
                         {
                             text = pad(status, status_width),
                             highlight = display.highlights[status] or agent_highlight,
                         },
-                        { text = info, highlight = agent_highlight },
-                    }
+                        {
+                            text = info,
+                            highlight = agent_highlight,
+                            truncate = "end",
+                            shrink_priority = 1,
+                            min_width = 0,
+                            expendable = true,
+                            omit_priority = 4,
+                        },
+                    }, display.available_width)
                     local agent_search_fields = search.fields_for_session(session, {
                         mark = mark,
                         current = current,
@@ -502,7 +529,8 @@ local function active_finder_from_snapshot(
     snapshot,
     expanded_by_id,
     active_expand,
-    previous_snapshot
+    previous_snapshot,
+    display_opts
 )
     local sessions = snapshot.sessions
     for _, session in ipairs(sessions) do
@@ -532,7 +560,7 @@ local function active_finder_from_snapshot(
         snapshot.focused_by_id,
         snapshot.marks_by_id,
         previous and previous.id or nil,
-        nil,
+        display_opts,
         snapshot.agents_loaded_by_id,
         snapshot.stale_by_id
     )
@@ -550,10 +578,10 @@ local function active_finder_from_snapshot(
     return finder, results, snapshot
 end
 
-function M.generate_active_finder_from_snapshot(snapshot, expanded_by_id, active_expand)
+function M.generate_active_finder_from_snapshot(snapshot, expanded_by_id, active_expand, display_opts)
     expanded_by_id = expanded_by_id or {}
     active_expand = active_expand or "current"
-    return active_finder_from_snapshot(snapshot, expanded_by_id, active_expand)
+    return active_finder_from_snapshot(snapshot, expanded_by_id, active_expand, nil, display_opts)
 end
 
 function M.generate_active_finder(expanded_by_id, active_expand)
@@ -562,7 +590,13 @@ function M.generate_active_finder(expanded_by_id, active_expand)
     return active_finder_from_snapshot(api.active.snapshot(), expanded_by_id, active_expand)
 end
 
-function M.generate_active_finder_async(expanded_by_id, active_expand, callback, previous_snapshot)
+function M.generate_active_finder_async(
+    expanded_by_id,
+    active_expand,
+    callback,
+    previous_snapshot,
+    display_opts
+)
     expanded_by_id = expanded_by_id or {}
     active_expand = active_expand or "current"
     local load_marks = not (previous_snapshot and previous_snapshot.marks_loaded)
@@ -571,7 +605,8 @@ function M.generate_active_finder_async(expanded_by_id, active_expand, callback,
             snapshot,
             expanded_by_id,
             active_expand,
-            previous_snapshot
+            previous_snapshot,
+            display_opts
         )
         callback(finder, rows, snapshot)
     end, {
@@ -580,7 +615,7 @@ function M.generate_active_finder_async(expanded_by_id, active_expand, callback,
     })
 end
 
-function M.generate_deleted_finder()
+function M.generate_deleted_finder(display_opts)
     local ok, err, entries, diagnostics = api.session.list_deleted()
     if not ok then
         log.error(err)
@@ -590,15 +625,37 @@ function M.generate_deleted_finder()
     end
     local search_options = configured_search_options()
     entries = search.sort_results(entries or {}, search_options.sort)
+    local display = vim.tbl_deep_extend("force", configured_display_options(), display_opts or {})
     return finders.new_table({
         results = entries,
         entry_maker = function(entry)
             local deleted_at = os.date("%Y-%m-%d %H:%M", entry.deleted_at)
             local search_fields = search.fields_for_session(entry)
-            local display = entry.metadata.name .. "  " .. entry.metadata.cwd .. "  " .. deleted_at
+            local parts = layout.fit_parts({
+                {
+                    text = entry.metadata.name,
+                    shrink_priority = 3,
+                    min_width = 1,
+                },
+                { text = "  " },
+                {
+                    text = entry.metadata.cwd,
+                    truncate = "middle",
+                    shrink_priority = 1,
+                    min_width = 1,
+                    expendable = true,
+                },
+                { text = "  " .. deleted_at, omit_priority = 5 },
+            }, display.available_width)
+            local values = {}
+            for _, part in ipairs(parts) do
+                values[#values + 1] = part.text
+            end
+            local rendered = table.concat(values)
             return {
                 value = entry,
-                display = display,
+                display = rendered,
+                display_parts = parts,
                 search_fields = search_fields,
                 ordinal = search.ordinal(search_fields) .. " " .. entry.id .. " " .. entry.key .. " " .. deleted_at,
             }
@@ -607,7 +664,7 @@ function M.generate_deleted_finder()
 end
 
 ---@return table
-function M.generate_directory_finder(prompt)
+function M.generate_directory_finder(prompt, display_opts)
     local candidates, err = path.enumerate(prompt)
     if err then
         log.error(err)
@@ -622,7 +679,7 @@ function M.generate_directory_finder(prompt)
         log.warn(diagnostic)
     end
 
-    local display = configured_display_options()
+    local display = vim.tbl_deep_extend("force", configured_display_options(), display_opts or {})
     local by_path = {}
     local mark_by_id, mark_width = mark_columns()
     local active_by_id = {}
@@ -710,7 +767,7 @@ function M.generate_directory_finder(prompt)
     })
 end
 
-function M.generate_new_finder()
+function M.generate_new_finder(display_opts)
     local results, err, diagnostics = items.get_items()
     if err then
         log.error(err)
@@ -728,7 +785,7 @@ function M.generate_new_finder()
         active_by_id[active.id] = true
     end
     local previous = state.prev()
-    local display = configured_display_options()
+    local display = vim.tbl_deep_extend("force", configured_display_options(), display_opts or {})
     local search_options = configured_search_options()
     local agents_by_id = active_agents_for_search()
     for _, entry in ipairs(results) do

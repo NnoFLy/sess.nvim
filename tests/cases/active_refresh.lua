@@ -150,3 +150,102 @@ assert(stop_reconcile)
 assert(reconcile_set_index == 1)
 stop_reconcile()
 vim.api.nvim_buf_delete(reconcile_prompt, { force = true })
+
+-- A resize arriving during an async hydration must be replayed after it
+-- completes, so rows are regenerated for the new result width.
+local pending_prompt = vim.api.nvim_create_buf(false, true)
+local pending_calls = 0
+local pending_done
+local pending_picker = {
+    prompt_bufnr = pending_prompt,
+    _sess_expanded = expanded,
+    finder = { results = {} },
+    refresh = function(self, finder)
+        self.finder = finder
+    end,
+}
+local stop_pending = require("sess.ui.active_refresh").start(
+    pending_picker,
+    function(_, done)
+        pending_calls = pending_calls + 1
+        pending_done = done
+    end,
+    {},
+    1000
+)
+assert(stop_pending)
+assert(pending_calls == 1)
+vim.api.nvim_exec_autocmds("VimResized", {})
+assert(pending_calls == 1)
+pending_done({}, {}, nil)
+assert(vim.wait(500, function() return pending_calls == 2 end, 10))
+pending_done({}, {}, nil)
+stop_pending()
+vim.api.nvim_buf_delete(pending_prompt, { force = true })
+
+-- Active rows are regenerated at the result width after a resize, including
+-- the compact hierarchy indentation used by narrow dashboards.
+local active_finders = require("telescope._extensions.sess.finders")
+local resize_snapshot = {
+    sessions = { session },
+    agents_by_id = {
+        [session.id] = {
+            {
+                id = "resize-agent",
+                name = "long-child-name",
+                status = "working",
+                info = "verbose child information",
+            },
+        },
+    },
+    focused_by_id = {},
+    marks_by_id = {},
+    marks_loaded = true,
+    agents_loaded_by_id = { [session.id] = true },
+    stale_by_id = {},
+    current_id = nil,
+    diagnostics = {},
+}
+local resize_expanded = { [session.id] = true }
+local resize_width = 60
+local resize_finder, resize_rows = active_finders.generate_active_finder_from_snapshot(
+    resize_snapshot,
+    resize_expanded,
+    "all",
+    { available_width = resize_width }
+)
+assert(resize_rows[2].display:find("  └─", 1, true))
+assert(vim.fn.strdisplaywidth(resize_rows[2].display) <= resize_width)
+local resize_prompt = vim.api.nvim_create_buf(false, true)
+local resize_picker = {
+    prompt_bufnr = resize_prompt,
+    _sess_expanded = resize_expanded,
+    _sess_active_snapshot = resize_snapshot,
+    finder = resize_finder,
+    refresh = function(self, next_finder)
+        self.finder = next_finder
+    end,
+}
+local stop_resize = require("sess.ui.active_refresh").start(
+    resize_picker,
+    function(expanded_by_id, done)
+        local next_finder, next_rows = active_finders.generate_active_finder_from_snapshot(
+            resize_snapshot,
+            expanded_by_id,
+            "all",
+            { available_width = resize_width }
+        )
+        done(next_finder, next_rows, resize_snapshot)
+    end,
+    resize_rows,
+    1000
+)
+assert(stop_resize)
+resize_width = 20
+vim.api.nvim_exec_autocmds("VimResized", {})
+local narrow_child = resize_picker.finder.results[2]
+assert(vim.fn.strdisplaywidth(narrow_child.display) <= resize_width)
+assert(narrow_child.display:find("└─", 1, true))
+assert(not narrow_child.display:find("  └─", 1, true))
+stop_resize()
+vim.api.nvim_buf_delete(resize_prompt, { force = true })

@@ -6,6 +6,7 @@ local action_state = require("telescope.actions.state")
 local api = require("sess.api")
 local log = require("sess.log")
 local finders = require("telescope._extensions.sess.finders")
+local layout = require("telescope._extensions.sess.layout")
 local load_or_create = require("sess.ui.load_or_create")
 local marks = require("sess.ui.marks")
 
@@ -53,7 +54,10 @@ local function refresh(prompt_bufnr, finder)
     local current_picker = action_state.get_current_picker(prompt_bufnr)
     local selected = action_state.get_selected_entry()
     local key = selection_key(selected and selected.value)
-    local next_finder = finder or finders.generate_new_finder()
+    local next_finder = finder
+        or finders.generate_new_finder({
+            available_width = layout.available_width(current_picker),
+        })
     -- Mutations redraw the preview and rows without discarding user input.
     current_picker:refresh(next_finder, { reset_prompt = false })
     restore_selection(current_picker, next_finder, key)
@@ -106,7 +110,8 @@ local function refresh_active(prompt_bufnr, expanded)
     local finder = finders.generate_active_finder_from_snapshot(
         snapshot,
         expanded,
-        picker._sess_active_expand
+        picker._sess_active_expand,
+        { available_width = layout.available_width(picker) }
     )
     picker:refresh(finder, { reset_prompt = false })
     restore_selection(picker, finder, key)
@@ -215,7 +220,13 @@ function M.restore_session(prompt_bufnr)
     end
 
     log.diagnostics(diagnostics)
-    refresh(prompt_bufnr, finders.generate_deleted_finder())
+    local picker = action_state.get_current_picker(prompt_bufnr)
+    refresh(
+        prompt_bufnr,
+        finders.generate_deleted_finder({
+            available_width = layout.available_width(picker),
+        })
+    )
 end
 
 function M.delete_session(prompt_bufnr)

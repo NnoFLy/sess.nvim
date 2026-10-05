@@ -538,6 +538,7 @@ Install telescope.nvim and plenary.nvim, then: >
                 preview = {
                     enabled = true,
                     width = 0.35,
+                    min_width = 80, -- hide preview below this result width
                     show_snapshot_summary = true,
                     show_agents = true,
                 },
@@ -563,8 +564,12 @@ milliseconds and must be a positive integer. Polling stops when the picker
 closes. Unsupported
 values are rejected during Telescope setup. The optional display table accepts
 show_metadata and show_agent_summary booleans, plus path_style "full",
-"relative", or "short". Rows use screen-cell widths, retain complete
-searchable ordinals, and shorten long paths without hiding state or names.
+"relative", or "short". Rows measure the active Telescope result window in screen cells, retain complete
+searchable ordinals, and recompute after terminal resize. Long paths shorten from
+the middle and verbose agent info from the end without hiding state or names.
+At narrow widths secondary labels collapse to symbols or disappear, while tree
+rows retain enough indentation for hierarchy. The preview uses `min_width`
+(default 80) to hide itself when the result area is too small.
 Regular and active session identity columns are shared, including Unicode-safe
 mark/name alignment. Telescope semantic highlight groups are used when the
 entry display module is available; plain text remains readable otherwise.

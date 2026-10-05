@@ -7,6 +7,7 @@ local search = require("telescope._extensions.sess.search")
 local actions = require("telescope._extensions.sess.actions")
 local help = require("telescope._extensions.sess.help")
 local preview = require("telescope._extensions.sess.preview")
+local layout = require("telescope._extensions.sess.layout")
 local path = require("sess.ui.path")
 local state = require("sess.api").state
 
@@ -15,6 +16,35 @@ local function apply_mappings(map, mappings)
         for key, action in pairs(mode_mappings) do
             map(mode, key, action)
         end
+    end
+end
+
+local function update_preview_layout(picker, previewer, preview_config, explicit)
+    -- An explicit caller previewer has precedence over responsive defaults,
+    -- including when Sess's preview is disabled or the result is too narrow.
+    if explicit then
+        picker.previewer = previewer
+        return
+    end
+    if not previewer then
+        return
+    end
+    local result_width = layout.available_width(picker)
+    local preview_active = picker.previewer ~= nil and picker.previewer ~= false
+    local available_width = preview_active
+            and result_width
+        or layout.preview_result_width(preview_config, nil, result_width)
+    local next_previewer = layout.preview_fits(preview_config, nil, available_width)
+            and previewer
+        or nil
+    local changed = picker.previewer ~= next_previewer
+    picker.previewer = next_previewer
+    picker.layout_config = picker.layout_config or {}
+    picker.layout_config.preview_width = preview_config.width or 0.35
+    if changed and type(picker.full_layout_update) == "function" then
+        pcall(function()
+            picker:full_layout_update()
+        end)
     end
 end
 
@@ -27,9 +57,11 @@ local function picker_options()
     opts.search = nil
     -- Telescope owns the preview buffer lifecycle. On narrow terminals the
     -- pane is omitted rather than taking space from the prompt and results.
-    if preview_config.enabled ~= false and vim.o.columns >= 80 then
+    if preview_config.enabled ~= false then
         local previewer = preview.new(preview_config)
-        if previewer then
+        opts._sess_previewer = previewer
+        if
+            previewer and layout.preview_fits(preview_config) then
             opts.previewer = previewer
             opts.layout_config = vim.tbl_deep_extend(
                 "force",
@@ -61,14 +93,23 @@ local function make_picker(opts, restore_picker)
     end
     local help_options = { action_help = action_help }
 
+    local picker
+    local path_mode = false
+    local generated_previewer = picker_opts._sess_previewer
+    picker_opts._sess_previewer = nil
     local current_session = state.current()
     if current_session then
         picker_opts.prompt_title = picker_opts.prompt_title .. " | " .. current_session.metadata.name
     end
 
-    picker_opts.finder = restore_picker and finders.generate_deleted_finder() or finders.generate_new_finder()
+    picker_opts.finder = restore_picker
+            and finders.generate_deleted_finder({
+                available_width = layout.initial_width(config.values.preview),
+            })
+        or finders.generate_new_finder({
+            available_width = layout.initial_width(config.values.preview),
+        })
     if not restore_picker then
-        local path_mode = false
         if opts.get_status_text == nil then
             picker_opts.get_status_text = function()
                 local selected
@@ -82,12 +123,20 @@ local function make_picker(opts, restore_picker)
         picker_opts.on_input_filter_cb = function(prompt)
             if path.is_path(prompt) then
                 path_mode = true
-                return { updated_finder = finders.generate_directory_finder(prompt) }
+                return {
+                    updated_finder = finders.generate_directory_finder(prompt, {
+                        available_width = layout.available_width(picker),
+                    }),
+                }
             end
 
             if path_mode then
                 path_mode = false
-                return { updated_finder = finders.generate_new_finder() }
+                return {
+                    updated_finder = finders.generate_new_finder({
+                        available_width = layout.available_width(picker),
+                    }),
+                }
             end
 
             return {}
@@ -150,12 +199,53 @@ local function make_picker(opts, restore_picker)
     -- replace a configured action.
     picker_opts.mappings = nil
     picker_opts.action_help = nil
+    -- A caller's explicit previewer, including false, wins over the generated
+    -- Sess previewer. The generated value is only a fallback when omitted.
+    local configured_previewer
+    if opts.previewer ~= nil then
+        -- tbl_deep_extend recursively copies table-valued previewers. Restore
+        -- the explicit object so Telescope receives exactly what the caller
+        -- supplied, including false.
+        picker_opts.previewer = opts.previewer
+    end
+    configured_previewer = picker_opts.previewer
+    if configured_previewer == nil then
+        configured_previewer = generated_previewer
+    end
 
-    local picker = pickers.new(picker_opts)
+    picker = pickers.new(picker_opts)
     picker._sess_help_kind = kind
     picker._sess_help_mappings = mappings
     picker._sess_help_options = help_options
     picker:find()
+    local preview_config = config.values.preview or {}
+    update_preview_layout(picker, configured_previewer, preview_config, opts.previewer ~= nil)
+    local display_opts = { available_width = layout.available_width(picker) }
+    if type(picker.refresh) == "function" then
+        if restore_picker then
+            picker:refresh(finders.generate_deleted_finder(display_opts), { reset_prompt = false })
+        elseif path_mode then
+            local prompt = action_state.get_current_line() or ""
+            picker:refresh(finders.generate_directory_finder(prompt, display_opts), { reset_prompt = false })
+        else
+            picker:refresh(finders.generate_new_finder(display_opts), { reset_prompt = false })
+        end
+    end
+    picker._sess_layout_stop = layout.on_resize(picker, function(width)
+        local preview_config = config.values.preview or {}
+        update_preview_layout(picker, configured_previewer, preview_config, opts.previewer ~= nil)
+        local display_opts = { available_width = layout.available_width(picker, width) }
+        if restore_picker then
+            picker:refresh(finders.generate_deleted_finder(display_opts), { reset_prompt = false })
+        elseif path_mode then
+            local prompt = action_state.get_current_line() or ""
+            picker:refresh(finders.generate_directory_finder(prompt, display_opts), {
+                reset_prompt = false,
+            })
+        else
+            picker:refresh(finders.generate_new_finder(display_opts), { reset_prompt = false })
+        end
+    end)
 end
 
 local M = {}
@@ -187,7 +277,8 @@ function M.active(opts)
     local finder, rows = finders.generate_active_finder_from_snapshot(
         initial_snapshot,
         expanded,
-        active_expand
+        active_expand,
+        { available_width = layout.initial_width(config.values.preview) }
     )
     picker_opts.prompt_title = finders.active_dashboard_title(initial_snapshot)
     picker_opts.finder = finder
@@ -231,6 +322,18 @@ function M.active(opts)
     picker_opts = vim.tbl_deep_extend("force", picker_opts, opts)
     picker_opts.mappings = nil
     picker_opts.action_help = nil
+    local generated_previewer = picker_opts._sess_previewer
+    picker_opts._sess_previewer = nil
+    -- Preserve an explicitly supplied previewer (including false) rather than
+    -- replacing it with the generated Sess previewer during layout updates.
+    local configured_previewer
+    if opts.previewer ~= nil then
+        picker_opts.previewer = opts.previewer
+    end
+    configured_previewer = picker_opts.previewer
+    if configured_previewer == nil then
+        configured_previewer = generated_previewer
+    end
     local picker = pickers.new(picker_opts)
     picker._sess_help_kind = "active"
     picker._sess_help_mappings = active_mappings
@@ -240,6 +343,22 @@ function M.active(opts)
     picker._sess_active_snapshot = initial_snapshot
     picker._sess_active_loading = true
     picker:find()
+    local preview_config = config.values.preview or {}
+    update_preview_layout(picker, configured_previewer, preview_config, opts.previewer ~= nil)
+    local layout_finder, layout_rows = finders.generate_active_finder_from_snapshot(
+        initial_snapshot,
+        expanded,
+        active_expand,
+        { available_width = layout.available_width(picker) }
+    )
+    if type(picker.refresh) == "function" then
+        picker:refresh(layout_finder, { reset_prompt = false })
+        rows = layout_rows
+    end
+    picker._sess_layout_stop = layout.on_resize(picker, function()
+        local preview_config = config.values.preview or {}
+        update_preview_layout(picker, configured_previewer, preview_config, opts.previewer ~= nil)
+    end)
     require("sess.ui.active_refresh").start(picker, function(expanded_by_id, done)
         picker._sess_active_loading = true
         return finders.generate_active_finder_async(
@@ -257,7 +376,8 @@ function M.active(opts)
                 end
                 done(finder, next_rows, snapshot)
             end,
-            picker._sess_active_snapshot
+            picker._sess_active_snapshot,
+            { available_width = layout.available_width(picker) }
         )
     end, rows, picker_opts.poll_interval)
 end

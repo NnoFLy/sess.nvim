@@ -104,7 +104,12 @@ availability without sourcing the Vimscript snapshot or entering lifecycle code.
 The preview uses Telescope's private nofile scratch buffer, and Telescope owns
 its cleanup with the picker. Agent hydration is shown as loading or stale; a
 preview error is content in the pane and never prevents picker filtering or
-refresh. Narrow terminals omit the pane.
+refresh. The pure `telescope._extensions.sess.layout` helper measures the active
+result window in display cells, allocates identity/path/metadata columns, and
+truncates paths from the middle and agent info from the end. Resize callbacks
+rebuild display rows without changing finder ordinals or session data; narrow
+terminals collapse optional metadata and omit the preview below its configured
+minimum width.
 
 Telescope action discoverability is owned by a small presentation adapter beside
 picker construction. It derives footer and help entries from the configured

@@ -25,6 +25,7 @@ function M.start(picker, generate, initial_rows, poll_interval)
     local stopped = false
     local refreshing = false
     local scheduled = false
+    local pending_resize = false
     local snapshot_at_refresh
     local autocmds = {}
 
@@ -34,6 +35,7 @@ function M.start(picker, generate, initial_rows, poll_interval)
         end
         stopped = true
         refreshing = false
+        pending_resize = false
         if timer then
             timer:stop()
             timer:close()
@@ -59,6 +61,8 @@ function M.start(picker, generate, initial_rows, poll_interval)
         require("sess.log").warn("Active picker refresh failed: " .. tostring(err))
     end
 
+    local refresh
+
     local function finish(finder, next_rows, snapshot)
         if stopped or not refreshing then
             return
@@ -73,6 +77,10 @@ function M.start(picker, generate, initial_rows, poll_interval)
             and snapshot_at_refresh
             and picker._sess_active_snapshot ~= snapshot_at_refresh
         then
+            if pending_resize and not stopped then
+                pending_resize = false
+                refresh()
+            end
             return
         end
 
@@ -141,9 +149,13 @@ function M.start(picker, generate, initial_rows, poll_interval)
         if not ok then
             fail(err)
         end
+        if pending_resize and not stopped then
+            pending_resize = false
+            refresh()
+        end
     end
 
-    local function refresh()
+    refresh = function()
         if stopped or refreshing then
             return
         end
@@ -172,6 +184,17 @@ function M.start(picker, generate, initial_rows, poll_interval)
         end
     end
 
+    -- A resize is a data-independent refresh: the same snapshot is rendered
+    -- again using the result window's current screen-cell width.
+    autocmds[#autocmds + 1] = vim.api.nvim_create_autocmd("VimResized", {
+        callback = function()
+            if refreshing then
+                pending_resize = true
+            else
+                refresh()
+            end
+        end,
+    })
     autocmds[#autocmds + 1] = vim.api.nvim_create_autocmd({ "BufHidden", "BufWipeout" }, {
         buffer = prompt,
         callback = stop,
