@@ -163,7 +163,9 @@ local previous = api.state.prev()
 local active = api.state.active()
 local ok, err, sessions, diagnostics = api.session.list()
 local ok, err, deleted, diagnostics = api.session.list_deleted()
-api.session.restore("name-or-id-or-trash-key")
+local ok, err, restored, diagnostics = api.session.restore("name-or-id-or-trash-key")
+-- Omitted targets for resolve/delete/rename/pin/unload use the current session;
+-- without one they return a clear error.
 local ok, err, preview, diagnostics = api.session.preview("my-project")
 -- preview is read-only: { session, snapshot_status, snapshot_available, snapshot_error }
 local ok, err, marked, diagnostics = api.session.get_by_mark("s")
@@ -365,6 +367,19 @@ Deleted sessions are soft-deleted into the private `trash/` directory and remain
 ## Persistence and safety
 
 `:checkhealth sess` checks setup, storage access, corrupt/version-incompatible metadata and missing snapshots. It never sources snapshots, writes probes or repairs/deletes data.
+
+On Linux, Darwin and FreeBSD with `/proc/self/fd` or `/dev/fd`, storage reads
+and writes walk opened, no-follow directory descriptors. Snapshot generation
+writes through the securely-created file descriptor, and loading executes bytes
+read through the same descriptor-relative/no-follow boundary rather than
+reopening the snapshot pathname. Other platforms (and restricted POSIX
+environments without these primitives) use a bounded private-store pathname
+fallback: existing components are checked and symlinked components are
+rejected, but concurrent pathname replacement can race those checks. The
+fallback does not provide descriptor-level containment; keep the store private.
+Such filesystem failures are reported by the affected operation (as an error,
+or as a diagnostic when the public operation can complete), while normal setup
+remains available.
 
 ## Development
 

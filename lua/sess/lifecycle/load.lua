@@ -25,14 +25,16 @@ function M.run(destination, options, context)
         return false, err or "no session for current working directory"
     end
 
-    local valid, validation_err = M.validate(item)
-    if not valid then
-        return false, validation_err
-    end
-
+    -- A live current session is already loaded. Do not require its persisted
+    -- snapshot merely to make an idempotent load succeed.
     local current = state.get_current_session()
     if current and current.id == item.id then
         return true, nil, current, lookup_diagnostics or {}
+    end
+
+    local valid, validation_err = M.validate(item)
+    if not valid then
+        return false, validation_err
     end
 
     local ready, pre_err = observer.before("load", item, callbacks)
@@ -78,7 +80,14 @@ function M.run(destination, options, context)
 
         editor.empty(item.metadata.cwd)
         local snapshot_path = assert(storage.get_session_path(item.id))
-        editor.source_snapshot(snapshot_path)
+        local snapshot_content, snapshot_err = storage.read_session(item.id)
+        if not snapshot_content then
+            return false, snapshot_err
+        end
+        local sourced, source_err = editor.source_snapshot(snapshot_path, snapshot_content)
+        if sourced == false then
+            return false, source_err
+        end
         return {}
     end)
     if not changed then

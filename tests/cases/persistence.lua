@@ -30,7 +30,8 @@ fixture.equal(previous, vim.v.this_session)
 
 local rename = vim.uv.fs_rename
 vim.uv.fs_rename = function(from, to)
-    if to == path then
+    -- Secure storage renames through an opened directory descriptor.
+    if to == path or to:match("/session%.vim$") then
         return nil, "injected rename failure"
     end
 

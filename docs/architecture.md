@@ -50,7 +50,7 @@ The lifecycle API is a thin facade over focused modules under `lua/sess/lifecycl
 - `editor_rollback` captures, protects, and restores reversible editor state;
 - `commit` applies runtime activation after persistence and editor changes succeed;
 - `transaction` is only a compatibility facade for those focused modules;
-- `save` coordinates path-based snapshot callbacks, usage metadata, outgoing saves, and save diagnostics;
+- `save` coordinates storage-selected snapshot callbacks (including optional descriptors), usage metadata, outgoing saves, and save diagnostics;
 - `create`, `load`, `unload`, `mutations`, and `marks` own operation-specific catalog/editor/runtime mutations. They receive an operation context and never import the public options API. Mark operations only update the registry and publish observers; loading a mark delegates to `load`.
 
 Operation modules follow this ordering:
@@ -73,7 +73,7 @@ Runtime state is the in-memory source of truth for the current and previous sess
 
 ### Editor adapter
 
-The editor layer translates between session operations and Neovim state. It captures and restores buffers, windows, tabpages, cursor positions, working-directory scopes, terminal jobs, and editor snapshots. Snapshot methods accept only paths: `write_snapshot(temp_path)` writes to a storage-provided temporary path and `source_snapshot(snapshot_path)` sources a path selected by lifecycle/storage. It does not resolve session IDs, replace files, validate persisted records, or make persistence/UI policy decisions. Its focus helper only validates and focuses buffers already visible in the current session's tabs; it never creates windows or reveals hidden buffers.
+The editor layer translates between session operations and Neovim state. It captures and restores buffers, windows, tabpages, cursor positions, working-directory scopes, terminal jobs, and editor snapshots. Storage selects a unique temporary path for snapshots; on descriptor-capable platforms `write_snapshot(temp_path, fd)` receives the still-open descriptor and writes through `/proc/self/fd` or `/dev/fd` so a replaced temporary leaf cannot redirect `:mksession`. The path-only fallback uses an ordinary trusted-store temporary path and passes no descriptor. Snapshot loading receives bytes already read by storage through its descriptor-relative/no-follow boundary; the editor never reopens the snapshot pathname. The editor does not resolve session IDs, replace files, validate persisted records, or make persistence/UI policy decisions. Its focus helper only validates and focuses buffers already visible in the current session's tabs; it never creates windows or reveals hidden buffers.
 
 ### Runtime agents
 
@@ -92,7 +92,7 @@ Storage owns the on-disk representation, including metadata, snapshots, session 
 - validating and atomically replacing the independent mark registry;
 - refusing unsafe paths and malformed records.
 
-Storage failures must be visible to callers. Corrupt records are skipped with diagnostics and are not automatically repaired or removed.
+Storage failures must be visible to callers. Corrupt records are skipped with diagnostics and are not automatically repaired or removed. On Linux, Darwin, and FreeBSD with an exposed `/proc/self/fd` or `/dev/fd` namespace, reads and writes walk opened storage-directory descriptors with `O_DIRECTORY|O_NOFOLLOW`; regular-file reads add `O_NOFOLLOW`, and temporary snapshot writes use the opened file descriptor itself. Other platforms, and restricted POSIX environments without these primitives, retain compatibility through a private-store path fallback: every existing component is checked as a directory and symlinked components are rejected, but a concurrent pathname replacement can still race between checks. The fallback does not claim descriptor-level containment; users must keep the store private, and operation-specific filesystem failures remain visible as errors (or diagnostics when the operation can complete) rather than making initialization fail.
 
 ### UI adapters
 

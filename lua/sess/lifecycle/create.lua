@@ -54,11 +54,12 @@ function M.run(cwd, options, context)
     end
 
     local created
+    local create_diagnostic
     local changed, change_err = rollback.change(function()
         editor.empty(item.metadata.cwd)
 
         local create_err
-        created, create_err = catalog.create(request)
+        created, create_err, create_diagnostic = catalog.create(request)
         if not created then
             error(create_err)
         end
@@ -80,6 +81,10 @@ function M.run(cwd, options, context)
     end
 
     commit.activate(created, current)
+    if create_diagnostic then
+        diagnostics = diagnostics or {}
+        diagnostics[#diagnostics + 1] = create_diagnostic
+    end
     return observer.finish("create", created, callbacks, diagnostics)
 end
 

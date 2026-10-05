@@ -7,6 +7,7 @@ local mutations = require("sess.lifecycle.mutations")
 local unload = require("sess.lifecycle.unload")
 local save = require("sess.lifecycle.save")
 local marks = require("sess.lifecycle.marks")
+local target = require("sess.lifecycle.target")
 
 local M = {}
 
@@ -111,8 +112,8 @@ local function query(operation)
     end
 end
 
-M.resolve = query(function(target)
-    local item, err, reason, diagnostics = catalog.resolve(target)
+M.resolve = query(function(destination)
+    local item, err, reason, diagnostics = target.resolve(destination)
     return item ~= nil, err, item, reason, diagnostics
 end)
 

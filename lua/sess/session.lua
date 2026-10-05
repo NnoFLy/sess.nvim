@@ -9,6 +9,20 @@ local function now()
     return os.time()
 end
 
+local function append_unique(destination, source)
+    local seen = {}
+    for _, value in ipairs(destination or {}) do
+        seen[value] = true
+    end
+    for _, value in ipairs(source or {}) do
+        if not seen[value] then
+            seen[value] = true
+            destination[#destination + 1] = value
+        end
+    end
+    return destination
+end
+
 local function normalize_cwd(cwd)
     return paths.identity(cwd)
 end
@@ -208,17 +222,24 @@ function M.prepare_create(opts)
 end
 
 function M.create(opts)
-    local item, err = M.prepare_create(opts)
-    if not item then
-        return nil, err
-    end
+    local item, create_err, _, lock_diagnostic = storage.with_create_lock(function()
+        local prepared, prepare_err = M.prepare_create(opts)
+        if not prepared then
+            return nil, prepare_err
+        end
 
-    local ok, create_err = storage.create_with_metadata(item.id, item.metadata)
-    if not ok then
+        local ok, metadata_err = storage.create_with_metadata(prepared.id, prepared.metadata)
+        if not ok then
+            return nil, metadata_err
+        end
+
+        return prepared
+    end)
+    if not item then
         return nil, create_err
     end
 
-    return item
+    return item, nil, lock_diagnostic
 end
 
 ---@param id Sess.SessionId
@@ -374,7 +395,7 @@ function M.list_deleted()
 end
 
 ---@param target string
----@return Sess.DeletedSession?, string?, string?
+---@return Sess.DeletedSession?, string?, string?, string[]?
 function M.resolve_deleted(target)
     if type(target) ~= "string" or vim.trim(target) == "" then
         return nil, "invalid deleted session target", "invalid-target"
@@ -384,57 +405,124 @@ function M.resolve_deleted(target)
     local target_name = target:lower()
     local entries, list_err, diagnostics = M.list_deleted()
     if list_err then
-        return nil, list_err, "storage"
+        return nil, list_err, "storage", diagnostics
     end
 
     local match
     for _, entry in ipairs(entries) do
-        if entry.key == target or entry.id == target or entry.metadata.name:lower() == target_name then
+        if
+            entry.key == target
+            or entry.id == target
+            or entry.metadata.name:lower() == target_name
+        then
             if match then
-                return nil, "deleted session target is ambiguous: " .. target, "ambiguous"
+                return nil,
+                    "deleted session target is ambiguous: " .. target,
+                    "ambiguous",
+                    diagnostics
             end
             match = entry
         end
     end
 
     if match then
-        return match
+        return match, nil, nil, diagnostics
     end
 
     if #diagnostics > 0 then
-        return nil, "deleted session not found: " .. target .. " (" .. table.concat(diagnostics, "; ") .. ")", "not-found"
+        return nil,
+            "deleted session not found: "
+                .. target
+                .. " ("
+                .. table.concat(diagnostics, "; ")
+                .. ")",
+            "not-found",
+            diagnostics
     end
-    return nil, "deleted session not found: " .. target, "not-found"
+    return nil, "deleted session not found: " .. target, "not-found", diagnostics
 end
 
 ---@param key string
----@return Sess.Session?, string?
+---@return Sess.Session?, string?, string[]?
 function M.restore(key)
-    local entry, err = storage.read_trash(key)
-    if not entry then
-        return nil, err
-    end
-
-    local sessions, scan_err, diagnostics = M.list()
-    if scan_err or #diagnostics > 0 then
-        return nil, scan_err or ("cannot verify uniqueness: " .. table.concat(diagnostics, "; "))
-    end
-
-    local name = entry.metadata.name:lower()
-    for _, existing in ipairs(sessions) do
-        if existing.metadata.name:lower() == name then
-            return nil, "session name already exists: " .. entry.metadata.name
+    local restored, err, diagnostics, lock_diagnostic = storage.with_create_lock(function()
+        local entries, trash_err, trash_diagnostics = storage.list_trash()
+        if trash_err then
+            return nil, trash_err, trash_diagnostics
         end
-        if same_cwd(existing.metadata.cwd, entry.metadata.cwd) then
-            return nil, "session already exists for directory: " .. entry.metadata.cwd
-        end
-    end
 
-    local ok, restore_err = storage.restore(key)
-    if not ok then
-        return nil, restore_err
+        local entry
+        for _, candidate in ipairs(entries) do
+            if candidate.key == key then
+                entry = candidate
+                break
+            end
+        end
+        if not entry then
+            return nil, "deleted session not found: " .. tostring(key), "not-found", trash_diagnostics
+        end
+
+        local sessions, scan_err, session_diagnostics = M.list()
+        if scan_err or #session_diagnostics > 0 then
+            return nil,
+                scan_err or ("cannot verify uniqueness: " .. table.concat(session_diagnostics, "; ")),
+                "storage",
+                trash_diagnostics
+        end
+
+        local name = entry.metadata.name:lower()
+        for _, existing in ipairs(sessions) do
+            if existing.metadata.name:lower() == name then
+                return nil, "session name already exists: " .. entry.metadata.name
+            end
+            if same_cwd(existing.metadata.cwd, entry.metadata.cwd) then
+                return nil, "session already exists for directory: " .. entry.metadata.cwd
+            end
+        end
+
+        -- Re-resolve the complete record immediately before the atomic rename;
+        -- this catches changes made by non-cooperating writers as well.
+        local fresh_entries, fresh_err, fresh_diagnostics = storage.list_trash()
+        if fresh_err then
+            return nil, fresh_err, "storage", trash_diagnostics
+        end
+        local fresh
+        for _, candidate in ipairs(fresh_entries) do
+            if candidate.key == key then
+                fresh = candidate
+                break
+            end
+        end
+        if not fresh then
+            return nil, "deleted session disappeared during restore: " .. tostring(key)
+        end
+        if
+            fresh.id ~= entry.id
+            or fresh.deleted_at ~= entry.deleted_at
+            or not vim.deep_equal(fresh.metadata, entry.metadata)
+        then
+            return nil, "deleted session changed during restore: " .. tostring(key)
+        end
+
+        local ok, restore_err, restored_entry = storage.restore(key, fresh)
+        if not ok then
+            return nil, restore_err
+        end
+        append_unique(trash_diagnostics, fresh_diagnostics)
+        return { id = restored_entry.id, metadata = restored_entry.metadata }, nil, trash_diagnostics
+    end)
+    if not restored then
+        return nil, err or "failed to restore deleted session", diagnostics
     end
-    return { id = entry.id, metadata = entry.metadata }
+    if err then
+        diagnostics = diagnostics or {}
+        diagnostics[#diagnostics + 1] = err
+    end
+    if lock_diagnostic then
+        diagnostics = diagnostics or {}
+        append_unique(diagnostics, { lock_diagnostic })
+    end
+    return restored, nil, diagnostics
 end
 
 -- Stale owners stay queryable until explicitly replaced or unmarked.

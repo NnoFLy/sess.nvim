@@ -120,9 +120,11 @@ function M.protected(fn)
 
         vim.o.hidden, vim.o.autowrite, vim.o.autowriteall = true, false, false
 
-        return fn()
+        return { fn() }
     end, debug.traceback)
 
+    local action_ok = ok and result[1] ~= false
+    local action_err = ok and result[2] or result
     local cleanup_errors = {}
 
     for buf, value in pairs(hidden) do
@@ -143,14 +145,16 @@ function M.protected(fn)
     end
 
     if #cleanup_errors > 0 then
+        local action_message = action_ok and "" or tostring(action_err) .. "; "
         return false,
-            (ok and "" or tostring(result) .. "; ") .. "option cleanup failed: " .. table.concat(
-                cleanup_errors,
-                "; "
-            )
+            action_message .. "option cleanup failed: " .. table.concat(cleanup_errors, "; ")
     end
 
-    return ok, result
+    if not action_ok then
+        return false, tostring(action_err or "editor action failed")
+    end
+
+    return true, result[1]
 end
 
 function M.hide()
@@ -335,23 +339,57 @@ M.load = legacy_load
 M._legacy_snapshot = legacy_snapshot
 M._legacy_load = legacy_load
 
-function M.source_snapshot(snapshot_path)
-    command("source", snapshot_path)
+function M.source_snapshot(snapshot_path, content)
+    if type(content) ~= "string" then
+        return false, "secure session snapshot content is required"
+    end
+
+    -- Storage reads the snapshot through its descriptor-relative, no-follow
+    -- boundary. Execute those bytes directly; :source would reopen a pathname
+    -- after that validation and reintroduce the leaf-replacement race.
+    vim.api.nvim_exec(content, false)
+    vim.v.this_session = snapshot_path
+    return true
+end
+
+local function open_descriptor_path(fd)
+    for _, prefix in ipairs({ "/proc/self/fd", "/dev/fd" }) do
+        local candidate = prefix .. "/" .. tostring(fd)
+        local stat = vim.uv.fs_stat(candidate)
+        if stat and stat.type == "file" then
+            return candidate
+        end
+    end
+    return nil
 end
 
 -- Write a snapshot to the caller-provided temporary path. Storage owns the
--- replacement policy and supplies this path.
-function M.write_snapshot(snapshot_path, legacy_item)
+-- replacement policy and supplies this path. When a descriptor is supplied,
+-- pass the descriptor itself to :mksession so Vim cannot redirect the write
+-- by replacing the temporary pathname.
+function M.write_snapshot(snapshot_path, legacy_item, fd)
     if M.snapshot ~= legacy_snapshot then
         return M.snapshot(legacy_item)
     end
 
-    vim.cmd({
+    local destination = snapshot_path
+    if fd then
+        destination = open_descriptor_path(fd)
+        if not destination then
+            return false, "secure snapshot descriptor path is unavailable"
+        end
+    end
+
+    local ok, err = pcall(vim.cmd, {
         cmd = "mksession",
         bang = true,
-        args = { snapshot_path },
+        args = { destination },
         magic = { file = false, bar = false },
     })
+    if not ok then
+        return false, tostring(err)
+    end
+    return true
 end
 
 -- Focus an existing visible buffer without creating windows or loading files.

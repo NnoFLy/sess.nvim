@@ -241,6 +241,8 @@ api.session.create(cwd?, opts?)                  *sess-api.session.create*
     Save outgoing session, hide buffers, enter a fresh session for cwd.
     opts: { name?, id?, hooks? }. Duplicate paths/names/ids fail before editor
     changes. Commands additionally load an existing session for the same path.
+    Returns the created session and diagnostics; a lock-cleanup warning is
+    reported once without turning an otherwise committed create into failure.
 
 api.session.load(target?, opts?)                *sess-api.session.load*
     Default: lookup current cwd. opts: { hooks? }. Validate target, run pre-hook,
@@ -290,7 +292,8 @@ api.session.restore(target, opts?)               *sess-api.session.restore*
     Restore by deleted name, original id, or unique trash key. Refuses
     ambiguous targets and conflicts with an existing id, name, or project path.
     The move is prompt-free and does not load the session or alter runtime
-    state. Valid old records remain recoverable.
+    state. Valid old records remain recoverable. A successful restore returns
+    the restored session and diagnostics for unrelated skipped trash records.
 
 api.session.rename(target?, name)               *sess-api.session.rename*
     Rename; default target is current. name is required.
@@ -497,8 +500,21 @@ succeeds. Generation/rename failure preserves the old snapshot and cleans up
 temporary files. v:this_session uses the final path. Metadata is also replaced
 atomically. Concurrent writers are last-write-wins without cross-process locks;
 metadata lost updates remain possible. Snapshot and metadata are not one
-filesystem transaction. Atomic replacement does not promise crash durability;
-there is no fsync.
+filesystem transaction. Each temporary file is fsynced before replacement, but
+the containing directory is not fsynced, so crash durability of the rename is
+not promised. On Linux, Darwin and FreeBSD when /proc/self/fd or /dev/fd is available,
+reads and writes walk opened storage-directory descriptors with
+O_DIRECTORY|O_NOFOLLOW; regular-file reads add O_NOFOLLOW. Snapshot generation
+writes through the securely-created descriptor itself, and loading executes
+bytes read through that descriptor-relative boundary rather than reopening a
+snapshot pathname. Other platforms, and restricted POSIX runtimes without
+these primitives, remain compatible through a private-store pathname fallback.
+It checks every existing storage component and rejects symlinked components, but
+cannot prevent a concurrent pathname replacement between those checks. The
+fallback makes no descriptor-level containment claim: keep the store private,
+and operation-specific filesystem failures are returned by the affected
+operation (as errors, or as diagnostics when the operation can complete) rather
+than making setup unusable.
 
 Before changing editor state, transitions validate metadata, target directories
 and snapshots, then recheck after pre-hooks. State is published only after editor

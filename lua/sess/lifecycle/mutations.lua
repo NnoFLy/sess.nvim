@@ -7,10 +7,23 @@ local rollback = require("sess.lifecycle.editor_rollback")
 
 local M = {}
 
+local function append_unique(destination, source)
+    local seen = {}
+    for _, value in ipairs(destination) do
+        seen[value] = true
+    end
+    for _, value in ipairs(source or {}) do
+        if not seen[value] then
+            seen[value] = true
+            destination[#destination + 1] = value
+        end
+    end
+end
+
 function M.restore(destination, options, context)
     local callbacks = context.hooks
 
-    local entry, err = catalog.resolve_deleted(destination)
+    local entry, err, _, diagnostics = catalog.resolve_deleted(destination)
     if not entry then
         return false, err
     end
@@ -21,17 +34,15 @@ function M.restore(destination, options, context)
         return false, pre_err
     end
 
-    local fresh_entry, resolve_err = catalog.resolve_deleted(entry.key)
-    if not fresh_entry then
-        return false, resolve_err
-    end
-
-    local restored, restore_err = catalog.restore(fresh_entry.key)
+    -- catalog.restore re-scans and revalidates the complete trash record while
+    -- holding the creation lock, so do not resolve it a second time here.
+    local restored, restore_err, restore_diagnostics = catalog.restore(entry.key)
     if not restored then
         return false, restore_err
     end
+    append_unique(diagnostics, restore_diagnostics)
 
-    return observer.finish("restore", restored, callbacks)
+    return observer.finish("restore", restored, callbacks, diagnostics)
 end
 
 function M.delete(destination, options, context)

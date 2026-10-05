@@ -11,8 +11,8 @@ local M = {}
 -- path it receives.
 function M.snapshot(item)
     local previous = vim.v.this_session
-    local ok, err = storage.replace_snapshot(item.id, function(path)
-        return editor.write_snapshot(path, item)
+    local ok, err = storage.replace_snapshot(item.id, function(path, fd)
+        return editor.write_snapshot(path, item, fd)
     end)
     if ok then
         local path, path_err = storage.get_session_path(item.id)
