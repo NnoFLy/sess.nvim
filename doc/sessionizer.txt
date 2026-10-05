@@ -614,7 +614,13 @@ Ctrl-r (insert)/rr (normal) renames. Ctrl-u (insert)/uu (normal) unloads the
 selected session, using the same Save/Discard/Cancel then Stop/Cancel prompts
 as :Sess unload. Unloading current closes the picker before prompting/saving
 (so cancelling leaves the session open, but closes the picker). Unloading another
-session refreshes the picker. All adapters share the Lua lifecycle policy.
+session refreshes the picker only after a committed operation; failed or
+cancelled operations leave the selected row and picker usable. Delete confirms
+with the selected name, path, current/inactive state, and the fact that buffers
+and jobs are not removed. Picker refreshes preserve the prompt and selection
+when possible, relocate selection if a row disappears, and report lifecycle
+errors separately from non-fatal diagnostics. Pending prompts/actions are
+ignored when triggered again. All adapters share the Lua lifecycle policy.
 
 ==============================================================================
 DEVELOPMENT                                                *sess-development*

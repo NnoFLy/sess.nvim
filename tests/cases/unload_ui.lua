@@ -83,23 +83,25 @@ vim.fn.confirm = function(_, buttons, default)
     return 3
 end
 actions.unload_session(prompt)
-assert(not closed and refreshed)
+assert(not closed and not refreshed)
 fixture.equal(2, #api.state.active())
 assert(vim.api.nvim_buf_is_valid(a_buf) and vim.bo[a_buf].modified)
 vim.fn.confirm = function()
     return 2
 end
+refreshed = false
 actions.unload_session(prompt)
 assert(not closed and refreshed)
 fixture.equal(b.id, api.state.current().id)
 fixture.equal({ api.state.current() }, api.state.active())
 assert(not vim.api.nvim_buf_is_valid(a_buf))
 
--- Failed operations leave the current session and picker intact.
+-- Failed operations leave the current session and picker intact without
+-- refreshing a stale row away.
 refreshed = false
 selected = { value = { id = "missing", metadata = { name = "missing" } } }
 actions.unload_session(prompt)
-assert(not closed and refreshed)
+assert(not closed and not refreshed)
 fixture.equal(b.id, api.state.current().id)
 
 -- Current-session unload closes the picker before prompts and snapshotting.

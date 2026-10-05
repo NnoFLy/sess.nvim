@@ -49,11 +49,13 @@ local function update_preview_layout(picker, previewer, preview_config, explicit
 end
 
 local function picker_options()
+    -- deepcopy does not preserve Telescope sorter's lifecycle metatable.
+    local configured_sorter = config.values.sorter
     local opts = vim.deepcopy(config.values)
     local preview_config = opts.preview or {}
     opts.preview = nil
     opts.action_help = nil
-    opts.sorter = search.new_sorter(opts.sorter, opts.search or {})
+    opts.sorter = search.new_sorter(configured_sorter, opts.search or {})
     opts.search = nil
     -- Telescope owns the preview buffer lifecycle. On narrow terminals the
     -- pane is omitted rather than taking space from the prompt and results.
@@ -117,7 +119,8 @@ local function make_picker(opts, restore_picker)
                 if ok and action_state_value then
                     selected = action_state_value.value
                 end
-                return help.footer(kind, vim.fn.mode(1), mappings, help_options, selected)
+                local footer = help.footer(kind, vim.fn.mode(1), mappings, help_options, selected)
+                return picker and picker._sess_action_status or footer
             end
         end
         picker_opts.on_input_filter_cb = function(prompt)
@@ -148,7 +151,8 @@ local function make_picker(opts, restore_picker)
             if ok and action_state_value then
                 selected = action_state_value.value
             end
-            return help.footer(kind, vim.fn.mode(1), mappings, help_options, selected)
+            local footer = help.footer(kind, vim.fn.mode(1), mappings, help_options, selected)
+            return picker and picker._sess_action_status or footer
         end
     end
 
@@ -289,6 +293,7 @@ function M.active(opts)
         active_action_help = config.values.action_help
     end
     local active_help_options = { action_help = active_action_help }
+    local picker
     if opts.get_status_text == nil then
         picker_opts.get_status_text = function()
             local selected
@@ -296,7 +301,14 @@ function M.active(opts)
             if ok and action_state_value then
                 selected = action_state_value.value
             end
-            return help.footer("active", vim.fn.mode(1), active_mappings, active_help_options, selected)
+            local footer = help.footer(
+                "active",
+                vim.fn.mode(1),
+                active_mappings,
+                active_help_options,
+                selected
+            )
+            return picker and picker._sess_action_status or footer
         end
     end
     picker_opts.mappings = nil
@@ -334,7 +346,7 @@ function M.active(opts)
     if configured_previewer == nil then
         configured_previewer = generated_previewer
     end
-    local picker = pickers.new(picker_opts)
+    picker = pickers.new(picker_opts)
     picker._sess_help_kind = "active"
     picker._sess_help_mappings = active_mappings
     picker._sess_help_options = active_help_options

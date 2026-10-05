@@ -122,7 +122,14 @@ help key is installed only when that key is not already configured in the mode,
 so custom mappings remain authoritative. The help list is a temporary floating
 scratch buffer tied to the picker prompt buffer; closing the picker closes the
 list and restores the prompt window. It never changes prompt text, selection, or
-filter state.
+filter state. Mutating actions keep a local pending guard around synchronous
+lifecycle calls and asynchronous input prompts, so repeated mappings cannot
+start competing operations. They refresh only after a committed success, keep
+the prompt and selection when possible, relocate selection when a row vanishes,
+and expose lifecycle errors separately from successful diagnostics. Current
+layout-replacing operations retain their close-before-transition ordering;
+non-current failures leave the picker and target visible. Refresh guards prevent
+callbacks from recursively triggering refresh/lifecycle work.
 
 The mark popup has two private UI owners. `ui/window.lua` validates its
 supported floating-window options and action keymap, computes editor-relative

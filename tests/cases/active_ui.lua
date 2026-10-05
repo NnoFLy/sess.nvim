@@ -24,8 +24,18 @@ package.loaded["telescope.finders"] = {
         return value
     end,
 }
+local sorter_methods = {
+    __index = {
+        _init = function() end,
+        _destroy = function() end,
+    },
+}
 package.loaded["telescope.config"] = {
-    values = { generic_sorter = function() end },
+    values = {
+        generic_sorter = function()
+            return setmetatable({}, sorter_methods)
+        end,
+    },
 }
 
 local config = require("telescope._extensions.sess.config")
@@ -153,6 +163,9 @@ local restore_picker_options = picker_options[2]
 assert(restore_picker_options.get_status_text() == "<CR> restore   ? actions")
 local active_picker_options = picker_options[3]
 assert(active_picker_options.prompt_title == "ACTIVE SESSIONS · 2 sessions · 0 agents")
+assert(getmetatable(active_picker_options.sorter) == sorter_methods)
+assert(type(active_picker_options.sorter._init) == "function")
+assert(type(active_picker_options.sorter._destroy) == "function")
 local status_text = active_picker_options.get_status_text()
 assert(status_text == "<C-b> mark   <CR> switch/focus   <S-Tab> all   <Tab> expand   ? actions")
 for _, row in ipairs(active_picker_options.finder.results) do

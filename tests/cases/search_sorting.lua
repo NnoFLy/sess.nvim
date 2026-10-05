@@ -27,6 +27,13 @@ assert(not pcall(config.setup, { search = { sort = "unknown" } }))
 assert(not pcall(config.setup, { search = { fields = { "unknown" } } }))
 local search = require("telescope._extensions.sess.search")
 
+-- Telescope's sorter lifecycle methods live on its metatable; the wrapper
+-- used by picker_options must preserve them for active pickers as well.
+local sorter_methods = { __index = { _init = function() end, _destroy = function() end } }
+local wrapped = search.new_sorter(setmetatable({}, sorter_methods), {})
+assert(getmetatable(wrapped) == sorter_methods)
+assert(type(wrapped._init) == "function" and type(wrapped._destroy) == "function")
+
 local session = {
     id = "one",
     metadata = {

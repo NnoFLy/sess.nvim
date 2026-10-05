@@ -261,6 +261,13 @@ function M.new_sorter(base, options)
     for key, value in pairs(base or {}) do
         sorter[key] = value
     end
+    -- Telescope sorters expose lifecycle methods through their metatable.
+    -- Copying fields alone leaves picker:find() unable to call _init/_destroy,
+    -- which is especially visible when opening the active picker.
+    local metatable = getmetatable(base)
+    if metatable then
+        setmetatable(sorter, metatable)
+    end
     sorter.scoring_function = function(first, second, third)
         local prompt, entry
         if type(first) == "table" then

@@ -337,7 +337,14 @@ terminal identity and output. Explicit status updates remain authoritative. Ente
 loads the selected session and focuses its existing agent buffer when visible.
 Agents are runtime-only: this picker never starts processes, creates windows, or
 persists agent data. Commands, Telescope and autocommands use the same
-lifecycle.
+lifecycle. Mutating picker actions keep the prompt open when a non-current
+operation fails, report errors separately from successful diagnostics, and
+refresh successful changes without losing the prompt or selection. Delete shows
+its target path/state and confirms before removing stored data; unload reuses
+the Save/Discard/Cancel and Stop/Cancel prompts. Current-session load, delete,
+and unload retain their close-before-transition behavior. A pending input or
+operation guards its mapping against duplicate actions, and a disappearing
+selection is moved to a remaining row safely.
 
 `:Sess load` defaults to the current working directory. `:Sess mark @s` marks
 the current session, `:Sess mark @s project-api` marks a specific session, and
