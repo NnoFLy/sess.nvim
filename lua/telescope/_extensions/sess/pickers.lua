@@ -116,6 +116,28 @@ local function make_picker(opts, restore_picker)
 
     local picker
     local path_mode = false
+    local finder_generation = 0
+    local finder_cancel
+    local previous_finder_snapshot
+    local function hydrate_finder(generator)
+        finder_generation = finder_generation + 1
+        local generation = finder_generation
+        if finder_cancel then
+            finder_cancel()
+            finder_cancel = nil
+        end
+        local finder, cancel = generator(function(finder, _, snapshot)
+            if generation ~= finder_generation then
+                return
+            end
+            previous_finder_snapshot = snapshot or previous_finder_snapshot
+            if picker and type(picker.refresh) == "function" then
+                picker:refresh(finder, { reset_prompt = false })
+            end
+        end, previous_finder_snapshot)
+        finder_cancel = cancel
+        return finder
+    end
     local generated_previewer = picker_opts._sess_previewer
     picker_opts._sess_previewer = nil
     local current_session = state.current()
@@ -147,21 +169,30 @@ local function make_picker(opts, restore_picker)
         end
         picker_opts.on_input_filter_cb = function(prompt)
             if path.is_path(prompt) then
-                path_mode = true
-                return {
-                    updated_finder = finders.generate_directory_finder(prompt, {
-                        available_width = layout.available_width(picker),
-                    }),
+                local display_opts = {
+                    available_width = layout.available_width(picker),
                 }
+                local updated_finder = hydrate_finder(function(callback, previous_snapshot)
+                    return finders.generate_directory_finder(
+                        prompt,
+                        display_opts,
+                        callback,
+                        previous_snapshot
+                    )
+                end)
+                path_mode = true
+                return { updated_finder = updated_finder }
             end
 
             if path_mode then
                 path_mode = false
-                return {
-                    updated_finder = finders.generate_new_finder({
-                        available_width = layout.available_width(picker),
-                    }),
+                local display_opts = {
+                    available_width = layout.available_width(picker),
                 }
+                local updated_finder = hydrate_finder(function(callback, previous_snapshot)
+                    return finders.generate_new_finder(display_opts, callback, previous_snapshot)
+                end)
+                return { updated_finder = updated_finder }
             end
 
             return {}
@@ -257,6 +288,11 @@ local function make_picker(opts, restore_picker)
             picker:refresh(finders.generate_new_finder(display_opts), { reset_prompt = false })
         end
     end
+    if not restore_picker then
+        hydrate_finder(function(callback, previous_snapshot)
+            return finders.generate_new_finder(display_opts, callback, previous_snapshot)
+        end)
+    end
     picker._sess_layout_stop = layout.on_resize(picker, function(width)
         local preview_config = config.values.preview or {}
         update_preview_layout(picker, configured_previewer, preview_config, opts.previewer ~= nil)
@@ -270,6 +306,23 @@ local function make_picker(opts, restore_picker)
             })
         else
             picker:refresh(finders.generate_new_finder(display_opts), { reset_prompt = false })
+        end
+        if not restore_picker then
+            if path_mode then
+                local prompt = action_state.get_current_line() or ""
+                hydrate_finder(function(callback, previous_snapshot)
+                    return finders.generate_directory_finder(
+                        prompt,
+                        display_opts,
+                        callback,
+                        previous_snapshot
+                    )
+                end)
+            else
+                hydrate_finder(function(callback, previous_snapshot)
+                    return finders.generate_new_finder(display_opts, callback, previous_snapshot)
+                end)
+            end
         end
     end)
 end
