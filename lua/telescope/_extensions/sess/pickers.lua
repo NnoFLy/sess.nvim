@@ -30,11 +30,11 @@ local function update_preview_layout(picker, previewer, preview_config, explicit
         return
     end
     local result_width = layout.available_width(picker)
-    local preview_active = picker.previewer ~= nil and picker.previewer ~= false
+    local preview_active = layout.has_preview_window(picker)
     local available_width = preview_active
             and result_width
         or layout.preview_result_width(preview_config, nil, result_width)
-    local next_previewer = layout.preview_fits(preview_config, nil, available_width)
+    local next_previewer = layout.preview_fits(preview_config, nil, available_width, picker)
             and previewer
         or nil
     local changed = picker.previewer ~= next_previewer
@@ -46,9 +46,26 @@ local function update_preview_layout(picker, previewer, preview_config, explicit
             picker:full_layout_update()
         end)
     end
+    -- Telescope may reject the previewer after the layout strategy applies
+    -- preview_cutoff. Do not leave Sess's state saying a pane is available.
+    if picker.previewer ~= nil and not layout.has_preview_window(picker) then
+        picker.previewer = nil
+    end
 end
 
-local function picker_options()
+local function preview_context(options)
+    options = options or {}
+    return {
+        layout_strategy = options.layout_strategy or config.values.layout_strategy,
+        layout_config = vim.tbl_deep_extend(
+            "force",
+            config.values.layout_config or {},
+            options.layout_config or {}
+        ),
+    }
+end
+
+local function picker_options(options)
     -- deepcopy does not preserve Telescope sorter's lifecycle metatable.
     local configured_sorter = config.values.sorter
     local opts = vim.deepcopy(config.values)
@@ -63,7 +80,9 @@ local function picker_options()
         local previewer = preview.new(preview_config)
         opts._sess_previewer = previewer
         if
-            previewer and layout.preview_fits(preview_config) then
+            previewer
+                and layout.preview_fits(preview_config, nil, nil, preview_context(options))
+            then
             opts.previewer = previewer
             opts.layout_config = vim.tbl_deep_extend(
                 "force",
@@ -83,7 +102,7 @@ end
 local function make_picker(opts, restore_picker)
     opts = opts or {}
 
-    local picker_opts = picker_options()
+    local picker_opts = picker_options(opts)
     local kind = restore_picker and "restore" or "regular"
     local mappings = restore_picker and {
         i = { ["<CR>"] = actions.restore_session },
@@ -106,10 +125,13 @@ local function make_picker(opts, restore_picker)
 
     picker_opts.finder = restore_picker
             and finders.generate_deleted_finder({
-                available_width = layout.initial_width(config.values.preview),
+                available_width = layout.initial_width(
+                    config.values.preview,
+                    preview_context(opts)
+                ),
             })
         or finders.generate_new_finder({
-            available_width = layout.initial_width(config.values.preview),
+            available_width = layout.initial_width(config.values.preview, preview_context(opts)),
         })
     if not restore_picker then
         if opts.get_status_text == nil then
@@ -264,7 +286,7 @@ end
 
 function M.active(opts)
     opts = opts or {}
-    local picker_opts = picker_options()
+    local picker_opts = picker_options(opts)
     local active_expand = config.values.active_expand
     local expanded = {}
     local current = state.current()
@@ -282,7 +304,7 @@ function M.active(opts)
         initial_snapshot,
         expanded,
         active_expand,
-        { available_width = layout.initial_width(config.values.preview) }
+        { available_width = layout.initial_width(config.values.preview, preview_context(opts)) }
     )
     picker_opts.prompt_title = finders.active_dashboard_title(initial_snapshot)
     picker_opts.finder = finder

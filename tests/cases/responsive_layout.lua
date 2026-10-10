@@ -158,7 +158,8 @@ assert(vim.fn.strdisplaywidth(rendered_agent_text) <= 28)
 assert(#rendered_item_sets > 0)
 
 local original_columns = vim.o.columns
-local preview_config = { enabled = true, width = 0.35, min_width = 80 }
+-- min_width=1 must not bypass Telescope's default horizontal preview_cutoff.
+local preview_config = { enabled = true, width = 0.35, min_width = 1 }
 vim.o.columns = 80
 assert(layout.initial_width(preview_config) == 80)
 vim.o.columns = 100
@@ -192,6 +193,12 @@ vim.cmd("vnew")
 local results_win = vim.api.nvim_get_current_win()
 vim.api.nvim_win_set_width(results_win, 50)
 local results_bufnr = vim.api.nvim_win_get_buf(results_win)
+local caret_picker = {
+    results_win = results_win,
+    layout = { results = { winid = results_win } },
+    selection_caret = "界 ",
+}
+assert(layout.available_width(caret_picker) == 47)
 local picker_instances = {}
 package.loaded["telescope.pickers"] = {
     new = function(options)
@@ -199,8 +206,12 @@ package.loaded["telescope.pickers"] = {
             prompt_bufnr = vim.api.nvim_create_buf(false, true),
             results_win = results_win,
             results_bufnr = results_bufnr,
-            layout = { results = { winid = results_win } },
+            layout = {
+                results = { winid = results_win },
+                preview = options.previewer and { winid = results_win } or nil,
+            },
             previewer = options.previewer,
+            selection_caret = "",
             layout_config = options.layout_config,
             finder = options.finder,
         }
@@ -210,23 +221,35 @@ package.loaded["telescope.pickers"] = {
         end
         function picker:full_layout_update()
             self.layout_updates = (self.layout_updates or 0) + 1
+            self.layout.preview = self.previewer
+                    and vim.o.columns >= 120
+                or nil
+            if self.layout.preview then
+                self.layout.preview = { winid = results_win }
+            end
         end
         picker_instances[#picker_instances + 1] = picker
         return picker
     end,
 }
 local pickers = require("telescope._extensions.sess.pickers")
-assert(not layout.preview_fits(preview_config, nil, 79))
-assert(layout.preview_fits(preview_config, nil, 80))
+assert(not layout.preview_fits(preview_config, 100, 1, { layout_strategy = "horizontal" }))
+assert(layout.preview_fits(preview_config, 160, 1, { layout_strategy = "horizontal" }))
 local api = require("sess.api")
 local ordinary_directory = fixture.directory("responsive-action-with-a-very-long-directory-name")
 local _, create_err, ordinary_session = api.session.create(ordinary_directory)
 assert(ordinary_session, create_err)
 local _, action_err, action_session = api.session.create(fixture.directory("responsive-action"))
 assert(action_session, action_err)
-vim.o.columns = 80
+vim.o.columns = 100
+vim.api.nvim_win_set_width(results_win, 100)
 pickers.sess()
-local picker = picker_instances[1]
+local cutoff_picker = picker_instances[#picker_instances]
+assert(cutoff_picker.previewer == nil)
+vim.o.columns = 80
+vim.api.nvim_win_set_width(results_win, 50)
+pickers.sess()
+local picker = picker_instances[#picker_instances]
 local function ordinary_row(current_finder)
     for _, item in ipairs(current_finder.results or {}) do
         if item.id == ordinary_session.id then

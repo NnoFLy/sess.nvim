@@ -178,16 +178,64 @@ end
 function M.preview_result_width(preview_config, terminal_width, result_width)
     preview_config = preview_config or {}
     terminal_width = terminal_width or vim.o.columns
-    local candidate = math.floor(terminal_width * (1 - (preview_config.width or 0.35)))
-    if result_width ~= nil then
-        candidate = math.min(candidate, math.floor(result_width))
-    end
+    local source_width = result_width or terminal_width
+    local candidate = math.floor(source_width * (1 - (preview_config.width or 0.35)))
     return math.max(1, candidate)
 end
 
-function M.preview_fits(preview_config, terminal_width, result_width)
+local telescope_preview_cutoffs = {
+    horizontal = 120,
+    vertical = 40,
+    center = 40,
+    cursor = 40,
+    bottom_pane = 120,
+}
+
+-- Telescope decides whether to create a preview from the layout strategy's
+-- cutoff before it creates the result window. Keep the same decision available
+-- to the responsive picker code, including before a picker has been mounted.
+function M.preview_cutoff(picker)
+    local layout_config = picker and picker.layout_config
+    local strategy = picker and picker.layout_strategy
+    local ok, telescope_config = pcall(require, "telescope.config")
+    if not strategy and ok and telescope_config.values then
+        strategy = telescope_config.values.layout_strategy
+    end
+    strategy = strategy or "horizontal"
+    if type(layout_config) == "table" then
+        local cutoff = layout_config.preview_cutoff
+        if cutoff == nil and type(strategy) == "string" then
+            local strategy_config = layout_config[strategy]
+            cutoff = type(strategy_config) == "table" and strategy_config.preview_cutoff or nil
+        end
+        if cutoff ~= nil then
+            return cutoff
+        end
+    end
+
+    if ok and telescope_config.values then
+        strategy = strategy or telescope_config.values.layout_strategy or "horizontal"
+        local defaults = telescope_config.values.layout_config or {}
+        local strategy_config = defaults[strategy]
+        if type(strategy_config) == "table" and strategy_config.preview_cutoff ~= nil then
+            return strategy_config.preview_cutoff
+        end
+        if defaults.preview_cutoff ~= nil then
+            return defaults.preview_cutoff
+        end
+    end
+
+    return telescope_preview_cutoffs[strategy or "horizontal"]
+end
+
+function M.preview_fits(preview_config, terminal_width, result_width, picker)
     preview_config = preview_config or {}
     if preview_config.enabled == false then
+        return false
+    end
+    terminal_width = terminal_width or vim.o.columns
+    local cutoff = M.preview_cutoff(picker)
+    if cutoff ~= nil and terminal_width < cutoff then
         return false
     end
     if result_width ~= nil then
@@ -197,13 +245,24 @@ function M.preview_fits(preview_config, terminal_width, result_width)
     return candidate >= (preview_config.min_width or 80)
 end
 
-function M.initial_width(preview_config)
+function M.initial_width(preview_config, picker)
     local width = vim.o.columns
     preview_config = preview_config or {}
-    if M.preview_fits(preview_config, width) then
+    if M.preview_fits(preview_config, width, nil, picker) then
         width = M.preview_result_width(preview_config, width)
     end
     return math.max(1, width)
+end
+
+local function selection_caret_width(picker)
+    local caret = picker and picker.selection_caret
+    if caret == nil then
+        local ok, telescope_config = pcall(require, "telescope.config")
+        if ok and telescope_config.values then
+            caret = telescope_config.values.selection_caret
+        end
+    end
+    return display_width(caret or "")
 end
 
 function M.available_width(picker, fallback)
@@ -221,11 +280,28 @@ function M.available_width(picker, fallback)
         if type(win) == "number" and vim.api.nvim_win_is_valid(win) then
             local ok, value = pcall(vim.api.nvim_win_get_width, win)
             if ok and value > 0 then
-                return value
+                return math.max(0, value - selection_caret_width(picker))
             end
         end
     end
-    return fallback or vim.o.columns
+    local results = picker_layout and picker_layout.results
+    if type(results) == "table" and type(results.width) == "number" and results.width > 0 then
+        return math.max(0, results.width - selection_caret_width(picker))
+    end
+    return math.max(0, (fallback or vim.o.columns) - selection_caret_width(picker))
+end
+
+-- A previewer can remain configured on a picker when Telescope suppresses its
+-- preview window due to preview_cutoff. Responsive state must distinguish the
+-- configured previewer from an actually mounted preview pane.
+function M.has_preview_window(picker)
+    local preview = picker and picker.layout and picker.layout.preview
+    if type(preview) == "table" then
+        local win = preview.winid or preview.win_id
+        return type(win) == "number" and vim.api.nvim_win_is_valid(win)
+    end
+    local win = picker and picker.preview_win
+    return type(win) == "number" and vim.api.nvim_win_is_valid(win)
 end
 
 -- Reformatting is tied to the picker lifetime; no global autocmd is left behind.
