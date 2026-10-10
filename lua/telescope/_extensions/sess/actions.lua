@@ -94,6 +94,9 @@ local function refresh(prompt_bufnr, finder, key)
     if not picker or type(picker.refresh) ~= "function" or picker._sess_refreshing then
         return false
     end
+    if type(picker._sess_invalidate_finder_hydration) == "function" then
+        picker._sess_invalidate_finder_hydration()
+    end
     if not key then
         local ok, selected = pcall(action_state.get_selected_entry)
         key = ok and selection_key(selected and selected.value) or nil

@@ -1,6 +1,7 @@
 local M = {}
 
 local actions = require("telescope._extensions.sess.actions")
+local layout = require("telescope._extensions.sess.layout")
 
 local descriptors = {
     regular = {
@@ -90,14 +91,7 @@ local function display_width(value)
 end
 
 local function shorten(value, width)
-    if display_width(value) <= width then
-        return value
-    end
-    if width <= 1 then
-        return string.sub(value, 1, width)
-    end
-    local result = vim.fn.strcharpart(value, 0, width - 1) .. "…"
-    return result
+    return layout.truncate_end(value, width)
 end
 
 local function custom_description(custom, kind, mode, key, action, fallback)

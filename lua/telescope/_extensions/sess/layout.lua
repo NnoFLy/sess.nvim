@@ -245,15 +245,6 @@ function M.preview_fits(preview_config, terminal_width, result_width, picker)
     return candidate >= (preview_config.min_width or 80)
 end
 
-function M.initial_width(preview_config, picker)
-    local width = vim.o.columns
-    preview_config = preview_config or {}
-    if M.preview_fits(preview_config, width, nil, picker) then
-        width = M.preview_result_width(preview_config, width)
-    end
-    return math.max(1, width)
-end
-
 local function selection_caret_width(picker)
     local caret = picker and picker.selection_caret
     if caret == nil then
@@ -263,6 +254,17 @@ local function selection_caret_width(picker)
         end
     end
     return display_width(caret or "")
+end
+
+function M.initial_width(preview_config, picker)
+    local width = vim.o.columns
+    preview_config = preview_config or {}
+    if M.preview_fits(preview_config, width, nil, picker) then
+        width = M.preview_result_width(preview_config, width)
+    end
+    -- Finder rows are built before Telescope mounts the result window. Reserve
+    -- the same selection caret cells that available_width removes afterward.
+    return math.max(1, width - selection_caret_width(picker))
 end
 
 function M.available_width(picker, fallback)

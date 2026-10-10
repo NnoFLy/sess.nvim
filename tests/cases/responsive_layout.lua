@@ -166,6 +166,7 @@ vim.o.columns = 100
 assert(layout.initial_width(preview_config) == 100)
 vim.o.columns = 160
 assert(layout.initial_width(preview_config) == 104)
+assert(layout.initial_width(preview_config, { selection_caret = "界 " }) == 101)
 
 -- A picker resize must update the preview layout, not just refresh its rows.
 local config = require("telescope._extensions.sess.config")

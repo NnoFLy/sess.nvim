@@ -87,6 +87,7 @@ local original_columns = vim.o.columns
 vim.o.columns = 12
 local narrow_footer = help.footer("regular", "i", config.values.mappings, action_help)
 assert(vim.fn.strdisplaywidth(narrow_footer) <= vim.o.columns - 4)
+
 local narrow_conflict_footer = help.footer(
     "regular",
     "i",
@@ -112,6 +113,14 @@ package.loaded["telescope.state"] = {
 }
 local floating_footer = help.footer("regular", "i", config.values.mappings, action_help)
 assert(vim.fn.strdisplaywidth(floating_footer) <= 8)
+
+-- Final footer shortening uses display cells and must not split a multibyte key.
+vim.api.nvim_win_set_width(footer_win, 7)
+local unicode_footer = help.footer("regular", "i", { i = { ["界界"] = actions.mark_session } }, {
+    action_help = { key = false },
+})
+assert(vim.fn.strdisplaywidth(unicode_footer) <= 3)
+assert(unicode_footer == "界…", unicode_footer)
 package.loaded["telescope.state"] = nil
 vim.api.nvim_win_close(footer_win, true)
 vim.api.nvim_buf_delete(footer_buf, { force = true })

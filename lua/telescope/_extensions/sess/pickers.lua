@@ -57,6 +57,7 @@ local function preview_context(options)
     options = options or {}
     return {
         layout_strategy = options.layout_strategy or config.values.layout_strategy,
+        selection_caret = options.selection_caret,
         layout_config = vim.tbl_deep_extend(
             "force",
             config.values.layout_config or {},
@@ -119,11 +120,50 @@ local function make_picker(opts, restore_picker)
     local finder_generation = 0
     local finder_cancel
     local previous_finder_snapshot
+    local hydration_close_autocmds = {}
+
+    local function invalidate_hydration()
+        finder_generation = finder_generation + 1
+        if finder_cancel then
+            pcall(finder_cancel)
+            finder_cancel = nil
+        end
+    end
+
+    local function picker_is_alive()
+        if not picker or picker.closed == true then
+            return false
+        end
+        if type(picker.is_done) == "function" then
+            local ok, done = pcall(picker.is_done, picker)
+            if ok and done then
+                return false
+            end
+        end
+        for _, buf in ipairs({ picker.prompt_bufnr, picker.results_bufnr }) do
+            if type(buf) == "number" then
+                local ok, valid = pcall(vim.api.nvim_buf_is_valid, buf)
+                if not ok or not valid then
+                    return false
+                end
+            end
+        end
+        for _, win in ipairs({ picker.prompt_win, picker.results_win }) do
+            if type(win) == "number" then
+                local ok, valid = pcall(vim.api.nvim_win_is_valid, win)
+                if not ok or not valid then
+                    return false
+                end
+            end
+        end
+        return true
+    end
+
     local function hydrate_finder(generator)
         finder_generation = finder_generation + 1
         local generation = finder_generation
         if finder_cancel then
-            finder_cancel()
+            pcall(finder_cancel)
             finder_cancel = nil
         end
         local finder, cancel = generator(function(finder, _, snapshot)
@@ -131,12 +171,44 @@ local function make_picker(opts, restore_picker)
                 return
             end
             previous_finder_snapshot = snapshot or previous_finder_snapshot
-            if picker and type(picker.refresh) == "function" then
-                picker:refresh(finder, { reset_prompt = false })
+            if not picker_is_alive() or type(picker.refresh) ~= "function" then
+                return
             end
+            pcall(function()
+                picker:refresh(finder, { reset_prompt = false })
+            end)
         end, previous_finder_snapshot)
         finder_cancel = cancel
         return finder
+    end
+
+    local function stop_hydration()
+        invalidate_hydration()
+        for _, autocmd in ipairs(hydration_close_autocmds) do
+            pcall(vim.api.nvim_del_autocmd, autocmd)
+        end
+        hydration_close_autocmds = {}
+    end
+
+    local function install_hydration_close_hooks()
+        picker._sess_invalidate_finder_hydration = invalidate_hydration
+        local function on_close()
+            stop_hydration()
+        end
+        if type(picker.prompt_bufnr) == "number" then
+            hydration_close_autocmds[#hydration_close_autocmds + 1] = vim.api.nvim_create_autocmd(
+                { "BufHidden", "BufWipeout" },
+                { buffer = picker.prompt_bufnr, callback = on_close }
+            )
+        end
+        for _, win in ipairs({ picker.prompt_win, picker.results_win }) do
+            if type(win) == "number" then
+                hydration_close_autocmds[#hydration_close_autocmds + 1] = vim.api.nvim_create_autocmd(
+                    "WinClosed",
+                    { pattern = tostring(win), callback = on_close }
+                )
+            end
+        end
     end
     local generated_previewer = picker_opts._sess_previewer
     picker_opts._sess_previewer = nil
@@ -275,6 +347,7 @@ local function make_picker(opts, restore_picker)
     picker._sess_help_mappings = mappings
     picker._sess_help_options = help_options
     picker:find()
+    install_hydration_close_hooks()
     local preview_config = config.values.preview or {}
     update_preview_layout(picker, configured_previewer, preview_config, opts.previewer ~= nil)
     local display_opts = { available_width = layout.available_width(picker) }
