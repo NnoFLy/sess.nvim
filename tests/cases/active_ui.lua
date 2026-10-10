@@ -39,12 +39,34 @@ package.loaded["telescope.config"] = {
 }
 
 local config = require("telescope._extensions.sess.config")
+local status_highlights = config.values.display.highlights
+assert(status_highlights.blocked == "SessStatusBlocked")
+assert(status_highlights.unknown == "SessStatusUnknown")
+assert(status_highlights.stale == "SessStatusStale")
+assert(status_highlights.blocked ~= status_highlights.unknown)
+assert(status_highlights.blocked ~= status_highlights.stale)
+assert(status_highlights.unknown ~= status_highlights.stale)
+
+vim.api.nvim_set_hl(0, "SessStatusBlocked", { fg = "#abcdef" })
 assert(config.values.active_expand == "none")
 local invalid_config = pcall(config.setup, { active_expand = "invalid" })
 assert(not invalid_config)
 assert(not pcall(config.setup, { poll_interval = 0 }))
 config.setup({ active_expand = "none", poll_interval = 250 })
-assert(config.values.active_expand == "none")
+assert(vim.api.nvim_get_hl(0, { name = "SessStatusBlocked", link = true }).fg == 0xABCDEF)
+assert(vim.api.nvim_get_hl(0, { name = "SessStatusUnknown", link = true }).link == "DiagnosticInfo")
+assert(vim.api.nvim_get_hl(0, { name = "SessStatusStale", link = true }).link == "DiagnosticHint")
+config.setup({
+    display = {
+        highlights = {
+            blocked = "SessTestBlocked",
+            unknown = "SessTestUnknown",
+        },
+    },
+})
+assert(config.values.display.highlights.blocked == "SessTestBlocked")
+assert(config.values.display.highlights.unknown == "SessTestUnknown")
+assert(config.values.display.highlights.stale == "SessStatusStale")
 config.setup({ active_expand = "all" })
 assert(config.values.sorting_strategy == "ascending")
 assert(config.values.layout_config.prompt_position == "top")

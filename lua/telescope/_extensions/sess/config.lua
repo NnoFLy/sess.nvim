@@ -16,6 +16,12 @@ local path_styles = {
     short = true,
 }
 
+local status_highlights = {
+    blocked = { group = "SessStatusBlocked", link = "DiagnosticWarn" },
+    unknown = { group = "SessStatusUnknown", link = "DiagnosticInfo" },
+    stale = { group = "SessStatusStale", link = "DiagnosticHint" },
+}
+
 local default_highlights = {
     current = "TelescopeResultsIdentifier",
     active = "TelescopeResultsIdentifier",
@@ -28,11 +34,11 @@ local default_highlights = {
     agent = "TelescopeResultsIdentifier",
     working = "TelescopeResultsIdentifier",
     idle = "TelescopeResultsComment",
-    blocked = "TelescopeResultsWarning",
+    blocked = status_highlights.blocked.group,
     done = "TelescopeResultsSpecialComment",
-    unknown = "TelescopeResultsWarning",
+    unknown = status_highlights.unknown.group,
     focused = "TelescopeResultsIdentifier",
-    stale = "TelescopeResultsWarning",
+    stale = status_highlights.stale.group,
 }
 
 config.values = {
@@ -211,6 +217,10 @@ config.setup = function(ext_config)
                 end
             end
         end
+    end
+
+    for _, highlight in pairs(status_highlights) do
+        vim.api.nvim_set_hl(0, highlight.group, { default = true, link = highlight.link })
     end
 
     config.values = vim.tbl_deep_extend("force", config.values, ext_config or {})
