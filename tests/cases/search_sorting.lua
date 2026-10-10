@@ -229,19 +229,31 @@ assert(active_parent_sorter.scoring_function("agent:pi", {
 
 local api = require("sess.api")
 local original_get_items = api.items.get_items
-local original_active_snapshot = api.active.snapshot
+local original_snapshot = api.active.snapshot
+local original_snapshot_async = api.active.snapshot_async
+api.active.snapshot = function()
+    error("regular finder must not probe agents synchronously")
+end
 api.items.get_items = function()
     return { session }, nil, {}
 end
-api.active.snapshot = function()
-    return {
+api.active.snapshot_async = function(callback)
+    callback({
         agents_by_id = {
             one = { { id = "pi", name = "pi", status = "working", info = "reviewing" } },
         },
         diagnostics = {},
-    }
+    })
+    return function() end
 end
-local regular_finder = finders.generate_new_finder()
+local unhydrated_finder = finders.generate_new_finder()
+assert(unhydrated_finder)
+local hydrated_finder
+local cancel = finders.generate_new_finder_async({}, function(finder)
+    hydrated_finder = finder
+end)
+assert(cancel)
+local regular_finder = hydrated_finder
 local regular_entry = regular_finder.entry_maker(regular_finder.results[1])
 assert(regular_entry.search_fields.agent:find("pi", 1, true))
 assert(regular_entry.search_fields.status:find("working", 1, true))
@@ -254,5 +266,35 @@ assert(sorter.scoring_function("reviewing", {
     ordinal = rows[1].ordinal,
     search_fields = rows[1].search_fields,
 }) >= 0)
+
+api.items.get_items = function()
+    return {
+        { name = "new-project", path = "/tmp/new-project", pinned = false },
+    }, nil, {}
+end
+local directory_finder = finders.generate_new_finder()
+local directory_entry = directory_finder.entry_maker(directory_finder.results[1])
+assert(directory_entry.value.directory)
+assert(directory_entry.value.path == "/tmp/new-project")
+local directory_root = fixture.directory("finder-directory")
+fixture.directory("finder-directory/zeta")
+fixture.directory("finder-directory/alpha")
+local hydrated_directory_finder
+local initial_directory_finder, directory_cancel = finders.generate_directory_finder(
+    directory_root .. "/",
+    nil,
+    function(finder)
+        hydrated_directory_finder = finder
+    end
+)
+assert(
+    initial_directory_finder.results[2].path:match("/alpha$")
+        or initial_directory_finder.results[2].path:match("/alpha/$")
+)
+assert(hydrated_directory_finder)
+assert(directory_cancel)
+assert(#hydrated_directory_finder.results == #initial_directory_finder.results)
+
 api.items.get_items = original_get_items
-api.active.snapshot = original_active_snapshot
+api.active.snapshot = original_snapshot
+api.active.snapshot_async = original_snapshot_async

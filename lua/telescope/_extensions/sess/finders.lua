@@ -139,16 +139,18 @@ local function configured_search_options()
     return vim.deepcopy(ok and config.values.search or {})
 end
 
--- Regular entries include agent fields for active sessions without changing
--- lifecycle state. The active snapshot owns the defensive, read-only probes.
-local function active_agents_for_search()
-    local called, snapshot = pcall(api.active.snapshot, { marks = false })
-    if not called then
-        log.warn("agent search hydration failed: " .. tostring(snapshot))
-        return {}
-    end
-    log.diagnostics(snapshot and snapshot.diagnostics)
-    return snapshot and snapshot.agents_by_id or {}
+-- Regular and directory finders start from an inexpensive base view. Agent
+-- status is hydrated through the same cancellable snapshot used by the active
+-- picker, so finder construction never performs a synchronous probe.
+local function hydrate_search_finder(callback, previous_snapshot, build_finder)
+    return api.active.snapshot_async(function(snapshot)
+        log.diagnostics(snapshot and snapshot.diagnostics)
+        local finder = build_finder(snapshot and snapshot.agents_by_id or {})
+        callback(finder, finder.results, snapshot)
+    end, {
+        marks = false,
+        previous_snapshot = previous_snapshot,
+    })
 end
 
 local function path_for_display(path_value, style)
@@ -664,10 +666,13 @@ function M.generate_deleted_finder(display_opts)
 end
 
 ---@return table
-function M.generate_directory_finder(prompt, display_opts)
-    local candidates, err = path.enumerate(prompt)
-    if err then
-        log.error(err)
+local function build_directory_finder(prompt, display_opts, agents_by_id, cached_candidates)
+    local candidates, err = cached_candidates, nil
+    if not candidates then
+        candidates, err = path.enumerate(prompt)
+        if err then
+            log.error(err)
+        end
     end
 
     local ok, list_err, sessions, diagnostics = api.session.list()
@@ -703,7 +708,7 @@ function M.generate_directory_finder(prompt, display_opts)
 
     local results = {}
     local search_options = configured_search_options()
-    local agents_by_id = active_agents_for_search()
+    agents_by_id = agents_by_id or {}
     for _, candidate in ipairs(candidates) do
         local candidate_path = path_utils.identity(candidate.path) or candidate.path
         local session = by_path[candidate_path]
@@ -767,8 +772,38 @@ function M.generate_directory_finder(prompt, display_opts)
     })
 end
 
-function M.generate_new_finder(display_opts)
-    local results, err, diagnostics = items.get_items()
+function M.generate_directory_finder(prompt, display_opts, callback, previous_snapshot)
+    local candidates, err = path.enumerate(prompt)
+    if err then
+        log.error(err)
+    end
+    local finder = build_directory_finder(prompt, display_opts, {}, candidates)
+    if not callback then
+        return finder
+    end
+
+    local cancel = hydrate_search_finder(callback, previous_snapshot, function(agents_by_id)
+        return build_directory_finder(prompt, display_opts, agents_by_id, candidates)
+    end)
+    return finder, cancel
+end
+
+function M.generate_directory_finder_async(prompt, display_opts, callback, previous_snapshot)
+    local _, cancel = M.generate_directory_finder(prompt, display_opts, callback, previous_snapshot)
+    return cancel
+end
+
+local function build_new_finder(
+    display_opts,
+    agents_by_id,
+    cached_results,
+    cached_err,
+    cached_diagnostics
+)
+    local results, err, diagnostics = cached_results, cached_err, cached_diagnostics
+    if not results then
+        results, err, diagnostics = items.get_items()
+    end
     if err then
         log.error(err)
     end
@@ -787,7 +822,7 @@ function M.generate_new_finder(display_opts)
     local previous = state.prev()
     local display = vim.tbl_deep_extend("force", configured_display_options(), display_opts or {})
     local search_options = configured_search_options()
-    local agents_by_id = active_agents_for_search()
+    agents_by_id = agents_by_id or {}
     for _, entry in ipairs(results) do
         entry.search_fields = search.fields_for_session({
             id = entry.id,
@@ -836,6 +871,9 @@ function M.generate_new_finder(display_opts)
             else
                 session = {
                     id = nil,
+                    directory = true,
+                    path = entry.path,
+                    prompt = entry.prompt,
                     metadata = {
                         name = entry.name,
                         cwd = entry.path,
@@ -877,6 +915,36 @@ function M.generate_new_finder(display_opts)
             }
         end,
     })
+end
+
+function M.generate_new_finder(display_opts, callback, previous_snapshot)
+    local cached_results, cached_err, cached_diagnostics = items.get_items()
+    local finder = build_new_finder(
+        display_opts,
+        {},
+        cached_results,
+        cached_err,
+        cached_diagnostics
+    )
+    if not callback then
+        return finder
+    end
+
+    local cancel = hydrate_search_finder(callback, previous_snapshot, function(agents_by_id)
+        return build_new_finder(
+            display_opts,
+            agents_by_id,
+            cached_results,
+            cached_err,
+            cached_diagnostics
+        )
+    end)
+    return finder, cancel
+end
+
+function M.generate_new_finder_async(display_opts, callback, previous_snapshot)
+    local _, cancel = M.generate_new_finder(display_opts, callback, previous_snapshot)
+    return cancel
 end
 
 return M
