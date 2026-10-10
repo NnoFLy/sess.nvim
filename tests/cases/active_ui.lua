@@ -118,7 +118,7 @@ local current_finder = finders.generate_active_finder({}, "current")
 local current_headers = session_headers(current_finder.results)
 assert(not current_headers[first.id].expanded)
 assert(current_headers[second.id].expanded)
-assert(current_headers[first.id].display:find("○", 1, true))
+assert(current_headers[first.id].display:find("◆", 1, true))
 assert(current_headers[second.id].display:find("●", 1, true))
 
 local none_finder = finders.generate_active_finder({}, "none")
@@ -167,9 +167,13 @@ for _, raw in ipairs(session_finder.results) do
     end
 end
 assert(session_entry)
-assert(session_entry.display:find("○", 1, true))
 assert(session_entry.display:find("@s", 1, true))
-assert(session_entry.display:find("[last]", 1, true))
+local previous_icon = session_entry.display:find("◆", 1, true)
+local session_name = session_entry.display:find("@s", 1, true)
+assert(previous_icon and previous_icon < session_name)
+assert(session_entry.display:find("    ◆ ", 1, true) == 1)
+assert(not session_entry.display:find("○", 1, true))
+assert(not session_entry.display:find("[last]", 1, true))
 
 local pickers = require("telescope._extensions.sess.pickers")
 pickers.sess()
@@ -185,6 +189,7 @@ local restore_picker_options = picker_options[2]
 assert(restore_picker_options.get_status_text() == "<CR> restore   ? actions")
 local active_picker_options = picker_options[3]
 assert(active_picker_options.prompt_title == "ACTIVE SESSIONS · 2 sessions · 0 agents")
+assert(active_picker_options.sorter._sess_active_sorter)
 assert(getmetatable(active_picker_options.sorter) == sorter_methods)
 assert(type(active_picker_options.sorter._init) == "function")
 assert(type(active_picker_options.sorter._destroy) == "function")

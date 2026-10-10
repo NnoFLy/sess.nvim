@@ -275,7 +275,8 @@ Regular session rows share the active picker’s layout: `●` is current,
 marks, names, and paths are separate display columns and stay aligned using
 screen-cell widths, including for Unicode. Long paths are shortened in the
 middle when the picker is narrow; the complete path remains searchable.
-`[pinned]`, `[last]`, and `[new session]` mark pinned, last, and new rows.
+`◆` marks the previous session in the state column, replacing its state icon.
+`★` marks pinned rows in the column between the expansion and state icons.
 Display metadata and agent summaries can be disabled with the Telescope
 extension `display` options. Override semantic groups with
 `display.highlights` (`current`, `active`, `inactive`, `new`, `mark`, `name`,
@@ -313,7 +314,7 @@ plain text. Configure `search.fields`, disable filter prefixes with
 and mark matches rank above loose path matches. A custom Telescope `sorter`
 continues to receive the enriched ordinal. Active-agent matches retain their
 parent session header. Plain paths, spaces, and Unicode remain searchable.
-Each session row ends with agent counts such as `agents 1 working 2 idle`;
+Each session row right-aligns agent counts such as `agents 1 working 2 idle`;
 while hydration is pending it says `agents loading`, and a failed/stale probe is
 shown as `agents stale`. A failed probe keeps the last usable rows and reports a
 warning. Active picker mappings use `active_mappings`, while

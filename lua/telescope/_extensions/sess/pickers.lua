@@ -8,6 +8,7 @@ local actions = require("telescope._extensions.sess.actions")
 local help = require("telescope._extensions.sess.help")
 local preview = require("telescope._extensions.sess.preview")
 local layout = require("telescope._extensions.sess.layout")
+local selection = require("telescope._extensions.sess.selection")
 local path = require("sess.ui.path")
 local state = require("sess.api").state
 
@@ -159,6 +160,15 @@ local function make_picker(opts, restore_picker)
         return true
     end
 
+    local function refresh_preserving_selection(next_finder)
+        local key = selection.current_key(picker)
+        selection.queue(picker, next_finder, key)
+        picker:refresh(next_finder, { reset_prompt = false })
+        if not selection.is_attached(picker) then
+            selection.restore_pending(picker)
+        end
+    end
+
     local function hydrate_finder(generator)
         finder_generation = finder_generation + 1
         local generation = finder_generation
@@ -175,7 +185,7 @@ local function make_picker(opts, restore_picker)
                 return
             end
             pcall(function()
-                picker:refresh(finder, { reset_prompt = false })
+                refresh_preserving_selection(finder)
             end)
         end, previous_finder_snapshot)
         finder_cancel = cancel
@@ -252,6 +262,7 @@ local function make_picker(opts, restore_picker)
                         previous_snapshot
                     )
                 end)
+                selection.queue(picker, updated_finder, selection.current_key(picker))
                 path_mode = true
                 return { updated_finder = updated_finder }
             end
@@ -264,6 +275,7 @@ local function make_picker(opts, restore_picker)
                 local updated_finder = hydrate_finder(function(callback, previous_snapshot)
                     return finders.generate_new_finder(display_opts, callback, previous_snapshot)
                 end)
+                selection.queue(picker, updated_finder, selection.current_key(picker))
                 return { updated_finder = updated_finder }
             end
 
@@ -343,6 +355,7 @@ local function make_picker(opts, restore_picker)
     end
 
     picker = pickers.new(picker_opts)
+    selection.attach(picker)
     picker._sess_help_kind = kind
     picker._sess_help_mappings = mappings
     picker._sess_help_options = help_options
@@ -353,12 +366,12 @@ local function make_picker(opts, restore_picker)
     local display_opts = { available_width = layout.available_width(picker) }
     if type(picker.refresh) == "function" then
         if restore_picker then
-            picker:refresh(finders.generate_deleted_finder(display_opts), { reset_prompt = false })
+            refresh_preserving_selection(finders.generate_deleted_finder(display_opts))
         elseif path_mode then
             local prompt = action_state.get_current_line() or ""
-            picker:refresh(finders.generate_directory_finder(prompt, display_opts), { reset_prompt = false })
+            refresh_preserving_selection(finders.generate_directory_finder(prompt, display_opts))
         else
-            picker:refresh(finders.generate_new_finder(display_opts), { reset_prompt = false })
+            refresh_preserving_selection(finders.generate_new_finder(display_opts))
         end
     end
     if not restore_picker then
@@ -371,14 +384,12 @@ local function make_picker(opts, restore_picker)
         update_preview_layout(picker, configured_previewer, preview_config, opts.previewer ~= nil)
         local display_opts = { available_width = layout.available_width(picker, width) }
         if restore_picker then
-            picker:refresh(finders.generate_deleted_finder(display_opts), { reset_prompt = false })
+            refresh_preserving_selection(finders.generate_deleted_finder(display_opts))
         elseif path_mode then
             local prompt = action_state.get_current_line() or ""
-            picker:refresh(finders.generate_directory_finder(prompt, display_opts), {
-                reset_prompt = false,
-            })
+            refresh_preserving_selection(finders.generate_directory_finder(prompt, display_opts))
         else
-            picker:refresh(finders.generate_new_finder(display_opts), { reset_prompt = false })
+            refresh_preserving_selection(finders.generate_new_finder(display_opts))
         end
         if not restore_picker then
             if path_mode then
@@ -480,6 +491,7 @@ function M.active(opts)
         return true
     end
     picker_opts = vim.tbl_deep_extend("force", picker_opts, opts)
+    picker_opts.sorter = search.new_active_sorter(picker_opts.sorter, opts.search)
     picker_opts.mappings = nil
     picker_opts.action_help = nil
     local generated_previewer = picker_opts._sess_previewer
@@ -495,6 +507,7 @@ function M.active(opts)
         configured_previewer = generated_previewer
     end
     picker = pickers.new(picker_opts)
+    selection.attach(picker)
     picker._sess_help_kind = "active"
     picker._sess_help_mappings = active_mappings
     picker._sess_help_options = active_help_options

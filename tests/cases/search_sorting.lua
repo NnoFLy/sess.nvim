@@ -207,8 +207,13 @@ assert_order(search.sort_results(ordering, "name"), "alpha", "beta", "charlie")
 local finders = require("telescope._extensions.sess.finders")
 local rows = finders.build_active_entries(
     { session },
-    { one = { { id = "pi", name = "pi", status = "working", info = "reviewing" } } },
-    {},
+    {
+        one = {
+            { id = "pi", name = "pi", status = "working", info = "reviewing" },
+            { id = "codex", name = "codex", status = "idle" },
+        },
+    },
+    { one = true },
     nil,
     {},
     { one = "@a" },
@@ -226,6 +231,31 @@ assert(active_parent_sorter.scoring_function("agent:pi", {
     ordinal = rows[1].ordinal,
     search_fields = rows[1].search_fields,
 }) >= 0)
+
+-- Active tree rows use the parent session's score, so Telescope cannot move
+-- an agent away from its associated session header.
+local hierarchy_sorter = search.new_active_sorter({
+    scoring_function = function(_, _, ordinal)
+        return #ordinal
+    end,
+}, config.values.search)
+local function active_entry(row)
+    return {
+        ordinal = row.ordinal,
+        search_fields = row.search_fields,
+        active_group_fields = row.active_group_fields,
+        active_group_ordinal = row.active_group_ordinal,
+    }
+end
+
+local parent_entry = active_entry(rows[1])
+local agent_entry = active_entry(rows[2])
+assert(
+    hierarchy_sorter.scoring_function("pi", parent_entry)
+        == hierarchy_sorter.scoring_function("pi", agent_entry)
+)
+local unmatched_agent_entry = active_entry(rows[3])
+assert(hierarchy_sorter.scoring_function("reviewing", unmatched_agent_entry) < 0)
 
 local api = require("sess.api")
 local original_get_items = api.items.get_items

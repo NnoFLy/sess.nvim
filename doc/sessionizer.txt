@@ -114,8 +114,9 @@ COMMANDS                                                     *sess-commands*
     Open the active-session dashboard. All Sess pickers display results
     top-to-bottom with the input prompt at the top. Regular session rows share
     the active-session layout: ● current, ○ active, · inactive, and + new
-    directory. Marks, names and paths stay aligned. [pinned], [last] and
-    [new session] mark pinned, last and new rows. The current session is
+    directory. ◆ marks the previous session in the same state column,
+    replacing its state icon. ★ marks pinned rows between the expansion and
+    state columns. Marks, names and paths stay aligned. The current session is
     omitted from the regular picker. Active sessions are shown as tree-style
     groups with strongly distinguished headers and agent rows; the title and
     headers include compact session/agent counts. Sessions start collapsed.
@@ -623,7 +624,8 @@ preserved while the picker is open and across status refreshes. A selected agent
 that disappears falls back to its parent session. Failed best-effort probes keep
 the last rows usable and report a diagnostic. It shows session headers
 immediately, then asynchronously hydrates agents and marks. It reuses terminal
-identity and output when they are unchanged between probes.
+identity and output when they are unchanged between probes. Session-header
+agent counts are right-aligned within the result row.
 
 Enter loads/creates. Ctrl-d (insert)/dd (normal) deletes with confirmation.
 Ctrl-r (insert)/rr (normal) renames. Ctrl-u (insert)/uu (normal) unloads the

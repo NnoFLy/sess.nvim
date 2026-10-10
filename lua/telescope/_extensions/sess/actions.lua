@@ -9,6 +9,7 @@ local finders = require("telescope._extensions.sess.finders")
 local layout = require("telescope._extensions.sess.layout")
 local load_or_create = require("sess.ui.load_or_create")
 local marks = require("sess.ui.marks")
+local selection = require("telescope._extensions.sess.selection")
 
 -- Telescope callbacks can outlive the keypress that started them (notably
 -- vim.ui.input). Keep the guard in this adapter so a second mapping cannot
@@ -41,50 +42,6 @@ local function finish_action(prompt_bufnr, picker, status)
     end
 end
 
-local function selection_key(value)
-    if not value then
-        return nil
-    end
-    local id = value.id or value.session_id
-    if not id then
-        return nil
-    end
-    return {
-        id = id,
-        kind = value.kind,
-        agent_id = value.agent_id,
-    }
-end
-
-local function same_selection_key(left, right)
-    return left
-        and right
-        and left.id == right.id
-        and left.kind == right.kind
-        and left.agent_id == right.agent_id
-end
-
-local function restore_selection(picker, finder, key)
-    if type(picker.set_selection) ~= "function" then
-        return
-    end
-    for index, row in ipairs(finder.results or {}) do
-        if
-            same_selection_key(selection_key(row), key)
-            or same_selection_key(selection_key(row.value), key)
-        then
-            pcall(picker.set_selection, picker, index)
-            return
-        end
-    end
-
-    -- A successful mutation can remove the selected row. Let Telescope select
-    -- the first remaining row rather than retaining a stale entry.
-    if key and #(finder.results or {}) > 0 then
-        pcall(picker.set_selection, picker, 1)
-    end
-end
-
 ---@param prompt_bufnr number
 ---@param finder table|nil
 ---@param key table|nil
@@ -99,7 +56,7 @@ local function refresh(prompt_bufnr, finder, key)
     end
     if not key then
         local ok, selected = pcall(action_state.get_selected_entry)
-        key = ok and selection_key(selected and selected.value) or nil
+        key = ok and selection.key(selected and selected.value)
     end
     local next_finder = finder
         or finders.generate_new_finder({
@@ -108,10 +65,16 @@ local function refresh(prompt_bufnr, finder, key)
     -- Mutations redraw the preview and rows without discarding user input. The
     -- local flag also prevents a refresh callback from recursively refreshing.
     picker._sess_refreshing = true
+    selection.queue(picker, next_finder, key)
     local ok = pcall(function()
         picker:refresh(next_finder, { reset_prompt = false })
-        restore_selection(picker, next_finder, key)
+        if not selection.is_attached(picker) then
+            selection.restore_pending(picker)
+        end
     end)
+    if not ok then
+        selection.cancel(picker)
+    end
     picker._sess_refreshing = false
     return ok
 end
@@ -175,7 +138,7 @@ end
 local function refresh_active(prompt_bufnr, expanded)
     local picker = action_state.get_current_picker(prompt_bufnr)
     local selected = action_state.get_selected_entry()
-    local key = selection_key(selected and selected.value)
+    local key = selection.key(selected and selected.value)
     local snapshot = picker._sess_active_snapshot or api.active.snapshot()
     picker._sess_active_snapshot = snapshot
     local finder = finders.generate_active_finder_from_snapshot(
@@ -184,8 +147,11 @@ local function refresh_active(prompt_bufnr, expanded)
         picker._sess_active_expand,
         { available_width = layout.available_width(picker) }
     )
+    selection.queue(picker, finder, key, { parent = true })
     picker:refresh(finder, { reset_prompt = false })
-    restore_selection(picker, finder, key)
+    if not selection.is_attached(picker) then
+        selection.restore_pending(picker)
+    end
 end
 
 function M.toggle_active(prompt_bufnr)
@@ -294,7 +260,7 @@ function M.restore_session(prompt_bufnr)
     if not started then
         return
     end
-    local key = selection_key(value)
+    local key = selection.key(value)
     local ok, err, _, diagnostics = api.session.restore(value.key)
     if not report_result(picker, ok, err, diagnostics) then
         finish_action(prompt_bufnr, picker, "Failed")
@@ -320,7 +286,7 @@ function M.delete_session(prompt_bufnr)
     if not started then
         return
     end
-    local key = selection_key(value)
+    local key = selection.key(value)
     local name = value.metadata and value.metadata.name or value.id
     local cwd = value.metadata and value.metadata.cwd or "unknown"
     local current = api.state.current()
@@ -367,7 +333,7 @@ function M.unload_session(prompt_bufnr)
     if not started then
         return
     end
-    local key = selection_key(value)
+    local key = selection.key(value)
     local current = api.state.current()
     local unloading_current = current and current.id == value.id
 
@@ -410,7 +376,7 @@ function M.mark_session(prompt_bufnr)
     if not started then
         return
     end
-    local key = selection_key(value)
+    local key = selection.key(value)
     vim.ui.input({ prompt = "Mark (a-z, 0-9): " }, function(input)
         if not input then
             finish_action(prompt_bufnr, picker, "Cancelled")
@@ -451,7 +417,7 @@ function M.toggle_pin_session(prompt_bufnr)
     if not started then
         return
     end
-    local key = selection_key(value)
+    local key = selection.key(value)
     local ok, err, _, diagnostics = api.session.toggle_pin(value.id)
     if not report_result(picker, ok, err, diagnostics) then
         finish_action(prompt_bufnr, picker, "Failed")
@@ -484,7 +450,7 @@ function M.unmark_session(prompt_bufnr)
     if not started then
         return
     end
-    local key = selection_key(value)
+    local key = selection.key(value)
     local ok, err, _, diagnostics = api.session.clear_mark(mark)
     if not report_result(picker, ok, err, diagnostics) then
         finish_action(prompt_bufnr, picker, "Failed")
@@ -503,7 +469,7 @@ function M.rename_session(prompt_bufnr)
     if not started then
         return
     end
-    local key = selection_key(value)
+    local key = selection.key(value)
 
     vim.ui.input({
         prompt = "Enter Session Name: ",

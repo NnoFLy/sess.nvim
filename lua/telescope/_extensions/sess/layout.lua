@@ -1,3 +1,5 @@
+local icons = require("telescope._extensions.sess.icons")
+
 local M = {}
 
 local function display_width(value)
@@ -14,7 +16,7 @@ local function truncate_end(value, width)
     if width <= 0 then
         return ""
     elseif width == 1 then
-        return "…"
+        return icons.ellipsis
     end
 
     local chars = vim.fn.strchars(value)
@@ -23,7 +25,7 @@ local function truncate_end(value, width)
     while keep > 0 and display_width(vim.fn.strcharpart(value, 0, keep)) > target do
         keep = keep - 1
     end
-    return vim.fn.strcharpart(value, 0, keep) .. "…"
+    return vim.fn.strcharpart(value, 0, keep) .. icons.ellipsis
 end
 
 M.truncate_end = truncate_end
@@ -36,7 +38,7 @@ local function truncate_middle(value, width)
     if width <= 0 then
         return ""
     elseif width == 1 then
-        return "…"
+        return icons.ellipsis
     end
 
     local chars = vim.fn.strchars(value)
@@ -56,7 +58,7 @@ local function truncate_middle(value, width)
     end
 
     return vim.fn.strcharpart(value, 0, left_chars)
-        .. "…"
+        .. icons.ellipsis
         .. vim.fn.strcharpart(value, chars - right_chars, right_chars)
 end
 

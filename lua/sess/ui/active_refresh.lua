@@ -1,5 +1,7 @@
 local M = {}
 
+local selection = require("telescope._extensions.sess.selection")
+
 local DEFAULT_POLL_INTERVAL = 1000
 
 -- Poll only while this picker is open, and redraw only when its rows change.
@@ -92,56 +94,11 @@ function M.start(picker, generate, initial_rows, poll_interval)
                 picker._sess_active_snapshot = snapshot
             end
             if snapshot_changed or not vim.deep_equal(rows, next_rows) then
-                local selected_key
-                if type(picker.get_selection) == "function" then
-                    local selected = picker:get_selection()
-                    local value = selected and selected.value or selected
-                    if value then
-                        local id = value.id or value.session_id
-                        if id then
-                            selected_key = {
-                                id = id,
-                                kind = value.kind,
-                                agent_id = value.agent_id,
-                            }
-                        end
-                    end
-                end
+                local selected_key = selection.current_key(picker)
+                selection.queue(picker, finder, selected_key, { parent = true })
                 picker:refresh(finder, { reset_prompt = false })
-                if selected_key and type(picker.set_selection) == "function" then
-                    local restored = false
-                    for index, row in ipairs(next_rows or {}) do
-                        local value = row.value or row
-                        local id = value.id or value.session_id
-                        if
-                            id == selected_key.id
-                            and value.kind == selected_key.kind
-                            and value.agent_id == selected_key.agent_id
-                        then
-                            pcall(picker.set_selection, picker, index)
-                            restored = true
-                            break
-                        end
-                    end
-                    if not restored then
-                        -- A disappearing agent can no longer be selected. Keep
-                        -- the parent session selected when it remains visible;
-                        -- otherwise choose the first valid row.
-                        for index, row in ipairs(next_rows or {}) do
-                            local value = row.value or row
-                            if
-                                value.session_id == selected_key.id
-                                and value.kind == "session"
-                            then
-                                pcall(picker.set_selection, picker, index)
-                                restored = true
-                                break
-                            end
-                        end
-                        if not restored and #(next_rows or {}) > 0 then
-                            pcall(picker.set_selection, picker, 1)
-                        end
-                    end
+                if not selection.is_attached(picker) then
+                    selection.restore_pending(picker)
                 end
                 rows = next_rows
             end

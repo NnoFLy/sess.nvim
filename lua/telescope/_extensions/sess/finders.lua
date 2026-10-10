@@ -21,19 +21,14 @@ local path = require("sess.ui.path")
 local path_utils = require("sess.path")
 local search = require("telescope._extensions.sess.search")
 local layout = require("telescope._extensions.sess.layout")
+local icons = require("telescope._extensions.sess.icons")
 
 local items = api.items
 local state = api.state
 
 local M = {}
 
-local status_symbols = {
-    blocked = "⚠",
-    done = "✓",
-    idle = "○",
-    unknown = "?",
-    working = "●",
-}
+local status_symbols = icons.status
 
 local status_display_order = { "working", "idle", "blocked", "done", "unknown" }
 
@@ -113,7 +108,7 @@ end
 function M.active_dashboard_title(snapshot)
     local summary = M.active_dashboard_summary(snapshot)
     return string.format(
-        "ACTIVE SESSIONS · %d sessions · %d agents",
+        "ACTIVE SESSIONS " .. icons.separator .. " %d sessions " .. icons.separator .. " %d agents",
         summary.session_count,
         summary.agent_count
     )
@@ -164,25 +159,13 @@ end
 
 local function state_for_session(session, opts)
     if not session.id then
-        return "+", "new"
+        return icons.state.new, "new"
     elseif opts.current_id == session.id then
-        return "●", "current"
+        return icons.state.current, "current"
     elseif opts.active then
-        return "○", "active"
+        return icons.state.active, "active"
     end
-    return "·", "inactive"
-end
-
-local function compact_metadata(value, width)
-    if not width or width >= 60 then
-        return value
-    end
-    local compact = {
-        ["[pinned]"] = "★",
-        ["[last]"] = "←",
-        ["[new session]"] = "+",
-    }
-    return compact[value] or value
+    return icons.state.inactive, "inactive"
 end
 
 local function session_display_parts(session, opts)
@@ -192,36 +175,32 @@ local function session_display_parts(session, opts)
     local width = display.available_width
     local tree = "  "
     if opts.expandable and opts.expanded then
-        tree = "▾ "
+        tree = icons.tree.expanded
     elseif opts.expandable then
-        tree = "▸ "
+        tree = icons.tree.collapsed
     end
 
     local marker, state = state_for_session(session, opts)
+    local marker_highlight = highlights[state]
+    if display.show_metadata ~= false and session.id and opts.previous_id == session.id then
+        marker = icons.metadata.previous
+        marker_highlight = highlights.metadata or marker_highlight
+    end
     local name = session.metadata.name or ""
     local cwd = path_for_display(session.metadata.cwd or "", display.path_style)
-    local metadata = {}
-    if display.show_metadata ~= false then
-        if session.metadata.pinned then
-            metadata[#metadata + 1] = "[pinned]"
-        end
-        if session.id and opts.previous_id == session.id then
-            metadata[#metadata + 1] = "[last]"
-        end
-        if not session.id then
-            metadata[#metadata + 1] = "[new session]"
-        end
-    end
-    if display.show_agent_summary ~= false and opts.agent_status then
-        metadata[#metadata + 1] = opts.agent_status
-    end
+    local agent_status = display.show_agent_summary ~= false and opts.agent_status
 
     if opts.path_width then
         cwd = layout.truncate_middle(cwd, opts.path_width)
     end
+    local pinned = display.show_metadata ~= false and session.metadata.pinned
     local parts = {
         { text = tree },
-        { text = marker .. " ", highlight = highlights[state] },
+        {
+            text = pinned and (icons.metadata.pinned .. " ") or "  ",
+            highlight = pinned and highlights.metadata or nil,
+        },
+        { text = marker .. " ", highlight = marker_highlight },
         {
             text = pad(opts.mark or "", opts.mark_width or 2) .. " ",
             highlight = highlights.mark,
@@ -246,11 +225,16 @@ local function session_display_parts(session, opts)
             omit_priority = opts.path_width == nil and 3 or nil,
         },
     }
-    for _, value in ipairs(metadata) do
+    local right_aligned_index
+    if agent_status then
+        local is_agent_status = agent_status:match("^agents ") ~= nil
+        if is_agent_status then
+            right_aligned_index = #parts + 1
+        end
         parts[#parts + 1] = {
-            text = "  " .. compact_metadata(value, width),
+            text = "  " .. agent_status,
             highlight = opts.status_highlight or highlights.metadata,
-            omit_priority = value:match("^agents ") and 4 or 5,
+            omit_priority = is_agent_status and 4 or 5,
         }
     end
 
@@ -259,6 +243,16 @@ local function session_display_parts(session, opts)
         fit_width = nil
     end
     local fitted = layout.fit_parts(parts, fit_width)
+    if fit_width and right_aligned_index and fitted[right_aligned_index].text ~= "" then
+        local fitted_width = 0
+        for _, part in ipairs(fitted) do
+            fitted_width = fitted_width + layout.display_width(part.text)
+        end
+        local gap = fit_width - fitted_width
+        if gap > 0 then
+            table.insert(fitted, right_aligned_index, { text = string.rep(" ", gap) })
+        end
+    end
     return fitted
 end
 
@@ -415,6 +409,7 @@ function M.build_active_entries(
             previous = previous and previous.id == session.id,
             agents = agents,
         })
+        local group_ordinal = search.ordinal(search_fields)
         local session_parts = session_display_parts(session, {
             expandable = true,
             expanded = expanded,
@@ -438,14 +433,16 @@ function M.build_active_entries(
             display = display_parts_text(session_parts),
             display_parts = session_parts,
             search_fields = search_fields,
-            ordinal = search.ordinal(search_fields),
+            ordinal = group_ordinal,
+            active_group_fields = search_fields,
+            active_group_ordinal = group_ordinal,
         }
         if expanded then
             if #agents == 0 then
                 local placeholder_parts = layout.fit_parts({
                     {
-                        text = display.available_width and display.available_width < 40 and "└─ "
-                            or "  └─ ",
+                        text = display.available_width and display.available_width < 40 and icons.tree.empty
+                            or "  " .. icons.tree.empty,
                     },
                     { text = "no agents", shrink_priority = 1, min_width = 1 },
                 }, display.available_width)
@@ -459,13 +456,15 @@ function M.build_active_entries(
                         { session.metadata.name, session.metadata.cwd, "no agents" },
                         " "
                     ),
+                    active_group_fields = search_fields,
+                    active_group_ordinal = group_ordinal,
                 }
             else
                 for index, agent in ipairs(agents) do
                     local status = normalized_status(agent.status)
-                    local branch = index == #agents and "└─" or "├─"
+                    local branch = index == #agents and icons.tree.last_branch or icons.tree.branch
                     local focused = focused_by_id and focused_by_id[session.id] == agent.id
-                    local focus_marker = focused and ">" or " "
+                    local focus_marker = focused and icons.focus or " "
                     local status_symbol = status_symbols[status]
                     local info = agent.info and agent.info ~= "" and "  " .. agent.info or ""
                     local agent_highlight = display.highlights and display.highlights.agent
@@ -519,6 +518,8 @@ function M.build_active_entries(
                         display_parts = agent_parts,
                         search_fields = agent_search_fields,
                         ordinal = search.ordinal(agent_search_fields),
+                        active_group_fields = search_fields,
+                        active_group_ordinal = group_ordinal,
                     }
                 end
             end
@@ -574,6 +575,8 @@ local function active_finder_from_snapshot(
                 display = highlighted_display(entry.display_parts, entry.display),
                 ordinal = entry.ordinal,
                 search_fields = entry.search_fields,
+                active_group_fields = entry.active_group_fields,
+                active_group_ordinal = entry.active_group_ordinal,
             }
         end,
     })

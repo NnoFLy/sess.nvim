@@ -84,6 +84,54 @@ vim.wait(600, function() return false end, 10)
 assert(refreshes == before, "closed picker must stop refreshing")
 stop() -- Cleanup is idempotent, including callbacks already queued.
 
+-- Selection restoration waits for Telescope's finder completion callback. A
+-- direct set_selection immediately after refresh can target the old manager.
+local selection = require("telescope._extensions.sess.selection")
+local completion
+local completion_picker = {
+    finder = { results = { { kind = "agent", session_id = "one", agent_id = "pi" } } },
+    register_completion_callback = function(_, callback)
+        completion = callback
+    end,
+    set_selection = function(self, index)
+        self.selected_index = index
+    end,
+}
+assert(selection.attach(completion_picker))
+selection.queue(completion_picker, completion_picker.finder, {
+    kind = "agent",
+    session_id = "one",
+    agent_id = "pi",
+})
+assert(completion_picker.selected_index == nil)
+completion()
+assert(completion_picker.selected_index == 1)
+
+-- Telescope's manager is sorted independently of finder.results, and set_selection
+-- expects a zero-based display row. Restore by manager position to avoid jumps.
+local manager_picker = {
+    manager = {
+        entries = {
+            { value = { id = "first" } },
+            { value = { id = "selected" } },
+        },
+        num_results = function(self)
+            return #self.entries
+        end,
+        get_entry = function(self, index)
+            return self.entries[index]
+        end,
+    },
+    get_row = function(_, index)
+        return index - 1
+    end,
+    set_selection = function(self, row)
+        self.selected_row = row
+    end,
+}
+assert(selection.restore(manager_picker, { results = {} }, { id = "selected" }))
+assert(manager_picker.selected_row == 1)
+
 -- A failed best-effort probe keeps the dashboard alive so a later poll can
 -- recover instead of closing the picker.
 local retry_prompt = vim.api.nvim_create_buf(false, true)

@@ -1,3 +1,5 @@
+local icons = require("telescope._extensions.sess.icons")
+
 local M = {}
 
 local function date(value)
@@ -29,7 +31,7 @@ local function state_text(value, context)
     if value.metadata and value.metadata.pinned then
         parts[#parts + 1] = "pinned"
     end
-    return table.concat(parts, " · ")
+    return table.concat(parts, " " .. icons.separator .. " ")
 end
 
 local function add_field(lines, label, value)
@@ -44,7 +46,7 @@ local function add_agents(lines, value, context)
     lines[#lines + 1] = ""
     lines[#lines + 1] = "Agents"
     if context.active_loading then
-        lines[#lines + 1] = "  Loading active data…"
+        lines[#lines + 1] = "  Loading active data" .. icons.ellipsis
         return
     end
     if context.active_stale then

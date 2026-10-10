@@ -275,6 +275,7 @@ function M.new_sorter(base, options)
     if metatable then
         setmetatable(sorter, metatable)
     end
+    sorter._sess_search_sorter = true
     sorter.scoring_function = function(first, second, third, fourth)
         local prompt, entry
         if type(first) == "table" then
@@ -306,6 +307,57 @@ function M.new_sorter(base, options)
             return -1
         end
         return score + rank_bonus(fields, query)
+    end
+    return sorter
+end
+
+-- Active results are a tree: a session header and matching agent rows must
+-- receive one score, otherwise Telescope's global sorter can split a group.
+-- The row fields still perform filtering, while the group fields provide the
+-- stable score used for every visible row in that group.
+function M.new_active_sorter(base, options)
+    local wrapped = base
+    if not wrapped or not wrapped._sess_search_sorter then
+        wrapped = M.new_sorter(base, options)
+    end
+
+    local sorter = {}
+    for key, value in pairs(wrapped) do
+        sorter[key] = value
+    end
+    local metatable = getmetatable(wrapped)
+    if metatable then
+        setmetatable(sorter, metatable)
+    end
+
+    local scoring = wrapped.scoring_function
+    sorter._sess_search_sorter = true
+    sorter._sess_active_sorter = true
+    sorter.scoring_function = function(first, second, third, fourth)
+        local has_sorter_argument = type(first) == "table"
+        local entry = has_sorter_argument and fourth or second
+        local group_fields = entry and entry.active_group_fields
+        local group_ordinal = entry and entry.active_group_ordinal
+        if not group_fields or not group_ordinal then
+            return scoring(first, second, third, fourth)
+        end
+
+        local row_score = scoring(first, second, third, fourth)
+        if row_score < 0 then
+            return row_score
+        end
+
+        local group_entry = {
+            ordinal = group_ordinal,
+            search_fields = group_fields,
+        }
+        local group_score
+        if has_sorter_argument then
+            group_score = scoring(first, second, group_ordinal, group_entry)
+        else
+            group_score = scoring(first, group_entry)
+        end
+        return group_score >= 0 and group_score or row_score
     end
     return sorter
 end
