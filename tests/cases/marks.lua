@@ -34,6 +34,29 @@ local stale_id = "stale-session"
 local marks = storage.read_marks()
 marks.s = stale_id
 assert(storage.write_marks(marks))
+
+-- A mark registry symlink must never be followed or replaced, including when
+-- the symlink is dangling.
+local outside_marks = fixture.directory("outside_marks") .. "/marks.json"
+local outside_content = { vim.json.encode({ version = 1, marks = {} }) }
+vim.fn.writefile(outside_content, outside_marks)
+assert(vim.uv.fs_unlink(mark_path))
+assert(vim.uv.fs_symlink(outside_marks, mark_path))
+local linked_marks, linked_err = storage.read_marks()
+assert(not linked_marks and tostring(linked_err):match("regular file"), tostring(linked_err))
+local linked_write, linked_write_err = storage.write_marks({})
+assert(not linked_write and tostring(linked_write_err):match("regular file"), tostring(linked_write_err))
+fixture.equal(outside_content, vim.fn.readfile(outside_marks))
+assert(vim.uv.fs_unlink(mark_path))
+local dangling_target = fixture.root .. "/missing_marks.json"
+assert(vim.uv.fs_symlink(dangling_target, mark_path))
+local dangling_marks, dangling_err = storage.read_marks()
+assert(not dangling_marks and tostring(dangling_err):match("regular file"), tostring(dangling_err))
+local dangling_write, dangling_write_err = storage.write_marks({})
+assert(not dangling_write and tostring(dangling_write_err):match("regular file"), tostring(dangling_write_err))
+assert(vim.uv.fs_unlink(mark_path))
+assert(storage.write_marks(marks))
+
 local stale_ok, stale_err, stale_entries, stale_diagnostics = api.session.list_marks()
 assert(stale_ok, stale_err)
 assert(stale_entries[1].stale)

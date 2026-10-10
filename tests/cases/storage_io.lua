@@ -9,6 +9,26 @@ assert(ok, err)
 local directory = fixture.root .. "/store/sessions/" .. item.id
 local metadata_path = directory .. "/metadata.json"
 local original = vim.fn.readfile(metadata_path)
+
+-- Failed metadata persistence must retain both the primary failure and a
+-- hard-delete cleanup failure instead of reporting success or hiding either.
+local original_write_metadata = storage.write_metadata
+local original_delete = storage.delete
+storage.write_metadata = function()
+    return false, "injected metadata persistence failure"
+end
+storage.delete = function()
+    return false, "injected cleanup failure"
+end
+local cleanup_ok, cleanup_err = storage.create_with_metadata("failed_cleanup", {})
+storage.write_metadata = original_write_metadata
+storage.delete = original_delete
+assert(not cleanup_ok)
+assert(tostring(cleanup_err):match("injected metadata persistence failure"), tostring(cleanup_err))
+assert(tostring(cleanup_err):match("failed to clean up created session"), tostring(cleanup_err))
+assert(tostring(cleanup_err):match("injected cleanup failure"), tostring(cleanup_err))
+assert(storage.delete("failed_cleanup", true))
+
 local updated = vim.deepcopy(item.metadata)
 updated.name = "must not be committed"
 

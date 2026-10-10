@@ -1136,6 +1136,22 @@ local function validate_marks(data)
     return data.marks
 end
 
+-- lstat keeps symlinks visible; fs_stat would follow live links and treat
+-- dangling links as a missing registry.
+local function validate_mark_registry_path(path)
+    local stat, err, code = vim.uv.fs_lstat(path)
+    if not stat then
+        if code == "ENOENT" then
+            return true, false
+        end
+        return false, "failed to access mark registry: " .. tostring(err or path)
+    end
+    if stat.type ~= "file" then
+        return false, "untrusted mark registry path (expected a regular file): " .. path
+    end
+    return true, true
+end
+
 function M.read_marks()
     assert_initialized()
     local trusted, trust_err = trusted_dir(root_path, "storage directory")
@@ -1143,12 +1159,12 @@ function M.read_marks()
         return nil, trust_err
     end
     local path = join(root_path, "marks.json")
-    local stat, err, code = vim.uv.fs_stat(path)
-    if not stat then
-        if code == "ENOENT" then
-            return {}
-        end
-        return nil, err
+    local safe, present_or_err = validate_mark_registry_path(path)
+    if not safe then
+        return nil, present_or_err
+    end
+    if not present_or_err then
+        return {}
     end
     local data, read_err = read_json(path)
     if not data then
@@ -1163,6 +1179,11 @@ function M.write_marks(marks)
     if not trusted then
         return false, trust_err
     end
+    local path = join(root_path, "marks.json")
+    local safe, safe_err = validate_mark_registry_path(path)
+    if not safe then
+        return false, safe_err
+    end
     local data = { version = 1, marks = marks }
     local valid, err = validate_marks(data)
     if not valid then
@@ -1172,7 +1193,7 @@ function M.write_marks(marks)
     if next(marks) == nil then
         data.marks = vim.empty_dict()
     end
-    return write_json(join(root_path, "marks.json"), data)
+    return write_json(path, data)
 end
 
 -- Session discovery
@@ -1796,7 +1817,10 @@ function M.create_with_metadata(id, metadata)
 
     ok, err = M.write_metadata(id, metadata)
     if not ok then
-        M.delete(id, true)
+        local deleted, delete_err = M.delete(id, true)
+        if not deleted then
+            return false, append_error(err, "failed to clean up created session: " .. tostring(delete_err))
+        end
 
         return false, err
     end
