@@ -84,6 +84,25 @@ local sorter = search.new_sorter({
 local exact = entry("frontend", "/tmp/other", "")
 local path = entry("other", "/tmp/frontend", "")
 assert(sorter.scoring_function("frontend", exact) > sorter.scoring_function("frontend", path))
+-- Telescope passes the sorter, prompt, ordinal, and entry to scoring_function.
+-- The extension must use the entry argument rather than the ordinal string.
+assert(sorter.scoring_function(sorter, "frontend", exact.ordinal, exact) > 0)
+
+local telescope_style_calls = 0
+local telescope_style_sorter = search.new_sorter({
+    scoring_function = function(_, prompt, line, scored_entry)
+        telescope_style_calls = telescope_style_calls + 1
+        assert(line == scored_entry.ordinal)
+        return line:find(prompt, 1, true) and 1 or -1
+    end,
+}, config.values.search)
+assert(telescope_style_sorter.scoring_function(
+    telescope_style_sorter,
+    "frontend",
+    exact.ordinal,
+    exact
+) >= 0)
+assert(telescope_style_calls == 1)
 
 -- Fuzzy-only queries must reach the base sorter with the complete ordinal.
 local fuzzy_calls = 0

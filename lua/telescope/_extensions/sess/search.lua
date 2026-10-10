@@ -214,7 +214,7 @@ local function entry_fields(entry)
         or {}
 end
 
-local function base_score(base, prompt, entry, options)
+local function base_score(base, prompt, entry)
     if not base then
         return 1
     end
@@ -223,18 +223,25 @@ local function base_score(base, prompt, entry, options)
         return 1
     end
 
-    -- Keep the complete ordinal on the entry passed to custom sorters. Field
-    -- restrictions are applied by the wrapper before this callback runs.
-    local scoring_entry = entry
-    local ok, score = pcall(scorer, prompt, scoring_entry)
-    if ok and type(score) == "number" then
-        return score
+    -- Telescope calls scoring_function as (sorter, prompt, ordinal, entry).
+    -- Keep the complete ordinal available to the configured sorter. Small
+    -- custom sorters using (prompt, entry) are supported without invoking them
+    -- twice, since scoring functions may have observable side effects.
+    local ordinal = entry and entry.ordinal or ""
+    local parameters = debug.getinfo(scorer, "u")
+    local parameter_count = parameters and parameters.nparams or 0
+    local ok, score
+    if parameter_count >= 4 then
+        ok, score = pcall(scorer, base, prompt, ordinal, entry)
+    elseif parameter_count == 3 then
+        ok, score = pcall(scorer, base, prompt, ordinal)
+    else
+        ok, score = pcall(scorer, prompt, entry)
     end
-    local called, method_score = pcall(scorer, base, prompt, scoring_entry)
-    if not called or type(method_score) ~= "number" then
+    if not ok or type(score) ~= "number" then
         return 1
     end
-    return method_score
+    return score
 end
 
 local function rank_bonus(fields, query)
@@ -268,11 +275,14 @@ function M.new_sorter(base, options)
     if metatable then
         setmetatable(sorter, metatable)
     end
-    sorter.scoring_function = function(first, second, third)
+    sorter.scoring_function = function(first, second, third, fourth)
         local prompt, entry
         if type(first) == "table" then
-            prompt, entry = second, third
+            -- Telescope's scoring_function receives the sorter as its first
+            -- argument, followed by the prompt, ordinal, and entry.
+            prompt, entry = second, fourth
         else
+            -- Keep direct calls useful for integrations and unit tests.
             prompt, entry = first, second
         end
         local fields = entry_fields(entry)
@@ -291,7 +301,7 @@ function M.new_sorter(base, options)
         if not filter and not plain_match then
             return -1
         end
-        local score = base_score(base, score_prompt, entry, options)
+        local score = base_score(base, score_prompt, entry)
         if score < 0 then
             return -1
         end
