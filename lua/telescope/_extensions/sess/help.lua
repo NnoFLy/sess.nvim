@@ -150,6 +150,58 @@ local function selected_value()
     return selected_ok and selected and selected.value or nil
 end
 
+local function picker_width(picker)
+    if not picker then
+        return nil
+    end
+    local windows = {
+        picker.results_win,
+        picker.prompt_win,
+        picker.layout
+            and picker.layout.results
+            and (picker.layout.results.winid or picker.layout.results.win_id),
+    }
+    for _, win in ipairs(windows) do
+        if type(win) == "number" and vim.api.nvim_win_is_valid(win) then
+            local width_ok, width = pcall(vim.api.nvim_win_get_width, win)
+            if width_ok and width > 0 then
+                return width
+            end
+        end
+    end
+    return nil
+end
+
+local function current_picker_width()
+    local current_buf = vim.api.nvim_get_current_buf()
+    local ok, telescope_state = pcall(require, "telescope.state")
+    if ok and type(telescope_state.get_status) == "function" then
+        local prompt_bufnrs = { current_buf }
+        if type(telescope_state.get_existing_prompt_bufnrs) == "function" then
+            local bufnrs_ok, existing = pcall(telescope_state.get_existing_prompt_bufnrs)
+            if bufnrs_ok and type(existing) == "table" then
+                prompt_bufnrs = existing
+            end
+        end
+        for _, prompt_bufnr in ipairs(prompt_bufnrs) do
+            local status_ok, status = pcall(telescope_state.get_status, prompt_bufnr)
+            local width = status_ok and status and picker_width(status.picker)
+            if width then
+                return width
+            end
+        end
+    end
+
+    local win_ok, win = pcall(vim.api.nvim_get_current_win)
+    if win_ok and vim.api.nvim_win_is_valid(win) then
+        local width_ok, width = pcall(vim.api.nvim_win_get_width, win)
+        if width_ok and width > 0 then
+            return width
+        end
+    end
+    return vim.o.columns or 80
+end
+
 local function available(kind, item, value)
     if not value then
         return true
@@ -241,7 +293,7 @@ function M.footer(kind, mode, mappings, options, value)
     end
 
     local full = table.concat(parts, "   ")
-    local max_width = math.max(1, (vim.o.columns or 80) - 4)
+    local max_width = math.max(1, math.floor(current_picker_width()) - 4)
     if display_width(full) <= max_width then
         return full
     end
@@ -326,6 +378,38 @@ end
 
 local open_popups = {}
 
+local function suspend_picker_close(prompt_bufnr)
+    local ok, autocmds = pcall(vim.api.nvim_get_autocmds, {
+        group = "PickerInsert",
+        event = "BufLeave",
+        buffer = prompt_bufnr,
+    })
+    if not ok or #autocmds == 0 then
+        return false
+    end
+    pcall(vim.api.nvim_clear_autocmds, {
+        group = "PickerInsert",
+        event = "BufLeave",
+        buffer = prompt_bufnr,
+    })
+    return true
+end
+
+local function restore_picker_close(prompt_bufnr)
+    if not vim.api.nvim_buf_is_valid(prompt_bufnr) then
+        return
+    end
+    pcall(vim.api.nvim_create_autocmd, "BufLeave", {
+        buffer = prompt_bufnr,
+        group = "PickerInsert",
+        nested = true,
+        once = true,
+        callback = function()
+            require("telescope.pickers").on_close_prompt(prompt_bufnr)
+        end,
+    })
+end
+
 local function close_popup(prompt_bufnr)
     local popup = open_popups[prompt_bufnr]
     if not popup then
@@ -340,6 +424,9 @@ local function close_popup(prompt_bufnr)
     end
     if popup.origin and vim.api.nvim_win_is_valid(popup.origin) then
         pcall(vim.api.nvim_set_current_win, popup.origin)
+    end
+    if popup.picker_close_suspended then
+        restore_picker_close(prompt_bufnr)
     end
 end
 
@@ -359,6 +446,19 @@ function M.show(prompt_bufnr, kind, mappings, options)
     vim.bo[buf].bufhidden = "wipe"
     vim.bo[buf].modifiable = false
     local origin = vim.api.nvim_get_current_win()
+    local popup = {
+        buf = buf,
+        origin = origin,
+        picker_close_suspended = suspend_picker_close(prompt_bufnr),
+    }
+    open_popups[prompt_bufnr] = popup
+    vim.api.nvim_create_autocmd({ "BufWipeout", "BufDelete" }, {
+        buffer = prompt_bufnr,
+        once = true,
+        callback = function()
+            close_popup(prompt_bufnr)
+        end,
+    })
     local win = vim.api.nvim_open_win(buf, true, {
         relative = "editor",
         row = math.max(0, math.floor(((vim.o.lines or 24) - height) / 2)),
@@ -368,20 +468,13 @@ function M.show(prompt_bufnr, kind, mappings, options)
         border = "rounded",
         style = "minimal",
     })
-    open_popups[prompt_bufnr] = { buf = buf, win = win, origin = origin }
+    popup.win = win
     vim.keymap.set({ "n", "i" }, "q", function()
         close_popup(prompt_bufnr)
     end, { buffer = buf, silent = true, nowait = true })
     vim.keymap.set({ "n", "i" }, "<Esc>", function()
         close_popup(prompt_bufnr)
     end, { buffer = buf, silent = true, nowait = true })
-    vim.api.nvim_create_autocmd({ "BufWipeout", "BufDelete" }, {
-        buffer = prompt_bufnr,
-        once = true,
-        callback = function()
-            close_popup(prompt_bufnr)
-        end,
-    })
 end
 
 function M.help_key(options)

@@ -96,6 +96,48 @@ local narrow_conflict_footer = help.footer(
 assert(not narrow_conflict_footer:find("? actions", 1, true))
 vim.o.columns = original_columns
 
+-- Footer text is bounded by the active floating window, not the full editor.
+local footer_buf = vim.api.nvim_create_buf(false, true)
+local footer_win = vim.api.nvim_open_win(footer_buf, true, {
+    relative = "editor",
+    row = 1,
+    col = 1,
+    width = 12,
+    height = 3,
+})
+package.loaded["telescope.state"] = {
+    get_status = function()
+        return { picker = { results_win = footer_win } }
+    end,
+}
+local floating_footer = help.footer("regular", "i", config.values.mappings, action_help)
+assert(vim.fn.strdisplaywidth(floating_footer) <= 8)
+package.loaded["telescope.state"] = nil
+vim.api.nvim_win_close(footer_win, true)
+vim.api.nvim_buf_delete(footer_buf, { force = true })
+
+-- Telescope closes a picker on BufLeave. Sess suspends that ownership before
+-- entering the help popup, so the prompt remains available while help is open.
+local prompt_buf = vim.api.nvim_create_buf(false, true)
+vim.api.nvim_open_win(prompt_buf, true, {
+    relative = "editor",
+    row = 1,
+    col = 1,
+    width = 24,
+    height = 3,
+})
+vim.api.nvim_create_augroup("PickerInsert", { clear = true })
+vim.api.nvim_create_autocmd("BufLeave", {
+    group = "PickerInsert",
+    buffer = prompt_buf,
+    callback = function()
+        vim.api.nvim_buf_delete(prompt_buf, { force = true })
+    end,
+})
+help.show(prompt_buf, "regular", config.values.mappings, action_help)
+assert(vim.api.nvim_buf_is_valid(prompt_buf))
+vim.api.nvim_buf_delete(prompt_buf, { force = true })
+
 -- A configured action owns its key in that mode; help is only installed in
 -- the mode where the key remains free.
 local picker_options = {}
