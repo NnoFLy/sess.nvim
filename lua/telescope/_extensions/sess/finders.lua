@@ -455,6 +455,7 @@ function M.build_active_entries(
         entries[#entries + 1] = {
             kind = "session",
             session_id = session.id,
+            current = current,
             session = vim.deepcopy(session),
             expanded = expanded,
             display = display_parts_text(session_parts),
@@ -541,6 +542,7 @@ function M.build_active_entries(
                     entries[#entries + 1] = {
                         kind = "agent",
                         session_id = session.id,
+                        current = current,
                         agent_id = agent.id,
                         agent = vim.deepcopy(agent),
                         display = display_parts_text(agent_parts),
@@ -632,13 +634,15 @@ function M.generate_active_finder_async(
     callback,
     previous_snapshot,
     display_opts,
-    search_options
+    search_options,
+    on_error
 )
     expanded_by_id = expanded_by_id or {}
     active_expand = active_expand or "current"
     local load_marks = not (previous_snapshot and previous_snapshot.marks_loaded)
     return api.active.snapshot_async(function(snapshot)
-        local finder, rows = active_finder_from_snapshot(
+        local ok, finder, rows, built_snapshot = pcall(
+            active_finder_from_snapshot,
             snapshot,
             expanded_by_id,
             active_expand,
@@ -646,10 +650,20 @@ function M.generate_active_finder_async(
             display_opts,
             search_options
         )
-        callback(finder, rows, snapshot)
+        if not ok then
+            if on_error then
+                on_error(finder)
+            end
+            return
+        end
+        local called, callback_err = pcall(callback, finder, rows, built_snapshot)
+        if not called and on_error then
+            on_error(callback_err)
+        end
     end, {
         marks = load_marks,
         previous_snapshot = previous_snapshot,
+        on_error = on_error,
     })
 end
 

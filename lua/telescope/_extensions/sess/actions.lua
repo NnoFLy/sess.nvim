@@ -777,6 +777,10 @@ function M.focus_agent(prompt_bufnr)
     if not value or value.kind ~= "agent" or not value.session_id or not value.agent_id then
         return
     end
+    local current = api.state.current()
+    if not current or current.id ~= value.session_id then
+        return
+    end
     local picker, started = begin_action(prompt_bufnr)
     if not started then
         return
@@ -1076,6 +1080,9 @@ function M.mark_session(prompt_bufnr)
     end
     local key = selection.key(value)
     vim.ui.input({ prompt = "Mark (a-z, 0-9): " }, function(input)
+        if picker._sess_picker_closed or current_picker(prompt_bufnr) ~= picker then
+            return
+        end
         if not input then
             finish_action(prompt_bufnr, picker, "Cancelled")
             return
@@ -1173,6 +1180,9 @@ function M.rename_session(prompt_bufnr)
         prompt = "Enter Session Name: ",
         default = value.metadata and value.metadata.name or "",
     }, function(name)
+        if picker._sess_picker_closed or current_picker(prompt_bufnr) ~= picker then
+            return
+        end
         if not name then
             finish_action(prompt_bufnr, picker, "Cancelled")
             return

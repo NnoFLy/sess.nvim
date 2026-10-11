@@ -204,7 +204,7 @@ function M.parse_filter(prompt, options)
         return nil
     end
 
-    if prompt:sub(1, 1) == "@" and #prompt > 1 and not prompt:find("%s") then
+    if prompt:match("^@[a-z0-9]$") then
         return { field = "mark", label = "mark", query = prompt }
     end
 

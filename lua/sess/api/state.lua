@@ -5,4 +5,5 @@ return {
     current = state.get_current_session,
     prev = state.get_prev_session,
     active = state.get_active_sessions,
+    active_generation = state.get_active_generation,
 }

@@ -168,7 +168,8 @@ local active = api.state.active()
 Mutating operations return `ok`, an error when they fail, the operation result,
 and diagnostic strings. A successful operation can therefore include warnings
 from metadata updates, restoration, hooks, or events. State getters return
-defensive copies.
+defensive copies; `api.state.active_generation()` provides the current
+read-only active-state generation for detecting stale asynchronous snapshots.
 
 For the full API contract and failure behavior, see
 [`:help sess-api`](doc/sessionizer.txt).

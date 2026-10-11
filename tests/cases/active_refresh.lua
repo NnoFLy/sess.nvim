@@ -171,6 +171,94 @@ assert(retry_picker._sess_active_refresh_warning == nil, "successful retry shoul
 stop_retry()
 vim.api.nvim_buf_delete(retry_prompt, { force = true })
 
+-- Errors raised after the generator returns must still release the polling
+-- guard so a later poll can retry.
+local async_error_prompt = vim.api.nvim_create_buf(false, true)
+local async_error_calls = 0
+local stop_async_error = require("sess.ui.active_refresh").start(
+    {
+        prompt_bufnr = async_error_prompt,
+        _sess_expanded = expanded,
+        finder = retry_finder,
+        refresh = function(self, next_finder)
+            self.finder = next_finder
+        end,
+    },
+    function(expanded_by_id, done, fail)
+        async_error_calls = async_error_calls + 1
+        if async_error_calls == 1 then
+            vim.schedule(function()
+                fail("async finder failed")
+            end)
+            return function() end
+        end
+        return sync_generate(expanded_by_id)
+    end,
+    retry_rows,
+    20
+)
+assert(vim.wait(500, function()
+    return async_error_calls >= 2
+end, 10))
+stop_async_error()
+vim.api.nvim_buf_delete(async_error_prompt, { force = true })
+
+-- An error delivered after a successful commit must not mark the healthy
+-- picker as failed.
+local late_error_prompt = vim.api.nvim_create_buf(false, true)
+local late_error_picker = {
+    prompt_bufnr = late_error_prompt,
+    _sess_expanded = expanded,
+    finder = retry_finder,
+    refresh = function(self, next_finder)
+        self.finder = next_finder
+    end,
+}
+local stop_late_error = require("sess.ui.active_refresh").start(
+    late_error_picker,
+    function(expanded_by_id, done, fail)
+        done(retry_finder, retry_rows)
+        vim.schedule(function()
+            fail("late finder failed")
+        end)
+        return function() end
+    end,
+    retry_rows,
+    1000
+)
+assert(stop_late_error)
+vim.wait(100, function() return false end, 10)
+assert(late_error_picker._sess_active_refresh_warning == nil)
+stop_late_error()
+vim.api.nvim_buf_delete(late_error_prompt, { force = true })
+
+-- A queued error after picker shutdown must also be ignored.
+local stopped_error_prompt = vim.api.nvim_create_buf(false, true)
+local stopped_error_picker = {
+    prompt_bufnr = stopped_error_prompt,
+    _sess_expanded = expanded,
+    finder = retry_finder,
+    refresh = function(self, next_finder)
+        self.finder = next_finder
+    end,
+}
+local stop_stopped_error = require("sess.ui.active_refresh").start(
+    stopped_error_picker,
+    function(expanded_by_id, done, fail)
+        vim.schedule(function()
+            fail("stopped finder failed")
+        end)
+        return function() end
+    end,
+    retry_rows,
+    1000
+)
+assert(stop_stopped_error)
+stop_stopped_error()
+vim.wait(100, function() return false end, 10)
+assert(stopped_error_picker._sess_active_refresh_warning == nil)
+vim.api.nvim_buf_delete(stopped_error_prompt, { force = true })
+
 -- A synchronous generator keeps its snapshot as well as its finder and rows;
 -- otherwise identical rows can leave the dashboard title and cache stale.
 local sync_snapshot_prompt = vim.api.nvim_create_buf(false, true)

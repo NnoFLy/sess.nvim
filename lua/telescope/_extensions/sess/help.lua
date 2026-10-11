@@ -272,7 +272,7 @@ local function available(kind, item, value)
             return true
         end
         if item.id == "focus" then
-            return value.kind == "agent"
+            return value.kind == "agent" and value.current == true
         end
         return value.kind == "session" or value.kind == "agent"
     elseif kind == "restore" then

@@ -108,4 +108,25 @@ assert(#failed_snapshot.agents_by_id[session.id] == 1)
 assert(failed_snapshot.agents_by_id[session.id][1].name == "pi")
 api.agent.snapshot_active = original_snapshot_active
 
+-- A lifecycle mutation during hydration invalidates the captured active rows;
+-- the completion must restart from current runtime membership.
+local runtime_state = require("sess.state")
+local original_snapshot_active_for_stale = api.agent.snapshot_active
+local removed_during_probe = false
+api.agent.snapshot_active = function(session_id)
+    if not removed_during_probe then
+        removed_during_probe = true
+        runtime_state.remove_active_session(session.id)
+        runtime_state.set_current_session(nil)
+    end
+    return original_snapshot_active_for_stale(session_id)
+end
+local refreshed_snapshot
+api.active.snapshot_async(function(snapshot)
+    refreshed_snapshot = snapshot
+end, { marks = false })
+assert(vim.wait(1000, function() return refreshed_snapshot ~= nil end, 10))
+assert(#refreshed_snapshot.sessions == 0)
+api.agent.snapshot_active = original_snapshot_active_for_stale
+
 vim.fn.job_info = original_job_info

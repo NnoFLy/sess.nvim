@@ -259,8 +259,15 @@ function M.start(picker, generate, initial_rows, poll_interval)
         -- Keep the last committed rows and let the next poll retry it. Store a
         -- textual warning as well as logging it so status/footer integrations
         -- can expose the failure without relying on a highlight or icon.
+        if stopped then
+            return
+        end
         refreshing = false
+        local cancel = cancel_refresh
         cancel_refresh = nil
+        if cancel then
+            pcall(cancel)
+        end
         picker._sess_active_loading = false
         picker._sess_active_refresh_warning = tostring(err)
         require("sess.log").warn("Active picker refresh failed: " .. tostring(err))
@@ -272,20 +279,16 @@ function M.start(picker, generate, initial_rows, poll_interval)
         if stopped or not refreshing then
             return
         end
-        refreshing = false
-        cancel_refresh = nil
 
         -- A manual refresh and polling share this generation. Whichever
         -- request starts last owns the eventual commit; an older callback must
         -- not overwrite its rows, title, snapshot, or expansion state.
         if generation ~= picker._sess_active_refresh_generation then
-            rollback_state = nil
-            if pending_resize and not stopped then
-                pending_resize = false
-                refresh()
-            end
             return
         end
+
+        refreshing = false
+        cancel_refresh = nil
 
         -- Ignore probes started before a user mutation replaced the cached
         -- snapshot while the probe was yielding. The newer mutation owns the
@@ -365,9 +368,26 @@ function M.start(picker, generate, initial_rows, poll_interval)
         snapshot_at_refresh = picker._sess_active_snapshot
         rollback_state = capture_state(picker)
         local function complete(finder, next_rows, snapshot)
-            finish(generation, finder, next_rows, snapshot)
+            local completed, err = pcall(finish, generation, finder, next_rows, snapshot)
+            if not completed then
+                fail(err)
+            end
         end
-        local ok, handle, next_rows, snapshot = pcall(generate, picker._sess_expanded, complete)
+        local function async_error(err)
+            if
+                not stopped
+                and refreshing
+                and generation == picker._sess_active_refresh_generation
+            then
+                fail(err)
+            end
+        end
+        local ok, handle, next_rows, snapshot = pcall(
+            generate,
+            picker._sess_expanded,
+            complete,
+            async_error
+        )
         if not ok then
             if rollback_state then
                 restore_state(picker, rollback_state)

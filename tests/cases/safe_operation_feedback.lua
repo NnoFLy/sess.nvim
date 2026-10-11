@@ -7,6 +7,7 @@ assert(first and second)
 
 local selected = { value = first }
 local picker = {
+    prompt_bufnr = 1,
     finder = { results = { first, second } },
     refresh = function(self, finder, options)
         assert(options.reset_prompt == false)
@@ -59,5 +60,26 @@ assert(picker.selection ~= nil)
 local renamed_ok, renamed_err, renamed = api.session.get(first.id)
 assert(renamed_ok, renamed_err)
 fixture.equal("renamed", renamed.metadata.name)
+
+-- Closing the picker invalidates outstanding UI callbacks; they must not
+-- mutate the captured session or refresh the dead picker.
+actions.rename_session(1)
+assert(input_calls == 3)
+actions.on_picker_close(picker)
+input_callback("late rename")
+local still_renamed_ok, still_renamed_err, still_renamed = api.session.get(first.id)
+assert(still_renamed_ok, still_renamed_err)
+fixture.equal("renamed", still_renamed.metadata.name)
+
+local mark_callback
+vim.ui.input = function(_, callback)
+    mark_callback = callback
+end
+actions.mark_session(1)
+actions.on_picker_close(picker)
+mark_callback("z")
+local marks_ok, marks_err, marks = api.session.list_marks()
+assert(marks_ok, marks_err)
+assert(#marks == 0)
 
 vim.ui.input = original_input

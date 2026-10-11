@@ -1,8 +1,17 @@
 local M = {}
 
 -- This module alone owns mutable runtime records. All reads and writes copy.
-local state = { active_sessions = {}, agents_by_session = {}, focused_agents = {} }
+local state = {
+    active_sessions = {},
+    agents_by_session = {},
+    focused_agents = {},
+    active_generation = 0,
+}
 local views = {}
+
+local function bump_active_generation()
+    state.active_generation = state.active_generation + 1
+end
 
 function M.get_view(id)
     return views[id] and vim.deepcopy(views[id]) or nil
@@ -31,17 +40,20 @@ function M.add_active_session(session)
     for i, active in ipairs(state.active_sessions) do
         if active.id == session.id then
             state.active_sessions[i] = vim.deepcopy(session)
+            bump_active_generation()
             return
         end
     end
 
     table.insert(state.active_sessions, vim.deepcopy(session))
+    bump_active_generation()
 end
 
 function M.remove_active_session(id)
     for i = #state.active_sessions, 1, -1 do
         if state.active_sessions[i].id == id then
             table.remove(state.active_sessions, i)
+            bump_active_generation()
         end
     end
 end
@@ -57,6 +69,11 @@ end
 function M.set_current_session(session)
     state.current_session = session and vim.deepcopy(session) or nil
     vim.g.sess_current_session = session and session.metadata.name or nil
+    bump_active_generation()
+end
+
+function M.get_active_generation()
+    return state.active_generation
 end
 
 function M.get_current_session()
@@ -126,6 +143,7 @@ function M.replace(session)
     for i, active in ipairs(state.active_sessions) do
         if active.id == session.id then
             state.active_sessions[i] = vim.deepcopy(session)
+            bump_active_generation()
         end
     end
 end

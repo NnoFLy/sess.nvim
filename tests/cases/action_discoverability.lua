@@ -44,12 +44,19 @@ local active_session_entries = help.entries(
     action_help,
     { kind = "session", session_id = "session" }
 )
+local inactive_agent_entries = help.entries(
+    "active",
+    "i",
+    config.values.active_mappings,
+    action_help,
+    { kind = "agent", session_id = "session", agent_id = "agent", current = false }
+)
 local active_agent_entries = help.entries(
     "active",
     "i",
     config.values.active_mappings,
     action_help,
-    { kind = "agent", session_id = "session", agent_id = "agent" }
+    { kind = "agent", session_id = "session", agent_id = "agent", current = true }
 )
 local function has_id(entries, id)
     for _, entry in ipairs(entries) do
@@ -62,6 +69,7 @@ end
 assert(has_id(regular_entries, "copy_path"))
 assert(has_id(active_session_entries, "refresh"))
 assert(not has_id(active_session_entries, "focus"))
+assert(not has_id(inactive_agent_entries, "focus"))
 assert(has_id(active_agent_entries, "focus"))
 
 local global_regular_mappings = {

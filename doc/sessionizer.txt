@@ -422,20 +422,29 @@ Queries:                                         *sess-api.session.queries*
 
 State getters:                                            *sess-api.state*
     api.state.current(), api.state.prev(), api.state.active()
+    api.state.active_generation()
     Read-only defensive copies. vim.g.sess_current_session is the current name
-    or nil. No public state setters exist.
+    or nil. active_generation() returns a monotonically increasing integer;
+    active snapshots captured before a lifecycle mutation are stale. No public
+    state setters exist.
 
 Active query:                                             *sess-api.active*
     api.active.snapshot() returns one read-only application view containing
     sessions, agents_by_id, focused_by_id, marks_by_id, current_id, and
     diagnostics. Telescope and other UIs should format this snapshot rather
     than repeatedly querying session, mark, and agent APIs.
-    api.active.snapshot_async(callback) builds the same view incrementally,
-    yielding between active sessions. It returns a cancellation function;
-    the callback receives the completed snapshot unless the operation is
-    cancelled. Pass { marks = false } to skip mark discovery for status-only
-    refreshes; callers can reuse loaded marks. api.active.initial_snapshot()
-    returns the inexpensive session-header view used while a UI hydrates data.
+    api.active.snapshot_async(callback, options) builds the same view
+    incrementally, yielding between active sessions. It returns a cancellation
+    function; the callback receives the completed snapshot unless the operation
+    is cancelled. Pass { marks = false } to skip mark discovery for status-only
+    refreshes; callers can reuse loaded marks. Pass the prior view as
+    { previous_snapshot = snapshot } to preserve agent data when a probe fails.
+    An optional { on_error = function(err) end } receives errors raised while
+    building the snapshot and errors raised by the completion callback. Probe
+    failures are reported in diagnostics and stale_by_id; the prior agent data
+    is preserved when previous_snapshot is supplied, and completion still runs.
+    api.active.initial_snapshot() returns the inexpensive session-header view
+    used while a UI hydrates data.
 
 api.session.preview(target) returns read-only metadata and
 { session, snapshot_status, snapshot_available, snapshot_error }. It never

@@ -301,6 +301,10 @@ pending_callback = nil
 -- Focusing an agent reports its own completion after the API result is
 -- recorded. Non-fatal diagnostics must remain visible alongside that label.
 local original_focus = api.agent.focus
+local original_current = api.state.current
+api.state.current = function()
+    return session
+end
 action_state.get_selected_entry = function()
     return { value = { kind = "agent", session_id = session.id, agent_id = "pi" } }
 end
@@ -311,6 +315,7 @@ picker._sess_action_status = nil
 actions.focus_agent(1)
 assert(picker._sess_action_status == "Done with diagnostics")
 api.agent.focus = original_focus
+api.state.current = original_current
 
 -- The active picker must install the same close lifecycle contract as regular
 -- and restore pickers. Exercise the registered autocmd rather than invoking

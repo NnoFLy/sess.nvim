@@ -830,7 +830,7 @@ function M.active(opts)
             prompt_border:change_title(title)
         end
     end
-    require("sess.ui.active_refresh").start(picker, function(expanded_by_id, done)
+    require("sess.ui.active_refresh").start(picker, function(expanded_by_id, done, fail)
         picker._sess_active_loading = true
         return finders.generate_active_finder_async(
             expanded_by_id,
@@ -852,7 +852,11 @@ function M.active(opts)
                 available_width = layout.available_width(picker),
                 result_width = layout.result_width(picker),
             },
-            picker._sess_search_options
+            picker._sess_search_options,
+            function(err)
+                picker._sess_active_loading = false
+                fail(err)
+            end
         )
     end, rows, picker_opts.poll_interval)
 end

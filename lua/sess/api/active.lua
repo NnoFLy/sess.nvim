@@ -17,6 +17,7 @@ local function new_snapshot()
         stale_by_id = {},
         current_id = current and current.id or nil,
         diagnostics = {},
+        generation = state.active_generation(),
     }
 end
 
@@ -95,27 +96,64 @@ function M.snapshot_async(callback, options)
     local include_marks = options.marks ~= false
     local result = new_snapshot()
     local cancelled = false
+    local restart_cancel
+
+    local function report_error(err)
+        if cancelled or type(options.on_error) ~= "function" then
+            return
+        end
+        pcall(options.on_error, err)
+    end
+
+    local function complete()
+        if cancelled then
+            return
+        end
+        -- A lifecycle mutation can happen while agent probes yield. Never
+        -- hand a stale active row set to the picker; restart from live state.
+        if state.active_generation() ~= result.generation then
+            restart_cancel = M.snapshot_async(callback, options)
+            return
+        end
+        local ok, err = pcall(callback, result)
+        if not ok then
+            report_error(err)
+        end
+    end
+
     local async = vim.async
     if async then
         local task = async.run(function()
             if include_marks then
-                add_marks(result)
+                local ok, err = pcall(add_marks, result)
+                if not ok then
+                    report_error(err)
+                    return
+                end
                 async.sleep(0)
             end
             for _, session in ipairs(result.sessions) do
                 if cancelled or async.is_closing() then
                     return
                 end
-                add_agents(result, session, options.previous_snapshot)
+                local ok, err = pcall(add_agents, result, session, options.previous_snapshot)
+                if not ok then
+                    report_error(err)
+                    return
+                end
                 async.sleep(0)
             end
             if not cancelled and not async.is_closing() then
-                callback(result)
+                complete()
             end
         end)
         return function()
             cancelled = true
             task:close()
+            if restart_cancel then
+                restart_cancel()
+                restart_cancel = nil
+            end
         end
     end
 
@@ -127,11 +165,15 @@ function M.snapshot_async(callback, options)
         index = index + 1
         local session = result.sessions[index]
         if not session then
-            callback(result)
+            complete()
             return
         end
 
-        add_agents(result, session, options.previous_snapshot)
+        local ok, err = pcall(add_agents, result, session, options.previous_snapshot)
+        if not ok then
+            report_error(err)
+            return
+        end
         vim.schedule(step)
     end
 
@@ -140,7 +182,11 @@ function M.snapshot_async(callback, options)
             if cancelled then
                 return
             end
-            add_marks(result)
+            local ok, err = pcall(add_marks, result)
+            if not ok then
+                report_error(err)
+                return
+            end
             vim.schedule(step)
         end)
     else
@@ -149,6 +195,10 @@ function M.snapshot_async(callback, options)
 
     return function()
         cancelled = true
+        if restart_cancel then
+            restart_cancel()
+            restart_cancel = nil
+        end
     end
 end
 

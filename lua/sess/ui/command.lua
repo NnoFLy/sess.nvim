@@ -110,9 +110,14 @@ local function valid_mark_names()
     return result
 end
 
-local function mark_targets()
-    local result = mark_names()
-    vim.list_extend(result, session_names())
+local function escaped_matches(list, pattern)
+    local result = filter_by_pattern(list, pattern)
+    return vim.tbl_map(vim.fn.fnameescape, result)
+end
+
+local function mark_target_matches(pattern)
+    local result = filter_by_pattern(mark_names(), pattern)
+    vim.list_extend(result, escaped_matches(session_names(), pattern))
     return result
 end
 
@@ -183,7 +188,7 @@ local function complete(arg_lead, cmdline, cursorpos)
             completed_args = completed_args - 1
         end
         if completed_args == 0 then
-            return filter_by_pattern(deleted_session_names(), arg_lead:gsub("\\(.)", "%1"))
+            return escaped_matches(deleted_session_names(), arg_lead:gsub("\\(.)", "%1"))
         end
         return {}
     end
@@ -191,7 +196,7 @@ local function complete(arg_lead, cmdline, cursorpos)
     if completion_kind == "mark" or completion_kind == "mark-target" then
         local completed_args = count_completed_arguments(rest)
         if completion_kind == "mark-target" and completed_args == 1 then
-            return filter_by_pattern(session_names(), arg_lead:gsub("\\(.)", "%1"))
+            return escaped_matches(session_names(), arg_lead:gsub("\\(.)", "%1"))
         end
         if completed_args > 0 then
             return {}
@@ -210,7 +215,7 @@ local function complete(arg_lead, cmdline, cursorpos)
             return path.complete(lead)
         end
 
-        return filter_by_pattern(mark_targets(), lead)
+        return mark_target_matches(lead)
     end
 
     if completion_kind == "session" then
@@ -223,7 +228,7 @@ local function complete(arg_lead, cmdline, cursorpos)
         end
 
         if completed_args + 1 == completion_arg then
-            return filter_by_pattern(session_names(), arg_lead:gsub("\\(.)", "%1"))
+            return escaped_matches(session_names(), arg_lead:gsub("\\(.)", "%1"))
         end
 
         return {}
