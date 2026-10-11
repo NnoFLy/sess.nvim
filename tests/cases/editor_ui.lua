@@ -1,7 +1,7 @@
 fixture.setup()
 
 local editor = require("sess.editor")
-local ui2 = { wins = {} }
+local ui2 = { wins = {}, bufs = {} }
 local previous_ui2 = package.loaded["vim._core.ui2"]
 package.loaded["vim._core.ui2"] = ui2
 
@@ -14,14 +14,19 @@ local win = vim.api.nvim_open_win(buf, false, {
     height = 3,
 })
 ui2.wins.cmd = win
+ui2.bufs.cmd = buf
+vim.bo[buf].buflisted = true
 
 local view = editor.capture()
+assert(not view.buffers[buf], "editor-owned ui2 buffer was captured")
+assert(not view.listing[buf], "editor-owned ui2 listing was captured")
 for _, tab in ipairs(view.tabs) do
     assert(#tab.floats == 0, "editor-owned ui2 window was captured")
 end
 
 editor.hide()
 assert(vim.api.nvim_win_is_valid(win), "editor-owned ui2 window was closed")
+assert(vim.bo[buf].buflisted, "editor-owned ui2 buffer was unlisted")
 
 ui2.wins.cmd = nil
 vim.api.nvim_win_close(win, true)

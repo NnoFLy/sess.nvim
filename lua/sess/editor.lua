@@ -14,18 +14,38 @@ end
 -- Neovim's ui2 windows are owned by the editor, not by a session. Keep them
 -- out of captured views and do not close them while changing sessions.
 local ui2
-local function is_ui2_window(win)
+local function get_ui2()
     if ui2 == nil then
         local ok, module = pcall(require, "vim._core.ui2")
         ui2 = ok and module or false
     end
 
-    if not ui2 then
+    return ui2 or nil
+end
+
+local function is_ui2_window(win)
+    local module = get_ui2()
+    if not module then
         return false
     end
 
-    for _, target in pairs(ui2.wins or {}) do
+    for _, target in pairs(module.wins or {}) do
         if target == win then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function is_ui2_buffer(buf)
+    local module = get_ui2()
+    if not module then
+        return false
+    end
+
+    for _, target in pairs(module.bufs or {}) do
+        if target == buf then
             return true
         end
     end
@@ -46,9 +66,11 @@ function M.capture()
     }
 
     for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-        view.listing[buf] = vim.bo[buf].buflisted
-        if vim.bo[buf].buflisted then
-            view.buffers[buf] = true
+        if not is_ui2_buffer(buf) then
+            view.listing[buf] = vim.bo[buf].buflisted
+            if vim.bo[buf].buflisted then
+                view.buffers[buf] = true
+            end
         end
     end
 
@@ -114,8 +136,10 @@ function M.protected(fn)
 
     local ok, result = xpcall(function()
         for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-            hidden[buf] = vim.bo[buf].bufhidden
-            vim.bo[buf].bufhidden = "hide"
+            if not is_ui2_buffer(buf) then
+                hidden[buf] = vim.bo[buf].bufhidden
+                vim.bo[buf].bufhidden = "hide"
+            end
         end
 
         vim.o.hidden, vim.o.autowrite, vim.o.autowriteall = true, false, false
@@ -194,7 +218,9 @@ function M.hide()
     vim.api.nvim_win_set_buf(0, parking)
 
     for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-        vim.bo[buf].buflisted = false
+        if not is_ui2_buffer(buf) then
+            vim.bo[buf].buflisted = false
+        end
     end
 end
 
