@@ -330,22 +330,31 @@ local function base_score(base, prompt, entry)
     return score
 end
 
-local function rank_bonus(fields, query)
+local function rank_penalty(fields, query)
     query = lower(query)
+    if query == "" then
+        return 0
+    end
+
     local name = lower(fields.name)
     local mark = lower(fields.mark)
     if name == query then
-        return 1000000
-    elseif mark == query then
-        return 900000
+        return 0
     elseif name:sub(1, #query) == query then
-        return 100000
+        return 10
+    elseif name:find(query, 1, true) then
+        -- A name match must beat a path match even when the name contains the
+        -- query instead of starting with it. Telescope's base sorter scores
+        -- the combined ordinal and can otherwise prefer a path match.
+        return 20
+    elseif fuzzy_matches(name, query) then
+        return 30
+    elseif mark == query then
+        return 40
     elseif mark:sub(1, #query) == query then
-        return 90000
-    elseif lower(fields.cwd):find(query, 1, true) then
-        return 1000
+        return 50
     end
-    return 0
+    return 1000
 end
 
 function M.new_sorter(base, options)
@@ -397,7 +406,7 @@ function M.new_sorter(base, options)
         if score < 0 then
             return -1
         end
-        return score + rank_bonus(fields, query)
+        return score + rank_penalty(fields, query)
     end
     return sorter
 end

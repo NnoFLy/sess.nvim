@@ -113,7 +113,11 @@ local sorter = search.new_sorter({
 }, config.values.search)
 local exact = entry("frontend", "/tmp/other", "")
 local path = entry("other", "/tmp/frontend", "")
-assert(sorter.scoring_function("frontend", exact) > sorter.scoring_function("frontend", path))
+-- Lower scores sort first, so name matches must beat path-only matches.
+local path_score = sorter.scoring_function("frontend", path)
+assert(sorter.scoring_function("frontend", exact) < path_score)
+local name_substring = entry("my-frontend-app", "/tmp/other", "")
+assert(sorter.scoring_function("frontend", name_substring) < path_score)
 -- Telescope passes the sorter, prompt, ordinal, and entry to scoring_function.
 -- The extension must use the entry argument rather than the ordinal string.
 assert(sorter.scoring_function(sorter, "frontend", exact.ordinal, exact) > 0)

@@ -307,8 +307,9 @@ to another key or `false` to change or disable this mapping. Search covers
 names, paths, marks, session state, and agent details. Configure `search.fields`,
 `search.filters`, and `search.sort` (`default`, `recent`, `pinned`, `activity`,
 or `name`) to control interpretation and ordering; custom sorters still receive
-complete searchable ordinals. Exact name and mark matches remain ahead of loose
-path matches, and malformed filter-looking text remains ordinary search text.
+complete searchable ordinals. Name matches rank ahead of path-only matches;
+exact name and mark matches rank highest. Malformed filter-looking text remains
+ordinary search text.
 The default insert/normal mappings include `<C-y>` to copy the selected complete
 session path. Search supports practical match counts, interpreted filters (such
 as `status:working`), and non-default sort modes without adding status text to
