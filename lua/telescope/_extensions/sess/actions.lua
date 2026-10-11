@@ -373,6 +373,12 @@ local function refresh(prompt_bufnr, finder, key)
         mode = picker._sess_display_mode,
     }
     local next_finder = finder
+    if picker._sess_path_mode then
+        -- Path rows reuse their session/mark index while typing. Lifecycle
+        -- actions may change that index, so force the next path refresh to
+        -- take a fresh snapshot.
+        picker._sess_directory_context = nil
+    end
     if not next_finder and picker._sess_path_mode then
         local ok, prompt = pcall(action_state.get_current_line)
         next_finder = finders.generate_directory_finder(

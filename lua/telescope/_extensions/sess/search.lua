@@ -1,3 +1,5 @@
+local path = require("sess.ui.path")
+
 local M = {}
 
 local allowed_fields = {
@@ -269,6 +271,35 @@ local function entry_fields(entry)
         or {}
 end
 
+local function unescape(value)
+    return path.unescape(text(value))
+end
+
+local function path_prompt(value)
+    value = unescape(value)
+    return value:match("^~/") ~= nil
+        or value:match("^/") ~= nil
+        or value:match("^%./") ~= nil
+        or value:match("^%.%./") ~= nil
+end
+
+-- Directory enumeration performs the authoritative prefix match. Running the
+-- normal fuzzy sorter on the same prompt makes aliases such as ./ and ~/ look
+-- like ordinary search text, which can hide valid siblings and reorder them.
+local function directory_score(prompt, entry)
+    local value = entry and entry.value
+    if not value or value.directory ~= true or not path_prompt(prompt) then
+        return nil
+    end
+
+    local typed = unescape(prompt)
+    local candidate = unescape(value.prompt)
+    if candidate:sub(1, #typed) == typed then
+        return 0
+    end
+    return -1
+end
+
 local function base_score(base, prompt, entry)
     if not base then
         return 1
@@ -341,6 +372,11 @@ function M.new_sorter(base, options)
             -- Keep direct calls useful for integrations and unit tests.
             prompt, entry = first, second
         end
+        local directory_result = directory_score(prompt, entry)
+        if directory_result ~= nil then
+            return directory_result
+        end
+
         local fields = entry_fields(entry)
         local filter = M.parse_filter(prompt, options)
         local query = filter and filter.query or prompt

@@ -3,7 +3,10 @@ local path_utils = require("sess.path")
 local M = {}
 
 local function unescape(value)
-    return (value or ""):gsub("\\\\(.)", "%1")
+    value = type(value) == "string" and value or ""
+    return (value:gsub("\\(.)", function(character)
+        return character
+    end))
 end
 
 local function home()
@@ -185,8 +188,13 @@ function M.complete(input)
     end
 
     local results = {}
+    local typed = unescape(input)
     for _, entry in ipairs(entries) do
-        results[#results + 1] = vim.fn.fnameescape(entry.prompt)
+        -- Returning the exact input makes Vim treat completion as already
+        -- finished and hide the sibling directories from the menu.
+        if entry.prompt ~= typed then
+            results[#results + 1] = vim.fn.fnameescape(entry.prompt)
+        end
     end
 
     return results

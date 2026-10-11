@@ -719,15 +719,7 @@ function M.generate_deleted_finder(display_opts, search_options)
 end
 
 ---@return table
-local function build_directory_finder(prompt, display_opts, agents_by_id, cached_candidates, search_options)
-    local candidates, err = cached_candidates, nil
-    if not candidates then
-        candidates, err = path.enumerate(prompt)
-        if err then
-            log.error(err)
-        end
-    end
-
+function M.directory_context()
     local ok, list_err, sessions, diagnostics = api.session.list()
     if not ok then
         log.error(list_err)
@@ -737,22 +729,52 @@ local function build_directory_finder(prompt, display_opts, agents_by_id, cached
         log.warn(diagnostic)
     end
 
-    local display = display_options(
-        vim.tbl_deep_extend("force", configured_display_options(), display_opts or {})
-    )
     local by_path = {}
-    local mark_by_id, mark_width = mark_columns()
-    local active_by_id = {}
-    for _, active in ipairs(state.active()) do
-        active_by_id[active.id] = true
-    end
-    local current = state.current()
-    local previous = state.prev()
     local name_width = 0
     for _, session in ipairs(sessions) do
         by_path[path_utils.identity(session.metadata.cwd) or session.metadata.cwd] = session
         name_width = math.max(name_width, vim.fn.strdisplaywidth(session.metadata.name))
     end
+
+    local mark_by_id, mark_width = mark_columns()
+    local active_by_id = {}
+    for _, active in ipairs(state.active()) do
+        active_by_id[active.id] = true
+    end
+
+    return {
+        sessions = sessions,
+        by_path = by_path,
+        mark_by_id = mark_by_id,
+        mark_width = mark_width,
+        active_by_id = active_by_id,
+        current = state.current(),
+        previous = state.prev(),
+        name_width = name_width,
+    }
+end
+
+---@return table
+local function build_directory_finder(prompt, display_opts, agents_by_id, cached_candidates, search_options, context)
+    local candidates, err = cached_candidates, nil
+    if not candidates then
+        candidates, err = path.enumerate(prompt)
+        if err then
+            log.error(err)
+        end
+    end
+
+    context = context or M.directory_context()
+    local display = display_options(
+        vim.tbl_deep_extend("force", configured_display_options(), display_opts or {})
+    )
+    local by_path = context.by_path
+    local mark_by_id = context.mark_by_id
+    local mark_width = context.mark_width
+    local active_by_id = context.active_by_id
+    local current = context.current
+    local previous = context.previous
+    local name_width = context.name_width
 
     for _, candidate in ipairs(candidates) do
         local candidate_path = path_utils.identity(candidate.path) or candidate.path
@@ -787,6 +809,17 @@ local function build_directory_finder(prompt, display_opts, agents_by_id, cached
             name_width = name_width,
             display = display,
         })
+        local session_id = session and session.id
+        local search_fields = search.fields_for_session(display_session, {
+            mark = mark_by_id[session_id],
+            current = current and session and current.id == session_id,
+            active = session and active_by_id[session_id] == true,
+            previous = previous and session and previous.id == session_id,
+            agents = session and agents_by_id[session_id],
+        })
+        -- Directory prompts use aliases such as ./, ../, and ~/. Keep the
+        -- typed form searchable alongside the canonical path used by sessions.
+        search_fields.cwd = search_fields.cwd .. " " .. candidate.prompt
         results[#results + 1] = {
             path = candidate.path,
             prompt = candidate.prompt,
@@ -796,20 +829,8 @@ local function build_directory_finder(prompt, display_opts, agents_by_id, cached
             metadata = metadata,
             display = display_parts_text(display_parts),
             display_parts = display_parts,
-            search_fields = search.fields_for_session(display_session, {
-                mark = mark_by_id[session and session.id],
-                current = current and session and current.id == session.id,
-                active = session and active_by_id[session.id] == true,
-                previous = previous and session and previous.id == session.id,
-                agents = session and agents_by_id[session.id],
-            }),
-            ordinal = search.ordinal(search.fields_for_session(display_session, {
-                mark = mark_by_id[session and session.id],
-                current = current and session and current.id == session.id,
-                active = session and active_by_id[session.id] == true,
-                previous = previous and session and previous.id == session.id,
-                agents = session and agents_by_id[session.id],
-            })),
+            search_fields = search_fields,
+            ordinal = search.ordinal(search_fields),
         }
     end
     results = search.sort_results(results, search_options.sort)
@@ -827,24 +848,31 @@ local function build_directory_finder(prompt, display_opts, agents_by_id, cached
     })
 end
 
-function M.generate_directory_finder(prompt, display_opts, callback, previous_snapshot, search_options)
+function M.generate_directory_finder(prompt, display_opts, callback, previous_snapshot, search_options, context)
     local candidates, err = path.enumerate(prompt)
     if err then
         log.error(err)
     end
-    local finder = build_directory_finder(prompt, display_opts, {}, candidates, search_options)
+    local finder = build_directory_finder(prompt, display_opts, {}, candidates, search_options, context)
     if not callback then
         return finder
     end
 
     local cancel = hydrate_search_finder(callback, previous_snapshot, function(agents_by_id)
-        return build_directory_finder(prompt, display_opts, agents_by_id, candidates, search_options)
+        return build_directory_finder(prompt, display_opts, agents_by_id, candidates, search_options, context)
     end)
     return finder, cancel
 end
 
-function M.generate_directory_finder_async(prompt, display_opts, callback, previous_snapshot, search_options)
-    local _, cancel = M.generate_directory_finder(prompt, display_opts, callback, previous_snapshot, search_options)
+function M.generate_directory_finder_async(prompt, display_opts, callback, previous_snapshot, search_options, context)
+    local _, cancel = M.generate_directory_finder(
+        prompt,
+        display_opts,
+        callback,
+        previous_snapshot,
+        search_options,
+        context
+    )
     return cancel
 end
 

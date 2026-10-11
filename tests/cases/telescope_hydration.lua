@@ -45,6 +45,7 @@ package.loaded["telescope.pickers"] = {
             height = 2,
         })
         local picker = {
+            options = options,
             finder = options.finder,
             prompt_bufnr = prompt_bufnr,
             prompt_win = prompt_win,
@@ -114,6 +115,34 @@ pickers.sess()
 local picker = picker_instances[2]
 _G.hydration_picker = picker
 local stale_callback = hydration_callback
+
+-- Path input must stay synchronous and cheap. Directory completion already
+-- filters filesystem rows, so it must not start an agent probe per keypress;
+-- its session metadata index is reused while the prompt remains in path mode.
+local api = require("sess.api")
+local original_snapshot_async = api.active.snapshot_async
+local original_directory_context = finders.directory_context
+local context_calls = 0
+finders.directory_context = function()
+    context_calls = context_calls + 1
+    return original_directory_context()
+end
+api.active.snapshot_async = function()
+    error("path input must not probe agents")
+end
+local path_filter = picker.options.on_input_filter_cb
+assert(type(path_filter) == "function")
+assert(path_filter("./"))
+assert(path_filter("./h"))
+assert(context_calls == 1, "path metadata should be cached while typing")
+api.active.snapshot_async = function(callback)
+    callback({ agents_by_id = {}, diagnostics = {} })
+    return function() end
+end
+assert(path_filter("sessions"))
+api.active.snapshot_async = original_snapshot_async
+finders.directory_context = original_directory_context
+
 refreshes = picker.refresh_count
 selected = { value = session }
 require("telescope._extensions.sess.actions").toggle_pin_session(picker.prompt_bufnr)
