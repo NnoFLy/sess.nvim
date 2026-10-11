@@ -24,57 +24,8 @@ local function clear_transient_action_status(picker)
     end
 end
 
-local function picker_status_text(picker, kind, mappings, help_options, selected)
-    local action_status = picker and picker._sess_action_status
-    local options = picker and picker._sess_search_options or {}
-    local prompt
-    local ok, value = pcall(action_state.get_current_line)
-    if ok then
-        prompt = value
-    end
-    local count
-    local manager = picker and picker.manager
-    if manager and type(manager.num_results) == "function" then
-        local count_ok, result = pcall(manager.num_results, manager)
-        if count_ok and type(result) == "number" then
-            count = result
-        end
-    end
-    local feedback, filter = search.feedback(prompt or "", options, count)
-    if picker then
-        picker._sess_search_filter = filter
-        picker._sess_search_count = count
-        picker._sess_sort_mode = options.sort or "default"
-    end
-    local footer = help.footer(kind, vim.fn.mode(1), mappings, help_options, selected)
-    local parts = {}
-    if picker and kind == "active" and picker._sess_active_refresh_warning then
-        parts[#parts + 1] = "Warning: " .. tostring(picker._sess_active_refresh_warning)
-    end
-    if action_status then
-        parts[#parts + 1] = action_status
-    end
-    if feedback then
-        parts[#parts + 1] = feedback
-    end
-    if footer then
-        parts[#parts + 1] = footer
-    end
-    local text = table.concat(parts, "  ")
-    if text == "" then
-        return nil
-    end
-    local width
-    if picker and type(picker.results_win) == "number" then
-        local width_ok, result = pcall(vim.api.nvim_win_get_width, picker.results_win)
-        if width_ok and result > 0 then
-            width = result - 4
-        end
-    end
-    if width and vim.fn.strdisplaywidth(text) > width then
-        text = layout.truncate_end(text, math.max(1, width))
-    end
-    return text
+local function picker_status_text(_, kind, mappings, help_options)
+    return help.footer(kind, vim.fn.mode(1), mappings, help_options)
 end
 
 local function apply_mappings(map, mappings)

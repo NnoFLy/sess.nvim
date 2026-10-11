@@ -119,26 +119,14 @@ action_state.get_selected_entry = function()
     return nil
 end
 
-local regular_footer = help.footer("regular", "i", config.values.mappings, action_help)
-assert(regular_footer:find("<CR>", 1, true))
-assert(regular_footer:find("<Tab>", 1, true))
-assert(regular_footer:find("<C-d>", 1, true))
-assert(regular_footer:find("?", 1, true))
-
-local normal_footer = help.footer("regular", "n", config.values.mappings, action_help)
-assert(normal_footer:find("dd", 1, true))
-assert(normal_footer:find("rr", 1, true))
-assert(not normal_footer:find("<C-r> rename", 1, true))
-
-local new_footer = help.footer(
-    "regular",
-    "i",
-    config.values.mappings,
-    action_help,
-    { directory = true, path = "/tmp/new" }
+assert(help.footer("regular", "i", config.values.mappings, action_help) == "? - help")
+assert(help.footer("regular", "n", config.values.mappings, action_help) == "? - help")
+assert(
+    help.footer("regular", "i", config.values.mappings, action_help, {
+        directory = true,
+        path = "/tmp/new",
+    }) == "? - help"
 )
-assert(new_footer:find("<Tab>", 1, true))
-assert(new_footer:find("<CR>", 1, true))
 
 local active_lines = table.concat(
     help.lines("active", config.values.active_mappings, action_help, {
@@ -151,17 +139,16 @@ assert(not active_lines:find("Assign mark", 1, true))
 
 local custom_action = function() end
 local custom_mappings = { i = { ["<C-x>"] = custom_action }, n = {} }
-local custom_footer = help.footer("regular", "i", custom_mappings, action_help)
-assert(custom_footer:find("<C-x> Run action", 1, true))
+assert(help.footer("regular", "i", custom_mappings, action_help) == "? - help")
 
-local conflict_footer = help.footer(
-    "regular",
-    "i",
-    { i = { ["?"] = actions.mark_session } },
-    action_help
+assert(
+    help.footer(
+        "regular",
+        "i",
+        { i = { ["?"] = actions.mark_session } },
+        action_help
+    ) == nil
 )
-assert(conflict_footer:find("? mark", 1, true))
-assert(not conflict_footer:find("? actions", 1, true))
 
 local same_label_lines = table.concat(
     help.lines(
@@ -177,47 +164,11 @@ local same_label_lines = table.concat(
 assert(same_label_lines:find("Insert mode", 1, true))
 assert(same_label_lines:find("Normal mode", 1, true))
 
+-- Help remains a single, stable hint regardless of the picker width.
 local original_columns = vim.o.columns
 vim.o.columns = 12
-local narrow_footer = help.footer("regular", "i", config.values.mappings, action_help)
-assert(vim.fn.strdisplaywidth(narrow_footer) <= vim.o.columns - 4)
-
-local narrow_conflict_footer = help.footer(
-    "regular",
-    "i",
-    { i = { ["?"] = actions.mark_session } },
-    action_help
-)
-assert(not narrow_conflict_footer:find("? actions", 1, true))
+assert(help.footer("regular", "i", config.values.mappings, action_help) == "? - help")
 vim.o.columns = original_columns
-
--- Footer text is bounded by the active floating window, not the full editor.
-local footer_buf = vim.api.nvim_create_buf(false, true)
-local footer_win = vim.api.nvim_open_win(footer_buf, true, {
-    relative = "editor",
-    row = 1,
-    col = 1,
-    width = 12,
-    height = 3,
-})
-package.loaded["telescope.state"] = {
-    get_status = function()
-        return { picker = { results_win = footer_win } }
-    end,
-}
-local floating_footer = help.footer("regular", "i", config.values.mappings, action_help)
-assert(vim.fn.strdisplaywidth(floating_footer) <= 8)
-
--- Final footer shortening uses display cells and must not split a multibyte key.
-vim.api.nvim_win_set_width(footer_win, 7)
-local unicode_footer = help.footer("regular", "i", { i = { ["界界"] = actions.mark_session } }, {
-    action_help = { key = false },
-})
-assert(vim.fn.strdisplaywidth(unicode_footer) <= 3)
-assert(unicode_footer == "界…", unicode_footer)
-package.loaded["telescope.state"] = nil
-vim.api.nvim_win_close(footer_win, true)
-vim.api.nvim_buf_delete(footer_buf, { force = true })
 
 -- Telescope closes a picker on BufLeave. Sess suspends that ownership before
 -- entering the help popup, so the prompt remains available while help is open.
@@ -262,8 +213,7 @@ end)
 assert(mapped["i:?"] == config.values.mappings.i["?"])
 assert(type(mapped["n:?"]) == "function")
 
--- Action feedback is composed with live count/footer data and keeps errors
--- actionable instead of replacing the status line indefinitely.
+-- The prompt status stays free of action, search, and result-count ghost text.
 created_picker.manager = { num_results = function() return 3 end }
 created_picker._sess_search_options = vim.tbl_deep_extend(
     "force",
@@ -271,22 +221,8 @@ created_picker._sess_search_options = vim.tbl_deep_extend(
     created_picker._sess_search_options or {},
     { sort = "name" }
 )
-action_state.get_current_line = function()
-    return "status:working"
-end
-created_picker._sess_action_status = "Done"
-local composed_status = picker_options[1].get_status_text()
-assert(composed_status:find("Done", 1, true))
-assert(composed_status:find("status:working", 1, true))
-assert(composed_status:find("3 matches", 1, true))
-assert(composed_status:find("sort:name", 1, true))
-picker_options[1].on_input_filter_cb("status:working")
-local filtered_status = picker_options[1].get_status_text()
-assert(not filtered_status:find("Done", 1, true))
-assert(filtered_status:find("status:working", 1, true))
-assert(filtered_status:find("3 matches", 1, true))
 created_picker._sess_action_status = "Failed: write failed"
-assert(picker_options[1].get_status_text():find("Failed: write failed", 1, true))
+assert(picker_options[1].get_status_text() == "? - help")
 
 config.setup({ action_help = { key = false, footer = false } })
 assert(help.help_key({ action_help = config.values.action_help }) == nil)
@@ -323,7 +259,7 @@ local active_cycle_footer = help.footer(
     { i = { ["<C-s>"] = actions.cycle_sort } },
     { action_help = { enabled = true, footer = true, key = "?" } }
 )
-assert(active_cycle_footer:find("<C-s>", 1, true))
+assert(active_cycle_footer == "? - help")
 config.setup({
     search = { cycle_sort = true },
     active_mappings = { i = { ["<C-s>"] = false } },

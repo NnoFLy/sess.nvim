@@ -204,7 +204,7 @@ for _, options in ipairs(picker_options) do
 end
 
 local restore_picker_options = picker_options[2]
-assert(restore_picker_options.get_status_text() == "<CR> restore   ? actions")
+assert(restore_picker_options.get_status_text() == "? - help")
 local active_picker_options = picker_options[3]
 assert(active_picker_options.prompt_title == "ACTIVE SESSIONS · 2 sessions · 0 agents")
 assert(active_picker_options.sorter._sess_active_sorter)
@@ -212,10 +212,7 @@ assert(getmetatable(active_picker_options.sorter) == sorter_methods)
 assert(type(active_picker_options.sorter._init) == "function")
 assert(type(active_picker_options.sorter._destroy) == "function")
 local status_text = active_picker_options.get_status_text()
-assert(
-    status_text
-        == "<C-b>  <C-j>  <C-k>  <C-o>  <C-r>  <C-y>  <CR>  <S-Tab>  <Tab>  ? actions"
-)
+assert(status_text == "? - help")
 for _, row in ipairs(active_picker_options.finder.results) do
     assert(row.kind ~= "agent", "active picker should hydrate agents asynchronously")
     if row.kind == "session" then
@@ -243,8 +240,7 @@ assert(mapped.i["<C-r>"] == nil)
 assert(mapped.i["<C-j>"] == nil)
 assert(mapped.i["<C-k>"] == nil)
 local independent_status = independent_active_options.get_status_text()
-assert(independent_status:find("<C-x>", 1, true))
-assert(not independent_status:find("<C-j>", 1, true))
+assert(independent_status == "? - help")
 
 local hydrated_snapshot = {
     sessions = { { id = "one" }, { id = "two" } },

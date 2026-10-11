@@ -308,10 +308,11 @@ or `name`) to control interpretation and ordering; custom sorters still receive
 complete searchable ordinals. Exact name and mark matches remain ahead of loose
 path matches, and malformed filter-looking text remains ordinary search text.
 The default insert/normal mappings include `<C-y>` to copy the selected complete
-session path. Search status shows practical match counts, interpreted filters
-(such as `status:working`), and non-default sort modes without changing the
-prompt. Set `search.show_count` or `search.show_sort` to `false` to hide
-those parts.
+session path. Search supports practical match counts, interpreted filters (such
+as `status:working`), and non-default sort modes without adding status text to
+the prompt. The prompt keeps only the `? - help` hint by default.
+`search.show_count` and `search.show_sort` remain accepted for compatibility but
+are not rendered there.
 Set `search.cycle_sort` to `true` (default key `<C-s>`), a key string, or
 `{ i = "<key>", n = "<key>" }` to opt into cycling through `default`, `recent`,
 `pinned`, `activity`, and `name`. Existing mappings win; use `false` for a mode
@@ -329,9 +330,9 @@ mappings always take precedence. Header arrows indicate expansion state, and
 agent summaries include textual loading, stale, blocked, and unknown states. Refresh
 preserves prompt, selection, and expansion; a disappeared agent selects its
 parent header. Override or disable any mapping with `mappings` or
-`active_mappings` (use `false`). The `action_help` footer and `?` popup
-describe applicable actions for the selected row and mark row-specific actions
-unavailable when they do not apply. The private preview is read-only: it
+`active_mappings` (use `false`). The prompt keeps only the `? - help` hint; the
+`?` popup describes applicable actions for the selected row, marking row-specific
+actions unavailable when they do not apply. The private preview is read-only: it
 shows identity, state, and editor statistics when available, plus snapshot
 diagnostics, bounded active-agent status, and the
 action Enter would perform. `show_snapshot_summary`, `show_agents`,
@@ -344,7 +345,7 @@ usable rows and expose diagnostics; successful operations may also report
 non-fatal diagnostics. Use `:Sess active` for a live view of active sessions
 and their agents.
 
-Rows and status/footer text are measured in screen cells, so long paths and
+Rows and the help hint use screen-cell widths, so long paths and
 Unicode names are truncated without splitting wide characters and without
 losing searchable/action values. Narrow terminals collapse secondary labels
 and hide the preview when needed. Set `icons = false` or `ascii_fallback = true`

@@ -1,7 +1,6 @@
 local M = {}
 
 local actions = require("telescope._extensions.sess.actions")
-local layout = require("telescope._extensions.sess.layout")
 
 local descriptors = {
     regular = {
@@ -140,10 +139,6 @@ local function display_width(value)
     return #value
 end
 
-local function shorten(value, width)
-    return layout.truncate_end(value, width)
-end
-
 local function custom_description(custom, kind, mode, key, action, fallback)
     if type(custom) ~= "table" then
         return fallback
@@ -192,58 +187,6 @@ local function selected_value()
     end
     local selected_ok, selected = pcall(action_state.get_selected_entry)
     return selected_ok and selected and selected.value or nil
-end
-
-local function picker_width(picker)
-    if not picker then
-        return nil
-    end
-    local windows = {
-        picker.results_win,
-        picker.prompt_win,
-        picker.layout
-            and picker.layout.results
-            and (picker.layout.results.winid or picker.layout.results.win_id),
-    }
-    for _, win in ipairs(windows) do
-        if type(win) == "number" and vim.api.nvim_win_is_valid(win) then
-            local width_ok, width = pcall(vim.api.nvim_win_get_width, win)
-            if width_ok and width > 0 then
-                return width
-            end
-        end
-    end
-    return nil
-end
-
-local function current_picker_width()
-    local current_buf = vim.api.nvim_get_current_buf()
-    local ok, telescope_state = pcall(require, "telescope.state")
-    if ok and type(telescope_state.get_status) == "function" then
-        local prompt_bufnrs = { current_buf }
-        if type(telescope_state.get_existing_prompt_bufnrs) == "function" then
-            local bufnrs_ok, existing = pcall(telescope_state.get_existing_prompt_bufnrs)
-            if bufnrs_ok and type(existing) == "table" then
-                prompt_bufnrs = existing
-            end
-        end
-        for _, prompt_bufnr in ipairs(prompt_bufnrs) do
-            local status_ok, status = pcall(telescope_state.get_status, prompt_bufnr)
-            local width = status_ok and status and picker_width(status.picker)
-            if width then
-                return width
-            end
-        end
-    end
-
-    local win_ok, win = pcall(vim.api.nvim_get_current_win)
-    if win_ok and vim.api.nvim_win_is_valid(win) then
-        local width_ok, width = pcall(vim.api.nvim_win_get_width, win)
-        if width_ok and width > 0 then
-            return width
-        end
-    end
-    return vim.o.columns or 80
 end
 
 local function available(kind, item, value)
@@ -328,7 +271,7 @@ function M.entries(kind, mode, mappings, options, value)
     return entries(kind, mode_name(mode), mappings, descriptions, value, false)
 end
 
-function M.footer(kind, mode, mappings, options, value)
+function M.footer(kind, mode, mappings, options)
     local action_help = get_action_help(options)
     if
         action_help == false
@@ -339,57 +282,11 @@ function M.footer(kind, mode, mappings, options, value)
     end
 
     mode = mode_name(mode or current_mode())
-    local descriptions = type(action_help) == "table" and action_help.descriptions or nil
-    local items = entries(kind, mode, mappings, descriptions, value, true)
-    local parts = {}
-    for _, item in ipairs(items) do
-        local text = item.key .. " " .. item.short
-        if value and not item.available then
-            text = text .. " unavailable"
-        end
-        parts[#parts + 1] = text
-    end
     local key = help_key(options)
-    if key and not (mappings and mappings[mode] and mappings[mode][key] ~= nil) then
-        parts[#parts + 1] = key .. " actions"
+    if not key or (mappings and mappings[mode] and mappings[mode][key] ~= nil) then
+        return nil
     end
-
-    local full = table.concat(parts, "   ")
-    local max_width = math.max(1, math.floor(current_picker_width()) - 4)
-    if display_width(full) <= max_width then
-        return full
-    end
-
-    local compact_parts = {}
-    for _, item in ipairs(items) do
-        local label = item.short
-            :gsub("switch/focus", "focus")
-            :gsub("switch", "sw")
-            :gsub("expand/collapse", "expand")
-            :gsub("rename", "ren")
-            :gsub("unload", "unld")
-            :gsub("delete", "del")
-        local text = item.key .. " " .. label
-        if value and not item.available then
-            text = item.key .. " unavailable"
-        end
-        compact_parts[#compact_parts + 1] = text
-    end
-    if key and not (mappings and mappings[mode] and mappings[mode][key] ~= nil) then
-        compact_parts[#compact_parts + 1] = key .. " actions"
-    end
-    local compact = table.concat(compact_parts, "  ")
-    if display_width(compact) > max_width then
-        local keys = {}
-        for _, item in ipairs(items) do
-            keys[#keys + 1] = item.key
-        end
-        if key and not (mappings and mappings[mode] and mappings[mode][key] ~= nil) then
-            keys[#keys + 1] = key .. " actions"
-        end
-        compact = table.concat(keys, "  ")
-    end
-    return shorten(compact, max_width)
+    return key .. " - help"
 end
 
 function M.lines(kind, mappings, options, value)
