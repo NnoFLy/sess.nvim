@@ -173,4 +173,6 @@ Observers receive defensive payloads containing the operation, affected session,
 - Add behavior at the shared lifecycle/API layer instead of duplicating it in commands or Telescope.
 - Treat rollback as limited to reversible editor operations; do not claim to undo arbitrary user code or autocmd side effects.
 - Preserve the distinction between operation failure and successful operation with diagnostics.
+- Keep editor-owned UI buffers and plugin callbacks outside session teardown; drain queued lifecycle callbacks before destructive buffer cleanup.
+- Skip UI observers during VimLeavePre autosave while still persisting the session.
 - Add regression tests for both success and failure paths, especially around corruption, partial I/O failure, hooks, events, and unload safety.

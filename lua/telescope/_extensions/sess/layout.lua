@@ -387,10 +387,29 @@ function M.on_resize(picker, callback)
         end
         autocmds = {}
     end
+    local function picker_is_alive()
+        if picker.closed == true then
+            return false
+        end
+
+        local valid, is_valid = pcall(vim.api.nvim_buf_is_valid, picker.prompt_bufnr)
+        return valid and is_valid
+    end
+
     autocmds[#autocmds + 1] = vim.api.nvim_create_autocmd("VimResized", {
         callback = function()
-            if not stopped then
-                callback(M.available_width(picker), M.result_width(picker))
+            if stopped then
+                return
+            end
+            if not picker_is_alive() then
+                stop()
+                return
+            end
+
+            local ok, err = pcall(callback, M.available_width(picker), M.result_width(picker))
+            if not ok then
+                stop()
+                error(err)
             end
         end,
     })

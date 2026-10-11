@@ -230,8 +230,10 @@ Available events are `SessCreated`, `SessLoaded`, `SessSaved`, `SessUnloaded`,
 `SessUnmarked`.
 
 State is committed before `after_operation` runs and before the event fires.
-Observers can query state but cannot start another lifecycle mutation. Errors
-from post-operation hooks and subscribers do not undo a successful operation.
+Observers can query state but cannot start another lifecycle mutation. During
+exit autosave, persistence still runs but hooks and User events are skipped
+because the editor is shutting down. Errors from post-operation hooks and
+subscribers do not undo a successful operation.
 
 ## Telescope picker
 

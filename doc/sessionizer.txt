@@ -499,6 +499,8 @@ emit SessSaved before destination operations. Create emits SessCreated, not
 SessLoaded. Switching does not unload the outgoing session. Explicit unload
 emits SessUnloaded. Current deletion emits SessUnloaded then SessDeleted;
 non-current deletion emits only SessDeleted. Same-session load emits nothing.
+During VimLeavePre autosave, persistence still runs but hooks and User events
+are skipped because the editor is already shutting down.
 
 Post-hook and subscriber errors never turn completed operations into failures.
 Neovim may display subscriber errors itself; errors exposed through its API or
@@ -552,10 +554,11 @@ leave partial editor changes. Post-save/load metadata failures are diagnostics
 if the snapshot/editor change has already completed.
 
 Unload rechecks buffer identity, modified text and live job IDs after consent
-and before each deletion. New resources or edits abort and require a retry.
-Terminal output alone does not invalidate consent. File writes, wiped buffers
-and stopped processes cannot be rolled back. A failed write can leave earlier
-files saved; a teardown failure can leave some buffers/jobs already closed.
+and before each deletion. Queued editor callbacks are drained before final
+teardown checks. New resources or edits abort and require a retry. Terminal
+output alone does not invalidate consent. File writes, wiped buffers and
+stopped processes cannot be rolled back. A failed write can leave earlier files
+saved; a teardown failure can leave some buffers/jobs already closed.
 Remaining editor state is restored where possible; failure does not emit
 SessUnloaded or remove the session from active records.
 

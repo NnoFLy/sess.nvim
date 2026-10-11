@@ -63,11 +63,16 @@ pcall(vim.api.nvim_del_autocmd, wipe)
 assert(not ok and err:match("changed during unload"))
 assert(vim.api.nvim_buf_is_valid(added) and vim.bo[added].modified)
 fixture.equal({ "late edit" }, vim.api.nvim_buf_get_lines(added, 0, -1, false))
+local queued_callback_saw_buffer
+vim.schedule(function()
+    queued_callback_saw_buffer = vim.api.nvim_buf_is_valid(added)
+end)
 assert(api.session.unload(item, {
     confirm = function()
         return "discard"
     end,
 }))
+assert(queued_callback_saw_buffer, "queued callbacks ran after buffer teardown")
 
 -- An exited terminal has no running job to confirm.
 local _, _, finished = api.session.create(fixture.directory("finished"))

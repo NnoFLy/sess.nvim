@@ -26,24 +26,37 @@ local function retained_buffers(id)
 end
 
 local function describe(buf)
-    if not vim.api.nvim_buf_is_valid(buf) then
+    local ok, record = pcall(function()
+        if not vim.api.nvim_buf_is_valid(buf) then
+            return nil
+        end
+
+        local terminal = vim.bo[buf].buftype == "terminal"
+        local job = terminal and vim.b[buf].terminal_job_id or nil
+        if job and vim.fn.jobwait({ job }, 0)[1] ~= -1 then
+            job = nil
+        end
+
+        return {
+            buf = buf,
+            name = vim.api.nvim_buf_get_name(buf),
+            modified = not terminal and vim.bo[buf].modified,
+            changedtick = vim.api.nvim_buf_get_changedtick(buf),
+            terminal = terminal,
+            job = job,
+        }
+    end)
+
+    if ok then
+        return record
+    end
+
+    local valid, is_valid = pcall(vim.api.nvim_buf_is_valid, buf)
+    if not valid or not is_valid then
         return nil
     end
 
-    local terminal = vim.bo[buf].buftype == "terminal"
-    local job = terminal and vim.b[buf].terminal_job_id or nil
-    if job and vim.fn.jobwait({ job }, 0)[1] ~= -1 then
-        job = nil
-    end
-
-    return {
-        buf = buf,
-        name = vim.api.nvim_buf_get_name(buf),
-        modified = not terminal and vim.bo[buf].modified,
-        changedtick = vim.api.nvim_buf_get_changedtick(buf),
-        terminal = terminal,
-        job = job,
-    }
+    error(record)
 end
 
 local function collect(item)
@@ -211,6 +224,14 @@ function M.close(plan)
     table.sort(buffers)
     for _, buf in ipairs(buffers) do
         if not retained_buffers(plan.item.id)[buf] then
+            -- Buffer/window lifecycle callbacks may have been queued by the
+            -- transition itself. Drain them before taking the final identity
+            -- snapshot or deleting the buffer.
+            local drained, drain_err = pcall(vim.wait, 0)
+            if not drained then
+                return false, "failed to drain buffer callbacks: " .. tostring(drain_err)
+            end
+
             local actual = describe(buf)
             if actual then
                 local expected = plan.buffers[buf]
