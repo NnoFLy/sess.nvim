@@ -35,6 +35,21 @@ local descriptors = {
             short = "delete",
             label = "Delete with confirmation",
         },
+        [actions.toggle_display] = {
+            id = "density",
+            short = "density",
+            label = "Toggle compact/detailed rows",
+        },
+        [actions.copy_path] = {
+            id = "copy_path",
+            short = "copy path",
+            label = "Copy session path",
+        },
+        [actions.cycle_sort] = {
+            id = "cycle_sort",
+            short = "sort",
+            label = "Cycle sort mode",
+        },
     },
     active = {
         [actions.active_enter] = {
@@ -52,10 +67,40 @@ local descriptors = {
             short = "all",
             label = "Toggle all expansion",
         },
+        [actions.next_active_header] = {
+            id = "next_header",
+            short = "next header",
+            label = "Next session header",
+        },
+        [actions.previous_active_header] = {
+            id = "previous_header",
+            short = "previous header",
+            label = "Previous session header",
+        },
+        [actions.refresh_active] = {
+            id = "refresh",
+            short = "refresh",
+            label = "Refresh agent data",
+        },
+        [actions.focus_agent] = {
+            id = "focus",
+            short = "focus",
+            label = "Focus selected agent",
+        },
+        [actions.copy_path] = {
+            id = "copy_path",
+            short = "copy path",
+            label = "Copy session path",
+        },
         [actions.mark_session] = {
             id = "mark",
             short = "mark",
             label = "Assign mark",
+        },
+        [actions.cycle_sort] = {
+            id = "cycle_sort",
+            short = "sort",
+            label = "Cycle sort mode",
         },
     },
     restore = {
@@ -63,6 +108,11 @@ local descriptors = {
             id = "restore",
             short = "restore",
             label = "Restore deleted session",
+        },
+        [actions.toggle_display] = {
+            id = "density",
+            short = "density",
+            label = "Toggle compact/detailed rows",
         },
     },
 }
@@ -201,16 +251,34 @@ local function available(kind, item, value)
         return true
     end
     if kind == "regular" then
-        if item.id == "enter" then
+        if item.id == "density" or item.id == "cycle_sort" then
+            return true
+        end
+        if item.id == "enter" or item.id == "copy_path" then
             return value.directory or value.id ~= nil
         end
         return value.id ~= nil
     elseif kind == "active" then
+        if
+            item.id == "density"
+            or item.id == "cycle_sort"
+            or item.id == "next_header"
+            or item.id == "previous_header"
+            or item.id == "refresh"
+        then
+            return true
+        end
         if item.id == "expand_all" then
             return true
         end
+        if item.id == "focus" then
+            return value.kind == "agent"
+        end
         return value.kind == "session" or value.kind == "agent"
     elseif kind == "restore" then
+        if item.id == "density" then
+            return true
+        end
         return value.id ~= nil or value.key ~= nil
     end
     return true

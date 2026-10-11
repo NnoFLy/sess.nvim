@@ -8,15 +8,16 @@ end
 
 M.display_width = display_width
 
-local function truncate_end(value, width)
+local function truncate_end(value, width, ellipsis)
     value = value or ""
+    ellipsis = ellipsis or icons.ellipsis
     if width == nil or display_width(value) <= width then
         return value
     end
     if width <= 0 then
         return ""
     elseif width == 1 then
-        return icons.ellipsis
+        return ellipsis
     end
 
     local chars = vim.fn.strchars(value)
@@ -25,20 +26,21 @@ local function truncate_end(value, width)
     while keep > 0 and display_width(vim.fn.strcharpart(value, 0, keep)) > target do
         keep = keep - 1
     end
-    return vim.fn.strcharpart(value, 0, keep) .. icons.ellipsis
+    return vim.fn.strcharpart(value, 0, keep) .. ellipsis
 end
 
 M.truncate_end = truncate_end
 
-local function truncate_middle(value, width)
+local function truncate_middle(value, width, ellipsis)
     value = value or ""
+    ellipsis = ellipsis or icons.ellipsis
     if width == nil or display_width(value) <= width then
         return value
     end
     if width <= 0 then
         return ""
     elseif width == 1 then
-        return icons.ellipsis
+        return ellipsis
     end
 
     local chars = vim.fn.strchars(value)
@@ -58,7 +60,7 @@ local function truncate_middle(value, width)
     end
 
     return vim.fn.strcharpart(value, 0, left_chars)
-        .. icons.ellipsis
+        .. ellipsis
         .. vim.fn.strcharpart(value, chars - right_chars, right_chars)
 end
 
@@ -135,7 +137,7 @@ function M.fit_parts(parts, width)
             if current > minimum then
                 local target = math.max(minimum, current - deficit)
                 local truncate = part.truncate == "middle" and truncate_middle or truncate_end
-                part.text = truncate(part.text or "", target)
+                part.text = truncate(part.text or "", target, part.ellipsis)
                 deficit = total_width(fitted) - width
             end
         end
@@ -166,7 +168,28 @@ function M.fit_parts(parts, width)
             if current > minimum then
                 local target = math.max(minimum, current - deficit)
                 local truncate = part.truncate == "middle" and truncate_middle or truncate_end
-                part.text = truncate(part.text or "", target)
+                part.text = truncate(part.text or "", target, part.ellipsis)
+                deficit = total_width(fitted) - width
+            end
+        end
+    end
+
+    -- Fixed tree, padding, and state columns can still exceed an extremely
+    -- narrow result window after all optional content is gone. Clip those
+    -- columns as a last resort so the rendered row never exceeds its budget.
+    if deficit > 0 then
+        for index = #fitted, 1, -1 do
+            if deficit <= 0 then
+                break
+            end
+            local part = fitted[index]
+            local current = part_width(part)
+            if current > 0 then
+                part.text = truncate_end(
+                    part.text or "",
+                    math.max(0, current - deficit),
+                    part.ellipsis
+                )
                 deficit = total_width(fitted) - width
             end
         end
@@ -269,6 +292,45 @@ function M.initial_width(preview_config, picker)
     return math.max(1, width - selection_caret_width(picker))
 end
 
+function M.result_width(picker, fallback)
+    local picker_layout = picker and picker.layout
+    if type(picker_layout) ~= "table" then
+        picker_layout = nil
+    end
+    local windows = {
+        picker and picker.results_win,
+        picker_layout and picker_layout.results and picker_layout.results.winid,
+        picker_layout and picker_layout.results and picker_layout.results.win_id,
+        picker_layout and picker_layout.results_win,
+    }
+    for _, win in ipairs(windows) do
+        if type(win) == "number" and vim.api.nvim_win_is_valid(win) then
+            local ok, value = pcall(vim.api.nvim_win_get_width, win)
+            if ok and value > 0 then
+                return math.max(0, value)
+            end
+        end
+    end
+    local results = picker_layout and picker_layout.results
+    if type(results) == "table" and type(results.width) == "number" and results.width > 0 then
+        return math.max(0, results.width)
+    end
+    return math.max(0, fallback or vim.o.columns)
+end
+
+function M.display_mode(display, result_width)
+    display = display or {}
+    if display.mode == "compact" or display.mode == "detailed" then
+        return display.mode
+    end
+    if display.mode == "auto" then
+        result_width = result_width or display.result_width or display.available_width or vim.o.columns
+        return result_width < (display.compact_width or 100) and "compact" or "detailed"
+    end
+    -- Keep formatter callers that predate density configuration detailed.
+    return "detailed"
+end
+
 function M.available_width(picker, fallback)
     local picker_layout = picker and picker.layout
     if type(picker_layout) ~= "table" then
@@ -328,7 +390,7 @@ function M.on_resize(picker, callback)
     autocmds[#autocmds + 1] = vim.api.nvim_create_autocmd("VimResized", {
         callback = function()
             if not stopped then
-                callback(M.available_width(picker))
+                callback(M.available_width(picker), M.result_width(picker))
             end
         end,
     })

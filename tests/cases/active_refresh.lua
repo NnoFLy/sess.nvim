@@ -159,10 +159,135 @@ local stop_retry = require("sess.ui.active_refresh").start(
     20
 )
 assert(stop_retry)
+assert(
+    vim.wait(500, function()
+        return retry_picker._sess_active_refresh_warning ~= nil
+    end, 10),
+    "failed probes should expose a textual warning"
+)
 assert(vim.wait(500, function() return retry_calls >= 2 end, 10))
 assert(retry_picker.finder ~= nil, "retry should leave picker usable")
+assert(retry_picker._sess_active_refresh_warning == nil, "successful retry should clear warning")
 stop_retry()
 vim.api.nvim_buf_delete(retry_prompt, { force = true })
+
+-- A synchronous generator keeps its snapshot as well as its finder and rows;
+-- otherwise identical rows can leave the dashboard title and cache stale.
+local sync_snapshot_prompt = vim.api.nvim_create_buf(false, true)
+local sync_snapshot_old = { token = "old" }
+local sync_snapshot_new = { token = "new" }
+local sync_snapshot_finder = { results = { { value = { id = "old" } } } }
+local sync_snapshot_next_finder = { results = { { value = { id = "new" } } } }
+local sync_snapshot_picker = {
+    prompt_bufnr = sync_snapshot_prompt,
+    finder = sync_snapshot_finder,
+    _sess_active_snapshot = sync_snapshot_old,
+    refresh = function(self, next_finder)
+        self.finder = next_finder
+    end,
+}
+local stop_sync_snapshot = require("sess.ui.active_refresh").start(
+    sync_snapshot_picker,
+    function()
+        return sync_snapshot_next_finder, sync_snapshot_next_finder.results, sync_snapshot_new
+    end,
+    sync_snapshot_finder.results,
+    1000
+)
+assert(sync_snapshot_picker._sess_active_snapshot == sync_snapshot_new)
+assert(sync_snapshot_picker.finder == sync_snapshot_next_finder)
+stop_sync_snapshot()
+vim.api.nvim_buf_delete(sync_snapshot_prompt, { force = true })
+
+-- Automatic refresh is transactional even when Telescope mutates several
+-- fields before reporting a partial refresh failure.
+local transaction_prompt = vim.api.nvim_create_buf(false, true)
+local transaction_results = vim.api.nvim_create_buf(false, true)
+vim.api.nvim_buf_set_lines(transaction_results, 0, -1, false, { "old rendered row" })
+local transaction_row = { value = { kind = "session", session_id = "transaction" } }
+local transaction_next_row = { value = { kind = "session", session_id = "next" } }
+local transaction_finder = { results = { transaction_row } }
+local transaction_next_finder = { results = { transaction_next_row } }
+local transaction_manager = {
+    entries = { transaction_row },
+    num_results = function(self)
+        return #self.entries
+    end,
+    get_entry = function(self, index)
+        return self.entries[index]
+    end,
+}
+local transaction_snapshot = { token = "old" }
+local transaction_next_snapshot = { token = "new" }
+local transaction_expanded = { transaction = true }
+local transaction_selection = transaction_row
+local transaction_picker = {
+    prompt_bufnr = transaction_prompt,
+    finder = transaction_finder,
+    manager = transaction_manager,
+    prompt = "old prompt",
+    prompt_title = "old title",
+    results_bufnr = transaction_results,
+    layout = {
+        prompt = {
+            border = {
+                title = nil,
+                change_title = function(self, title)
+                    self.title = title
+                end,
+            },
+        },
+    },
+    _sess_expanded = transaction_expanded,
+    _sess_active_snapshot = transaction_snapshot,
+    get_prompt = function(self)
+        return self.prompt
+    end,
+    set_prompt = function(self, prompt)
+        self.prompt = prompt
+    end,
+    get_selection = function()
+        return transaction_selection
+    end,
+    get_reset_row = function()
+        return 0
+    end,
+    set_selection = function(self, row)
+        self.selected_row = row
+    end,
+    refresh = function(self, finder)
+        self.finder = finder
+        self.manager.entries = { transaction_next_row }
+        self.prompt = "candidate prompt"
+        self.prompt_title = "candidate title"
+        self.layout.prompt.border:change_title("candidate title")
+        self._sess_expanded.transaction = false
+        vim.api.nvim_buf_set_lines(self.results_bufnr, 0, -1, false, { "candidate rendered row" })
+        error("injected automatic refresh failure")
+    end,
+}
+local stop_transaction = require("sess.ui.active_refresh").start(
+    transaction_picker,
+    function()
+        return transaction_next_finder, transaction_next_finder.results, transaction_next_snapshot
+    end,
+    transaction_finder.results,
+    1000
+)
+assert(stop_transaction)
+assert(transaction_picker.finder == transaction_finder)
+assert(transaction_picker.manager.entries[1] == transaction_row)
+assert(transaction_picker.prompt == "old prompt")
+assert(transaction_picker.prompt_title == "old title")
+assert(transaction_picker.layout.prompt.border.title == nil)
+assert(transaction_picker._sess_active_snapshot == transaction_snapshot)
+assert(transaction_picker._sess_expanded == transaction_expanded)
+assert(transaction_picker._sess_expanded.transaction)
+assert(vim.api.nvim_buf_get_lines(transaction_results, 0, -1, false)[1] == "old rendered row")
+assert(transaction_picker._sess_active_refresh_warning ~= nil)
+stop_transaction()
+vim.api.nvim_buf_delete(transaction_prompt, { force = true })
+vim.api.nvim_buf_delete(transaction_results, { force = true })
 
 -- Reconciliation must not leave a vanished agent selected.
 local reconcile_prompt = vim.api.nvim_create_buf(false, true)

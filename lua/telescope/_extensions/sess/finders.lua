@@ -28,6 +28,11 @@ local state = api.state
 
 local M = {}
 
+local function configured_display()
+    local ok, config = pcall(require, "telescope._extensions.sess.config")
+    return ok and config.values.display or {}
+end
+
 local status_symbols = icons.status
 
 local status_display_order = { "working", "idle", "blocked", "done", "unknown" }
@@ -107,26 +112,41 @@ end
 
 function M.active_dashboard_title(snapshot)
     local summary = M.active_dashboard_summary(snapshot)
+    local separator = icons.for_display(configured_display()).separator
     return string.format(
-        "ACTIVE SESSIONS " .. icons.separator .. " %d sessions " .. icons.separator .. " %d agents",
+        "ACTIVE SESSIONS " .. separator .. " %d sessions " .. separator .. " %d agents",
         summary.session_count,
         summary.agent_count
     )
 end
 
-local function configured_display_options()
-    local ok, config = pcall(require, "telescope._extensions.sess.config")
-    local options = ok and config.values.display or {}
+local function display_options(options)
     options = vim.deepcopy(options or {})
     if options.highlights == nil then
         options.highlights = {}
     end
+    options.mode = layout.display_mode(options, options.result_width)
+    options.symbols = icons.for_display(options)
+    -- Compact rows retain state, marks, and other session metadata. Agent
+    -- summaries remain the density-specific content reserved for detailed rows.
+    if options.mode == "compact" then
+        options.show_agent_summary = false
+    end
+    return options
+end
+
+local function configured_display_options()
+    local ok, config = pcall(require, "telescope._extensions.sess.config")
+    local options = vim.deepcopy(ok and config.values.display or {})
     -- A formatter can be used independently in tests and by integrations; a
     -- picker invocation defaults to the current editor width.
     if options.available_width == nil then
         options.available_width = vim.o.columns
     end
-    return options
+    if options.result_width == nil then
+        options.result_width = vim.o.columns
+    end
+    return display_options(options)
 end
 
 local function configured_search_options()
@@ -158,32 +178,35 @@ local function path_for_display(path_value, style)
 end
 
 local function state_for_session(session, opts)
+    local symbols = opts.symbols or icons.for_display(opts.display)
     if not session.id then
-        return icons.state.new, "new"
+        return symbols.state.new, "new"
     elseif opts.current_id == session.id then
-        return icons.state.current, "current"
+        return symbols.state.current, "current"
     elseif opts.active then
-        return icons.state.active, "active"
+        return symbols.state.active, "active"
     end
-    return icons.state.inactive, "inactive"
+    return symbols.state.inactive, "inactive"
 end
 
 local function session_display_parts(session, opts)
     opts = opts or {}
-    local display = opts.display or {}
+    local display = display_options(opts.display or {})
+    local symbols = display.symbols
     local highlights = display.highlights or {}
     local width = display.available_width
     local tree = "  "
     if opts.expandable and opts.expanded then
-        tree = icons.tree.expanded
+        tree = symbols.tree.expanded
     elseif opts.expandable then
-        tree = icons.tree.collapsed
+        tree = symbols.tree.collapsed
     end
 
+    opts.symbols = symbols
     local marker, state = state_for_session(session, opts)
     local marker_highlight = highlights[state]
     if display.show_metadata ~= false and session.id and opts.previous_id == session.id then
-        marker = icons.metadata.previous
+        marker = symbols.metadata.previous
         marker_highlight = highlights.metadata or marker_highlight
     end
     local name = session.metadata.name or ""
@@ -191,13 +214,13 @@ local function session_display_parts(session, opts)
     local agent_status = display.show_agent_summary ~= false and opts.agent_status
 
     if opts.path_width then
-        cwd = layout.truncate_middle(cwd, opts.path_width)
+        cwd = layout.truncate_middle(cwd, opts.path_width, symbols.ellipsis)
     end
     local pinned = display.show_metadata ~= false and session.metadata.pinned
     local parts = {
         { text = tree },
         {
-            text = pinned and (icons.metadata.pinned .. " ") or "  ",
+            text = pinned and (symbols.metadata.pinned .. " ") or "  ",
             highlight = pinned and highlights.metadata or nil,
         },
         { text = marker .. " ", highlight = marker_highlight },
@@ -217,6 +240,7 @@ local function session_display_parts(session, opts)
             text = cwd,
             highlight = highlights.cwd,
             truncate = "middle",
+            ellipsis = symbols.ellipsis,
             shrink_priority = 1,
             min_width = 1,
             expendable = true,
@@ -362,12 +386,15 @@ function M.build_active_entries(
     previous_id,
     display_opts,
     agents_loaded_by_id,
-    stale_by_id
+    stale_by_id,
+    search_options
 )
     expanded_by_id = expanded_by_id or {}
     marks_by_id = marks_by_id or {}
-    local display = vim.tbl_deep_extend("force", configured_display_options(), display_opts or {})
-    local search_options = configured_search_options()
+    local display = display_options(
+        vim.tbl_deep_extend("force", configured_display_options(), display_opts or {})
+    )
+    search_options = search_options or configured_search_options()
     local previous = previous_id and { id = previous_id } or nil
     sessions = search.sort_sessions(sessions, search_options.sort, function(session)
         local session_agents = agents_by_id[session.id] or {}
@@ -441,8 +468,8 @@ function M.build_active_entries(
             if #agents == 0 then
                 local placeholder_parts = layout.fit_parts({
                     {
-                        text = display.available_width and display.available_width < 40 and icons.tree.empty
-                            or "  " .. icons.tree.empty,
+                        text = display.available_width and display.available_width < 40 and display.symbols.tree.empty
+                            or "  " .. display.symbols.tree.empty,
                     },
                     { text = "no agents", shrink_priority = 1, min_width = 1 },
                 }, display.available_width)
@@ -462,10 +489,11 @@ function M.build_active_entries(
             else
                 for index, agent in ipairs(agents) do
                     local status = normalized_status(agent.status)
-                    local branch = index == #agents and icons.tree.last_branch or icons.tree.branch
+                    local branch = index == #agents and display.symbols.tree.last_branch
+                        or display.symbols.tree.branch
                     local focused = focused_by_id and focused_by_id[session.id] == agent.id
-                    local focus_marker = focused and icons.focus or " "
-                    local status_symbol = status_symbols[status]
+                    local focus_marker = focused and display.symbols.focus or " "
+                    local status_symbol = display.symbols.status[status]
                     local info = agent.info and agent.info ~= "" and "  " .. agent.info or ""
                     local agent_highlight = display.highlights and display.highlights.agent
                     local indent = display.available_width and display.available_width < 40 and "" or "  "
@@ -496,6 +524,7 @@ function M.build_active_entries(
                             text = info,
                             highlight = agent_highlight,
                             truncate = "end",
+                            ellipsis = display.symbols.ellipsis,
                             shrink_priority = 1,
                             min_width = 0,
                             expendable = true,
@@ -533,7 +562,8 @@ local function active_finder_from_snapshot(
     expanded_by_id,
     active_expand,
     previous_snapshot,
-    display_opts
+    display_opts,
+    search_options
 )
     local sessions = snapshot.sessions
     for _, session in ipairs(sessions) do
@@ -565,7 +595,8 @@ local function active_finder_from_snapshot(
         previous and previous.id or nil,
         display_opts,
         snapshot.agents_loaded_by_id,
-        snapshot.stale_by_id
+        snapshot.stale_by_id,
+        search_options
     )
     local finder = finders.new_table({
         results = results,
@@ -583,16 +614,16 @@ local function active_finder_from_snapshot(
     return finder, results, snapshot
 end
 
-function M.generate_active_finder_from_snapshot(snapshot, expanded_by_id, active_expand, display_opts)
+function M.generate_active_finder_from_snapshot(snapshot, expanded_by_id, active_expand, display_opts, search_options)
     expanded_by_id = expanded_by_id or {}
     active_expand = active_expand or "current"
-    return active_finder_from_snapshot(snapshot, expanded_by_id, active_expand, nil, display_opts)
+    return active_finder_from_snapshot(snapshot, expanded_by_id, active_expand, nil, display_opts, search_options)
 end
 
-function M.generate_active_finder(expanded_by_id, active_expand)
+function M.generate_active_finder(expanded_by_id, active_expand, search_options)
     expanded_by_id = expanded_by_id or {}
     active_expand = active_expand or "current"
-    return active_finder_from_snapshot(api.active.snapshot(), expanded_by_id, active_expand)
+    return active_finder_from_snapshot(api.active.snapshot(), expanded_by_id, active_expand, nil, nil, search_options)
 end
 
 function M.generate_active_finder_async(
@@ -600,7 +631,8 @@ function M.generate_active_finder_async(
     active_expand,
     callback,
     previous_snapshot,
-    display_opts
+    display_opts,
+    search_options
 )
     expanded_by_id = expanded_by_id or {}
     active_expand = active_expand or "current"
@@ -611,7 +643,8 @@ function M.generate_active_finder_async(
             expanded_by_id,
             active_expand,
             previous_snapshot,
-            display_opts
+            display_opts,
+            search_options
         )
         callback(finder, rows, snapshot)
     end, {
@@ -620,7 +653,7 @@ function M.generate_active_finder_async(
     })
 end
 
-function M.generate_deleted_finder(display_opts)
+function M.generate_deleted_finder(display_opts, search_options)
     local ok, err, entries, diagnostics = api.session.list_deleted()
     if not ok then
         log.error(err)
@@ -628,9 +661,11 @@ function M.generate_deleted_finder(display_opts)
     for _, diagnostic in ipairs(diagnostics or {}) do
         log.warn(diagnostic)
     end
-    local search_options = configured_search_options()
+    search_options = search_options or configured_search_options()
     entries = search.sort_results(entries or {}, search_options.sort)
-    local display = vim.tbl_deep_extend("force", configured_display_options(), display_opts or {})
+    local display = display_options(
+        vim.tbl_deep_extend("force", configured_display_options(), display_opts or {})
+    )
     return finders.new_table({
         results = entries,
         entry_maker = function(entry)
@@ -646,6 +681,7 @@ function M.generate_deleted_finder(display_opts)
                 {
                     text = entry.metadata.cwd,
                     truncate = "middle",
+                    ellipsis = display.symbols.ellipsis,
                     shrink_priority = 1,
                     min_width = 1,
                     expendable = true,
@@ -669,7 +705,7 @@ function M.generate_deleted_finder(display_opts)
 end
 
 ---@return table
-local function build_directory_finder(prompt, display_opts, agents_by_id, cached_candidates)
+local function build_directory_finder(prompt, display_opts, agents_by_id, cached_candidates, search_options)
     local candidates, err = cached_candidates, nil
     if not candidates then
         candidates, err = path.enumerate(prompt)
@@ -687,7 +723,9 @@ local function build_directory_finder(prompt, display_opts, agents_by_id, cached
         log.warn(diagnostic)
     end
 
-    local display = vim.tbl_deep_extend("force", configured_display_options(), display_opts or {})
+    local display = display_options(
+        vim.tbl_deep_extend("force", configured_display_options(), display_opts or {})
+    )
     local by_path = {}
     local mark_by_id, mark_width = mark_columns()
     local active_by_id = {}
@@ -710,7 +748,7 @@ local function build_directory_finder(prompt, display_opts, agents_by_id, cached
     end
 
     local results = {}
-    local search_options = configured_search_options()
+    search_options = search_options or configured_search_options()
     agents_by_id = agents_by_id or {}
     for _, candidate in ipairs(candidates) do
         local candidate_path = path_utils.identity(candidate.path) or candidate.path
@@ -775,24 +813,24 @@ local function build_directory_finder(prompt, display_opts, agents_by_id, cached
     })
 end
 
-function M.generate_directory_finder(prompt, display_opts, callback, previous_snapshot)
+function M.generate_directory_finder(prompt, display_opts, callback, previous_snapshot, search_options)
     local candidates, err = path.enumerate(prompt)
     if err then
         log.error(err)
     end
-    local finder = build_directory_finder(prompt, display_opts, {}, candidates)
+    local finder = build_directory_finder(prompt, display_opts, {}, candidates, search_options)
     if not callback then
         return finder
     end
 
     local cancel = hydrate_search_finder(callback, previous_snapshot, function(agents_by_id)
-        return build_directory_finder(prompt, display_opts, agents_by_id, candidates)
+        return build_directory_finder(prompt, display_opts, agents_by_id, candidates, search_options)
     end)
     return finder, cancel
 end
 
-function M.generate_directory_finder_async(prompt, display_opts, callback, previous_snapshot)
-    local _, cancel = M.generate_directory_finder(prompt, display_opts, callback, previous_snapshot)
+function M.generate_directory_finder_async(prompt, display_opts, callback, previous_snapshot, search_options)
+    local _, cancel = M.generate_directory_finder(prompt, display_opts, callback, previous_snapshot, search_options)
     return cancel
 end
 
@@ -801,7 +839,8 @@ local function build_new_finder(
     agents_by_id,
     cached_results,
     cached_err,
-    cached_diagnostics
+    cached_diagnostics,
+    search_options
 )
     local results, err, diagnostics = cached_results, cached_err, cached_diagnostics
     if not results then
@@ -823,8 +862,10 @@ local function build_new_finder(
         active_by_id[active.id] = true
     end
     local previous = state.prev()
-    local display = vim.tbl_deep_extend("force", configured_display_options(), display_opts or {})
-    local search_options = configured_search_options()
+    local display = display_options(
+        vim.tbl_deep_extend("force", configured_display_options(), display_opts or {})
+    )
+    search_options = search_options or configured_search_options()
     agents_by_id = agents_by_id or {}
     for _, entry in ipairs(results) do
         entry.search_fields = search.fields_for_session({
@@ -898,6 +939,13 @@ local function build_new_finder(
                 mark = mark_by_id[session.id],
                 mark_width = mark_width,
                 name_width = name_width,
+                agent_status = session.id
+                        and agent_status_text(
+                            agents_by_id[session.id] or {},
+                            agents_by_id[session.id] ~= nil,
+                            false
+                        )
+                    or nil,
                 display = display,
             })
 
@@ -920,14 +968,15 @@ local function build_new_finder(
     })
 end
 
-function M.generate_new_finder(display_opts, callback, previous_snapshot)
+function M.generate_new_finder(display_opts, callback, previous_snapshot, search_options)
     local cached_results, cached_err, cached_diagnostics = items.get_items()
     local finder = build_new_finder(
         display_opts,
         {},
         cached_results,
         cached_err,
-        cached_diagnostics
+        cached_diagnostics,
+        search_options
     )
     if not callback then
         return finder
@@ -939,14 +988,15 @@ function M.generate_new_finder(display_opts, callback, previous_snapshot)
             agents_by_id,
             cached_results,
             cached_err,
-            cached_diagnostics
+            cached_diagnostics,
+            search_options
         )
     end)
     return finder, cancel
 end
 
-function M.generate_new_finder_async(display_opts, callback, previous_snapshot)
-    local _, cancel = M.generate_new_finder(display_opts, callback, previous_snapshot)
+function M.generate_new_finder_async(display_opts, callback, previous_snapshot, search_options)
+    local _, cancel = M.generate_new_finder(display_opts, callback, previous_snapshot, search_options)
     return cancel
 end
 

@@ -13,13 +13,11 @@ local allowed_fields = {
     info = true,
 }
 
-local sort_modes = {
-    default = true,
-    recent = true,
-    pinned = true,
-    activity = true,
-    name = true,
-}
+local sort_order = { "default", "recent", "pinned", "activity", "name" }
+local sort_modes = {}
+for _, mode in ipairs(sort_order) do
+    sort_modes[mode] = true
+end
 
 local function text(value)
     return value == nil and "" or tostring(value)
@@ -103,6 +101,19 @@ function M.allowed_fields()
     return vim.deepcopy(allowed_fields)
 end
 
+function M.sort_modes()
+    return vim.deepcopy(sort_order)
+end
+
+function M.next_sort(mode)
+    for index, current in ipairs(sort_order) do
+        if current == mode then
+            return sort_order[index % #sort_order + 1]
+        end
+    end
+    return sort_order[1]
+end
+
 function M.validate(options)
     options = options or {}
     if options.fields ~= nil then
@@ -125,6 +136,32 @@ function M.validate(options)
     end
     if options.sort ~= nil and (type(options.sort) ~= "string" or not sort_modes[options.sort]) then
         return false, 'search.sort must be "default", "recent", "pinned", "activity", or "name"'
+    end
+    for _, key in ipairs({ "show_count", "show_sort" }) do
+        if options[key] ~= nil and type(options[key]) ~= "boolean" then
+            return false, "search." .. key .. " must be a boolean"
+        end
+    end
+    if options.cycle_sort ~= nil then
+        local value = options.cycle_sort
+        local valid = value == false or value == true or (type(value) == "string" and value ~= "")
+        if type(value) == "table" then
+            if next(value) == nil then
+                return false, "search.cycle_sort mappings must not be empty"
+            end
+            valid = true
+            for mode, key in pairs(value) do
+                if mode ~= "i" and mode ~= "n" then
+                    return false, "search.cycle_sort keys must be i or n"
+                end
+                if key ~= false and (type(key) ~= "string" or key == "") then
+                    return false, "search.cycle_sort mappings must be non-empty strings or false"
+                end
+            end
+        end
+        if not valid then
+            return false, "search.cycle_sort must be a boolean, key, or mode mapping"
+        end
     end
     return true
 end
@@ -168,17 +205,35 @@ function M.parse_filter(prompt, options)
     end
 
     if prompt:sub(1, 1) == "@" and #prompt > 1 and not prompt:find("%s") then
-        return { field = "mark", query = prompt }
+        return { field = "mark", label = "mark", query = prompt }
     end
 
     local field, query = prompt:match("^([%a_]+):(.*)$")
     local aliases = { path = "cwd", agent = "agent", status = "status" }
     if field and aliases[field] and query ~= "" then
-        return { field = aliases[field], query = query }
+        return { field = aliases[field], label = field, query = query }
     end
     -- Unknown, empty, or malformed filters are deliberately plain text. This
     -- keeps paths and shell-like names searchable without interpreting them.
     return nil
+end
+
+-- Keep status rendering independent from Telescope internals. A nil count is
+-- intentional for lightweight pickers and means that no count is available.
+function M.feedback(prompt, options, count)
+    options = options or {}
+    local parts = {}
+    local filter = M.parse_filter(prompt, options)
+    if filter then
+        parts[#parts + 1] = filter.label .. ":" .. filter.query
+    end
+    if options.show_count ~= false and count ~= nil then
+        parts[#parts + 1] = tostring(count) .. " matches"
+    end
+    if options.show_sort ~= false and options.sort and options.sort ~= "default" then
+        parts[#parts + 1] = "sort:" .. options.sort
+    end
+    return #parts > 0 and table.concat(parts, "  ") or nil, filter
 end
 
 local function field_matches(fields, field, query)
@@ -375,7 +430,7 @@ local function recent_value(session)
 end
 
 function M.sort_results(results, mode)
-    mode = mode or "default"
+    mode = sort_modes[mode] and mode or "default"
     if mode == "default" then
         return results
     end

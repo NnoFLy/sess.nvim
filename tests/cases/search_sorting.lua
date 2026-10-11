@@ -24,7 +24,14 @@ package.loaded["telescope.finders"] = {
 local config = require("telescope._extensions.sess.config")
 config.setup({ search = { filters = true, sort = "default" } })
 assert(not pcall(config.setup, { search = { sort = "unknown" } }))
+assert(not pcall(config.setup, { search = { cycle_sort = { x = "<C-s>" } } }))
+assert(not pcall(config.setup, { search = { cycle_sort = "" } }))
+assert(not pcall(config.setup, { search = { cycle_sort = { i = "" } } }))
+assert(not pcall(config.setup, { search = { cycle_sort = {} } }))
+assert(not pcall(config.setup, { search = { show_count = "yes" } }))
 assert(not pcall(config.setup, { search = { fields = { "unknown" } } }))
+assert(config.values.search.show_count == true)
+assert(config.values.search.show_sort == true)
 local search = require("telescope._extensions.sess.search")
 
 -- Telescope's sorter lifecycle methods live on its metatable; the wrapper
@@ -64,6 +71,28 @@ assert(path_filter.query == "界面 with spaces")
 assert(search.parse_filter("path:", config.values.search) == nil)
 assert(search.parse_filter("not:a", config.values.search) == nil)
 assert(search.parse_filter("@a", config.values.search).field == "mark")
+assert(search.parse_filter("status:working", config.values.search).label == "status")
+local mark_feedback, mark_filter = search.feedback("@a", config.values.search, 2)
+assert(mark_filter.field == "mark")
+assert(mark_feedback == "mark:@a  2 matches")
+assert(search.next_sort("default") == "recent")
+assert(search.next_sort("name") == "default")
+local filter_feedback, parsed_feedback = search.feedback("path:frontend", {
+    filters = true,
+    show_count = true,
+    show_sort = true,
+    sort = "name",
+}, 3)
+assert(parsed_feedback.field == "cwd")
+assert(filter_feedback == "path:frontend  3 matches  sort:name")
+local malformed_feedback, malformed_filter = search.feedback("not:a", {
+    filters = true,
+    show_count = false,
+    show_sort = true,
+    sort = "default",
+}, nil)
+assert(malformed_filter == nil)
+assert(malformed_feedback == nil)
 
 local function entry(name, cwd, mark)
     local value = {
@@ -126,8 +155,11 @@ local rejecting_sorter = search.new_sorter({
 }, config.values.search)
 assert(rejecting_sorter.scoring_function("frnt", exact) < 0)
 
--- The default fields include info even when it is absent from agent/name/status.
-assert(vim.tbl_contains(config.values.search.fields, "info"))
+-- The documented default includes every session-state label as well as agent
+-- details, even when a particular row has no value for one of them.
+for _, field in ipairs({ "pinned", "last", "current", "active", "info" }) do
+    assert(vim.tbl_contains(config.values.search.fields, field), "missing default field " .. field)
+end
 assert(sorter.scoring_function("reviewing", {
     ordinal = "reviewing",
     search_fields = { info = "reviewing" },
@@ -144,6 +176,21 @@ assert(sorter.scoring_function("pinned", {
     ordinal = ordinal,
     search_fields = fields,
 }) >= 0)
+-- State fields must work in the default scope even without duplicates in
+-- status. The base sorter still receives the untouched complete ordinal.
+for _, label in ipairs({ "pinned", "last", "current", "active" }) do
+    local state_ordinal = label .. " complete enriched ordinal"
+    local state_sorter = search.new_sorter({
+        scoring_function = function(_, scored_entry)
+            assert(scored_entry.ordinal == state_ordinal)
+            return 1
+        end,
+    }, config.values.search)
+    assert(state_sorter.scoring_function(label, {
+        ordinal = state_ordinal,
+        search_fields = { [label] = label },
+    }) >= 0)
+end
 
 local saw_enriched_ordinal = false
 local name_only_sorter = search.new_sorter({
@@ -310,13 +357,23 @@ local directory_root = fixture.directory("finder-directory")
 fixture.directory("finder-directory/zeta")
 fixture.directory("finder-directory/alpha")
 local hydrated_directory_finder
+local original_sort_results = search.sort_results
+local directory_sort_mode
+search.sort_results = function(results, mode)
+    directory_sort_mode = mode
+    return original_sort_results(results, mode)
+end
 local initial_directory_finder, directory_cancel = finders.generate_directory_finder(
     directory_root .. "/",
     nil,
     function(finder)
         hydrated_directory_finder = finder
-    end
+    end,
+    nil,
+    { sort = "name" }
 )
+assert(directory_sort_mode == "name")
+search.sort_results = original_sort_results
 assert(
     initial_directory_finder.results[2].path:match("/alpha$")
         or initial_directory_finder.results[2].path:match("/alpha/$")

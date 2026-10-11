@@ -247,19 +247,47 @@ require("telescope").setup({
     extensions = {
         sess = {
             display = {
+                mode = "detailed", -- compact | detailed | auto
+                compact_width = 100,
+                icons = true,
+                ascii_fallback = false,
+                toggle_key = "<C-g>", -- false disables the density mapping
                 show_metadata = true,
                 show_agent_summary = true,
                 path_style = "full", -- full | relative | short
+                -- highlights = { current = "TelescopeResultsIdentifier" },
             },
             preview = {
                 enabled = true,
                 width = 0.35,
+                min_width = 80,
                 show_snapshot_summary = true,
                 show_agents = true,
+                show_editor_summary = true,
+                show_action_hint = true,
+                max_agents = 8,
+            },
+            action_help = {
+                enabled = true,
+                key = "?",
+                footer = true,
             },
             search = {
+                fields = {
+                    "name", "cwd", "mark", "pinned", "last", "current",
+                    "active", "agent", "status", "info",
+                },
                 filters = true,
                 sort = "default", -- default | recent | pinned | activity | name
+                show_count = true,
+                show_sort = true,
+                cycle_sort = false, -- true uses <C-s>; a key or { i = key, n = key }
+            },
+            active = {
+                refresh_key = "<C-r>", -- false disables generated refresh
+                header_navigation = true,
+                next_header_key = "<C-j>",
+                previous_header_key = "<C-k>",
             },
         },
     },
@@ -267,8 +295,62 @@ require("telescope").setup({
 ```
 
 The picker can load, create, pin, mark, rename, unload, delete, and restore
-sessions. Search covers names, paths, marks, session state, and agent details.
-Use `:Sess active` for a live view of active sessions and their agents.
+sessions. `compact` rows keep state, mark, name, and a useful path; `detailed`
+rows add metadata and agent summaries. `auto` uses the actual results-window
+width and switches to compact below `display.compact_width` (100 by default).
+By default, `<C-g>` toggles the regular picker between compact and
+detailed row density (the default density is `detailed`); set `display.toggle_key`
+to another key or `false` to change or disable this mapping. Search covers
+names, paths, marks, session state, and agent details. Configure `search.fields`,
+`search.filters`, and `search.sort` (`default`, `recent`, `pinned`, `activity`,
+or `name`) to control interpretation and ordering; custom sorters still receive
+complete searchable ordinals. Exact name and mark matches remain ahead of loose
+path matches, and malformed filter-looking text remains ordinary search text.
+The default insert/normal mappings include `<C-y>` to copy the selected complete
+session path. Search status shows practical match counts, interpreted filters
+(such as `status:working`), and non-default sort modes without changing the
+prompt. Set `search.show_count` or `search.show_sort` to `false` to hide
+those parts.
+Set `search.cycle_sort` to `true` (default key `<C-s>`), a key string, or
+`{ i = "<key>", n = "<key>" }` to opt into cycling through `default`, `recent`,
+`pinned`, `activity`, and `name`. Existing mappings win; use `false` for a mode
+to disable it. The mapping preserves the prompt and selected session, agent, or
+directory when the order changes.
+The active-session picker provides a conflict-safe manual refresh mapping
+(`<C-r>` by default) and `<C-o>` to focus a selected agent; these actions are
+safe and do not load or unload sessions. Configure `active.refresh_key` with a
+key or `false` to replace or disable refresh. With `active.header_navigation`
+enabled (the default), `<C-j>` and `<C-k>` move to the next and previous
+session headers; configure their keys with `next_header_key` and
+`previous_header_key`, or set header navigation to `false`. Generated mappings
+are added only when the key is unclaimed, so `active_mappings` and picker
+mappings always take precedence. Header arrows indicate expansion state, and
+agent summaries include textual loading, stale, blocked, and unknown states. Refresh
+preserves prompt, selection, and expansion; a disappeared agent selects its
+parent header. Override or disable any mapping with `mappings` or
+`active_mappings` (use `false`). The `action_help` footer and `?` popup
+describe applicable actions for the selected row and mark row-specific actions
+unavailable when they do not apply. The private preview is read-only: it
+shows identity, state, and editor statistics when available, plus snapshot
+diagnostics, bounded active-agent status, and the
+action Enter would perform. `show_snapshot_summary`, `show_agents`,
+`show_editor_summary`, and `show_action_hint` independently control those
+sections; `max_agents` bounds the agent list. `preview.width` controls the
+preview fraction and `min_width` hides it when the result area is too narrow.
+Missing or corrupt data is rendered as a warning and does not load, source,
+write, or mutate a session. Hydration and refresh failures retain the last
+usable rows and expose diagnostics; successful operations may also report
+non-fatal diagnostics. Use `:Sess active` for a live view of active sessions
+and their agents.
+
+Rows and status/footer text are measured in screen cells, so long paths and
+Unicode names are truncated without splitting wide characters and without
+losing searchable/action values. Narrow terminals collapse secondary labels
+and hide the preview when needed. Set `icons = false` or `ascii_fallback = true`
+for ASCII markers; semantic highlight groups can be overridden through
+`display.highlights` (for example, `{ current = "TelescopeResultsIdentifier" }`).
+Symbols and highlights are presentation only: state, marks, names, paths, and
+agent statuses remain distinguishable in plain text.
 
 ## Development
 

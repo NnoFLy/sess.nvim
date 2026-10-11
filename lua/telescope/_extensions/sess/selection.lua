@@ -1,4 +1,5 @@
 local M = {}
+local path = require("sess.path")
 
 local function row_value(row)
     return row and (row.value or row)
@@ -17,7 +18,7 @@ function M.key(value)
         }
     end
     if value.directory and value.path then
-        return { directory = true, path = value.path }
+        return { directory = true, path = path.identity(value.path) or value.path }
     end
     return nil
 end

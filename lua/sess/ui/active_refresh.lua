@@ -4,6 +4,200 @@ local selection = require("telescope._extensions.sess.selection")
 
 local DEFAULT_POLL_INTERVAL = 1000
 
+local function copy_table(value)
+    if type(value) ~= "table" then
+        return value
+    end
+    local copy = {}
+    for key, child in pairs(value) do
+        copy[key] = child
+    end
+    return copy
+end
+
+local function capture_manager_fields(manager)
+    if type(manager) ~= "table" then
+        return nil
+    end
+    local ok, fields = pcall(function()
+        local captured = {}
+        for key, value in pairs(manager) do
+            if type(value) == "table" then
+                local array = true
+                for child_key in pairs(value) do
+                    if type(child_key) ~= "number" then
+                        array = false
+                        break
+                    end
+                end
+                if array then
+                    captured[key] = copy_table(value)
+                else
+                    local copied, copy = pcall(vim.deepcopy, value)
+                    captured[key] = copied and copy or value
+                end
+            else
+                captured[key] = value
+            end
+        end
+        return captured
+    end)
+    return ok and fields or nil
+end
+
+local function restore_manager_fields(manager, fields)
+    if type(manager) ~= "table" or type(fields) ~= "table" then
+        return
+    end
+    pcall(function()
+        for key in pairs(manager) do
+            manager[key] = nil
+        end
+        for key, value in pairs(fields) do
+            manager[key] = value
+        end
+    end)
+end
+
+local function capture_prompt(picker)
+    if not picker then
+        return nil
+    end
+    if type(picker.get_prompt) == "function" then
+        local ok, prompt = pcall(picker.get_prompt, picker)
+        if ok and type(prompt) == "string" then
+            return prompt
+        end
+    end
+    if type(picker.prompt) == "string" then
+        return picker.prompt
+    end
+    if type(picker.prompt_bufnr) == "number" then
+        local ok, prompt = pcall(function()
+            if not vim.api.nvim_buf_is_valid(picker.prompt_bufnr) then
+                return nil
+            end
+            return vim.api.nvim_buf_get_lines(picker.prompt_bufnr, 0, 1, false)[1]
+        end)
+        if ok and type(prompt) == "string" then
+            return prompt
+        end
+    end
+    return nil
+end
+
+local function capture_state(picker)
+    local state = {
+        finder = picker.finder,
+        manager = picker.manager,
+        manager_fields = capture_manager_fields(picker.manager),
+        snapshot = picker._sess_active_snapshot,
+        expanded = picker._sess_expanded,
+        expanded_fields = copy_table(picker._sess_expanded),
+        prompt_title = picker.prompt_title,
+        prompt = capture_prompt(picker),
+        selection_entry = picker._selection_entry,
+        selection_row = picker._selection_row,
+    }
+    local prompt_border = picker.layout
+        and picker.layout.prompt
+        and picker.layout.prompt.border
+    if prompt_border then
+        -- A nil title is meaningful: rollback must clear a candidate title
+        -- introduced by a partially failed refresh.
+        state.border_title_present = true
+        state.border_title = prompt_border.title
+    end
+    if type(picker.get_selection) == "function" then
+        local ok, selected = pcall(picker.get_selection, picker)
+        if ok then
+            state.selected = selected
+        end
+    end
+    if type(picker.results_bufnr) == "number" then
+        local ok, valid = pcall(vim.api.nvim_buf_is_valid, picker.results_bufnr)
+        if ok and valid then
+            local rows_ok, rows = pcall(vim.api.nvim_buf_get_lines, picker.results_bufnr, 0, -1, false)
+            if rows_ok then
+                state.rows = rows
+            end
+        end
+    end
+    if type(picker.results_win) == "number" then
+        local ok, valid = pcall(vim.api.nvim_win_is_valid, picker.results_win)
+        if ok and valid then
+            local cursor_ok, cursor = pcall(vim.api.nvim_win_get_cursor, picker.results_win)
+            if cursor_ok then
+                state.cursor = cursor
+            end
+        end
+    end
+    return state
+end
+
+local function restore_state(picker, state)
+    picker.finder = state.finder
+    picker.manager = state.manager
+    restore_manager_fields(state.manager, state.manager_fields)
+    picker._sess_active_snapshot = state.snapshot
+    picker._sess_expanded = state.expanded
+    if type(state.expanded) == "table" and type(state.expanded_fields) == "table" then
+        for key in pairs(state.expanded) do
+            state.expanded[key] = nil
+        end
+        for key, value in pairs(state.expanded_fields) do
+            state.expanded[key] = value
+        end
+    end
+    picker.prompt_title = state.prompt_title
+    local prompt_border = picker.layout
+        and picker.layout.prompt
+        and picker.layout.prompt.border
+    if prompt_border and state.border_title_present then
+        pcall(prompt_border.change_title, prompt_border, state.border_title)
+    end
+    if state.prompt ~= nil then
+        local restored = false
+        if type(picker.set_prompt) == "function" then
+            restored = pcall(picker.set_prompt, picker, state.prompt)
+        elseif picker.prompt ~= nil then
+            restored = pcall(function()
+                picker.prompt = state.prompt
+            end)
+        end
+        if not restored and type(picker.prompt_bufnr) == "number" then
+            pcall(function()
+                if vim.api.nvim_buf_is_valid(picker.prompt_bufnr) then
+                    vim.api.nvim_buf_set_lines(picker.prompt_bufnr, 0, 1, false, { state.prompt })
+                end
+            end)
+        end
+    end
+    if state.rows ~= nil and type(picker.results_bufnr) == "number" then
+        pcall(function()
+            if vim.api.nvim_buf_is_valid(picker.results_bufnr) then
+                vim.api.nvim_buf_set_lines(picker.results_bufnr, 0, -1, false, state.rows)
+            end
+        end)
+    end
+    if state.cursor ~= nil and type(picker.results_win) == "number" then
+        pcall(function()
+            if vim.api.nvim_win_is_valid(picker.results_win) then
+                vim.api.nvim_win_set_cursor(picker.results_win, state.cursor)
+            end
+        end)
+    end
+    picker._selection_entry = state.selection_entry
+    picker._selection_row = state.selection_row
+    local key = selection.key(state.selected and (state.selected.value or state.selected))
+    if key then
+        pcall(selection.restore, picker, state.finder, key, { parent = true })
+    end
+    if state.selection_entry ~= nil then
+        picker._selection_entry = state.selection_entry
+    end
+end
+
 -- Poll only while this picker is open, and redraw only when its rows change.
 -- The generator receives a completion callback and may yield between probes.
 function M.start(picker, generate, initial_rows, poll_interval)
@@ -29,7 +223,9 @@ function M.start(picker, generate, initial_rows, poll_interval)
     local scheduled = false
     local pending_resize = false
     local snapshot_at_refresh
+    local rollback_state
     local autocmds = {}
+    picker._sess_active_refresh_transactional = true
 
     local function stop()
         if stopped then
@@ -38,6 +234,9 @@ function M.start(picker, generate, initial_rows, poll_interval)
         stopped = true
         refreshing = false
         pending_resize = false
+        rollback_state = nil
+        picker._sess_active_refresh_transactional = nil
+        picker._sess_active_commit_title = nil
         if timer then
             timer:stop()
             timer:close()
@@ -57,28 +256,47 @@ function M.start(picker, generate, initial_rows, poll_interval)
 
     local function fail(err)
         -- A best-effort status probe must not close an otherwise usable picker.
-        -- Keep the last committed rows and let the next poll retry it.
+        -- Keep the last committed rows and let the next poll retry it. Store a
+        -- textual warning as well as logging it so status/footer integrations
+        -- can expose the failure without relying on a highlight or icon.
         refreshing = false
         cancel_refresh = nil
+        picker._sess_active_loading = false
+        picker._sess_active_refresh_warning = tostring(err)
         require("sess.log").warn("Active picker refresh failed: " .. tostring(err))
     end
 
     local refresh
 
-    local function finish(finder, next_rows, snapshot)
+    local function finish(generation, finder, next_rows, snapshot)
         if stopped or not refreshing then
             return
         end
         refreshing = false
         cancel_refresh = nil
 
+        -- A manual refresh and polling share this generation. Whichever
+        -- request starts last owns the eventual commit; an older callback must
+        -- not overwrite its rows, title, snapshot, or expansion state.
+        if generation ~= picker._sess_active_refresh_generation then
+            rollback_state = nil
+            if pending_resize and not stopped then
+                pending_resize = false
+                refresh()
+            end
+            return
+        end
+
         -- Ignore probes started before a user mutation replaced the cached
-        -- snapshot while the probe was yielding.
+        -- snapshot while the probe was yielding. The newer mutation owns the
+        -- picker state and must not be rolled back by this stale probe.
         if
             snapshot
             and snapshot_at_refresh
             and picker._sess_active_snapshot ~= snapshot_at_refresh
         then
+            rollback_state = nil
+            picker._sess_active_refresh_warning = nil
             if pending_resize and not stopped then
                 pending_resize = false
                 refresh()
@@ -88,23 +306,39 @@ function M.start(picker, generate, initial_rows, poll_interval)
 
         local ok, err = pcall(function()
             -- Collapsed rows can stay unchanged while a session status changes.
+            -- Keep every field below speculative until Telescope accepts the
+            -- candidate finder. In particular, snapshot assignment must follow
+            -- picker:refresh so a partial refresh can be rolled back.
             local snapshot_changed = snapshot ~= nil
                 and not vim.deep_equal(picker._sess_active_snapshot, snapshot)
-            if snapshot then
-                picker._sess_active_snapshot = snapshot
-            end
             if snapshot_changed or not vim.deep_equal(rows, next_rows) then
-                local selected_key = selection.current_key(picker)
+                local selected_key = selection.key(
+                    rollback_state and rollback_state.selected
+                        and (rollback_state.selected.value or rollback_state.selected)
+                )
                 selection.queue(picker, finder, selected_key, { parent = true })
                 picker:refresh(finder, { reset_prompt = false })
                 if not selection.is_attached(picker) then
                     selection.restore_pending(picker)
                 end
+                if snapshot then
+                    picker._sess_active_snapshot = snapshot
+                end
+                if type(picker._sess_active_commit_title) == "function" and snapshot then
+                    picker._sess_active_commit_title(snapshot)
+                end
                 rows = next_rows
             end
         end)
         if not ok then
+            selection.cancel(picker)
+            if rollback_state then
+                restore_state(picker, rollback_state)
+            end
             fail(err)
+        else
+            rollback_state = nil
+            picker._sess_active_refresh_warning = nil
         end
         if pending_resize and not stopped then
             pending_resize = false
@@ -126,9 +360,19 @@ function M.start(picker, generate, initial_rows, poll_interval)
         end
 
         refreshing = true
+        picker._sess_active_refresh_generation = (picker._sess_active_refresh_generation or 0) + 1
+        local generation = picker._sess_active_refresh_generation
         snapshot_at_refresh = picker._sess_active_snapshot
-        local ok, handle, next_rows = pcall(generate, picker._sess_expanded, finish)
+        rollback_state = capture_state(picker)
+        local function complete(finder, next_rows, snapshot)
+            finish(generation, finder, next_rows, snapshot)
+        end
+        local ok, handle, next_rows, snapshot = pcall(generate, picker._sess_expanded, complete)
         if not ok then
+            if rollback_state then
+                restore_state(picker, rollback_state)
+                rollback_state = nil
+            end
             fail(handle)
         elseif type(handle) == "function" then
             cancel_refresh = handle
@@ -137,7 +381,7 @@ function M.start(picker, generate, initial_rows, poll_interval)
             end
         elseif handle ~= nil then
             -- Backwards-compatible synchronous generator form.
-            finish(handle, next_rows)
+            finish(generation, handle, next_rows, snapshot)
         end
     end
 

@@ -134,7 +134,16 @@ COMMANDS                                                     *sess-commands*
     the parent and focuses the selected agent's existing visible buffer. Status
     refresh is best-effort: a failed probe leaves the last rows usable and emits
     a diagnostic, while a selected agent that disappears falls back to its
-    parent session. This picker is runtime-only; it never starts processes,
+    parent session. Header arrows indicate expansion state, and summaries use
+    text as well as symbols for loading, stale, blocked, and unknown data.
+    By default `<C-r>` manually refreshes agent data when that key is not claimed
+    by another active mapping; configure `active.refresh_key` with another key
+    or `false` to disable it. With `active.header_navigation` enabled (default),
+    `<C-j>` and `<C-k>` move to the next and previous session headers. Configure
+    `next_header_key` and `previous_header_key`, or set header navigation to
+    false. Existing active mappings always win. Refresh preserves prompt,
+    selection, expansion, and the last usable snapshot; failed probes expose a
+    textual warning. This picker is runtime-only; it never starts processes,
     creates windows, or persists agent state.
 
 Tab completion supports subcommands, marks, session names, deleted-session names/ids/keys,
@@ -168,7 +177,15 @@ shell-like characters, and invalid syntax is treated as ordinary text. Configure
 `search.fields`, `search.filters`, and `search.sort` (`default`, `recent`,
 `pinned`, `activity`, or `name`) in the Telescope extension. The default order
 is unchanged. Active agent matches keep their parent session visible. A custom
-`sorter` receives the enriched ordinal.
+`sorter` receives the enriched ordinal. The status area can show practical
+match counts (`show_count`, enabled by default), interpreted filters, and a
+non-default sort mode (`show_sort`, enabled by default). Malformed filter-like
+text remains ordinary search text. Set `cycle_sort` to `true` (using `<C-s>`),
+a key string, or `{ i = "<key>", n = "<key>" }` to add an opt-in mapping in
+insert and normal mode for regular and active pickers. Existing mappings in the
+relevant mapping table take precedence and `false` disables a mode. Cycling
+follows `default`, `recent`, `pinned`, `activity`, `name` and restores the
+selected session, agent, or directory by stable identity.
 
 <C-b> prompts
 for and assigns a mark to the selected session. A prompt
@@ -545,12 +562,24 @@ Install telescope.nvim and plenary.nvim, then: >
     require("telescope").setup({
         extensions = {
             sess = {
+                active = {
+                    refresh_key = "<C-r>", -- false disables generated refresh
+                    header_navigation = true,
+                    next_header_key = "<C-j>",
+                    previous_header_key = "<C-k>",
+                },
                 active_expand = "none",
                 poll_interval = 1000, -- polling interval (ms)
                 display = {
+                    mode = "detailed", -- compact | detailed | auto
+                    compact_width = 100, -- auto switches below this result width
+                    icons = true,
+                    ascii_fallback = false,
+                    toggle_key = "<C-g>", -- false disables the density mapping
                     show_metadata = true,
                     show_agent_summary = true,
                     path_style = "full", -- full | relative | short
+                    -- highlights = { current = "TelescopeResultsIdentifier" },
                 },
                 preview = {
                     enabled = true,
@@ -558,6 +587,9 @@ Install telescope.nvim and plenary.nvim, then: >
                     min_width = 80, -- hide preview below this result width
                     show_snapshot_summary = true,
                     show_agents = true,
+                    show_editor_summary = true,
+                    show_action_hint = true,
+                    max_agents = 8,
                 },
                 action_help = {
                     enabled = true,
@@ -566,9 +598,15 @@ Install telescope.nvim and plenary.nvim, then: >
                     -- descriptions = { ["<C-x>"] = "Custom action" },
                 },
                 search = {
-                    fields = { "name", "cwd", "mark", "agent", "status", "info" },
+                    fields = {
+                        "name", "cwd", "mark", "pinned", "last", "current",
+                        "active", "agent", "status", "info",
+                    },
                     filters = true,
                     sort = "default", -- default | recent | pinned | activity | name
+                    show_count = true,
+                    show_sort = true,
+                    cycle_sort = false,
                 },
             },
         },
@@ -578,17 +616,40 @@ Install telescope.nvim and plenary.nvim, then: >
 The active_expand option accepts "all", "current", or "none". The
 poll_interval option sets the active picker polling interval in
 milliseconds and must be a positive integer. Polling stops when the picker
-closes. Unsupported
+closes. `active.refresh_key` is a non-empty key or false; it is generated only
+when unclaimed by an active mapping. `active.header_navigation` enables the
+conflict-safe next/previous header mappings, whose keys are configurable with
+`next_header_key` and `previous_header_key` (each can also be false). Unsupported
 values are rejected during Telescope setup. The optional display table accepts
-show_metadata and show_agent_summary booleans, plus path_style "full",
-"relative", or "short". Rows measure the active Telescope result window in screen cells, retain complete
+mode "compact", "detailed", or "auto". Auto mode uses the actual Telescope
+result-window width and changes to compact below compact_width (a positive
+integer, default 100). `icons` and `ascii_fallback` are booleans; disabling
+icons or enabling the fallback uses ASCII symbols. `toggle_key` is a
+non-empty mapping key, false to disable the density mapping, or nil. A
+configured regular-picker mapping at that key wins; mapping it to false also
+disables the generated mapping. Invalid display types or values are rejected
+during Telescope setup. The search table also accepts boolean `show_count` and `show_sort`, plus
+`cycle_sort` as false, true, a key, or per-mode mapping. Status feedback is
+bounded for narrow result windows and does not replace operation diagnostics.
+The table also accepts show_metadata and
+show_agent_summary booleans, plus path_style "full", "relative", or "short".
+`highlights` overrides semantic Telescope highlight group names by field;
+accepted fields include current, active, inactive, new, mark, name, cwd,
+metadata, agent, working, idle, blocked, done, unknown, focused, and stale.
+Rows measure the active Telescope result window in screen cells, retain complete
 searchable ordinals, and recompute after terminal resize. Long paths shorten from
 the middle and verbose agent info from the end without hiding state or names.
 At narrow widths secondary labels collapse to symbols or disappear, while tree
 rows retain enough indentation for hierarchy. The preview uses `min_width`
 (default 80) to hide itself when the result area is too small.
 Regular and active session identity columns are shared, including Unicode-safe
-mark/name alignment. Telescope semantic highlight groups are used when the
+mark/name alignment. Default regular-picker insert/normal mappings include
+`<C-y>` to copy the selected complete session path. Active-picker mappings also
+include `<C-r>` to refresh agent data and `<C-o>` to focus a selected agent.
+Override or disable these mappings with `mappings` or `active_mappings` (use
+`false`); configured mappings take precedence. Copying only writes the complete
+path to the `+` register and does not load, unload, or otherwise mutate a
+session. Telescope semantic highlight groups are used when the
 entry display module is available; plain text remains readable otherwise.
 Override the semantic groups with display.highlights keys current, active,
 inactive, new, mark, name, cwd, metadata, agent, working, idle, blocked,
@@ -597,6 +658,13 @@ done, unknown, focused, and stale. Regular picker mappings use `mappings`; activ
 separate insert and normal-mode descriptions. Regular, active, and restore
 pickers have separate action sets. Row-specific actions are marked unavailable;
 unknown custom mappings are shown with their key and a generic action label.
+The footer and `?` popup include safe convenience actions when applicable:
+copy path, refresh active-agent data, focus the selected agent, and density
+(toggle compact/detailed rows). Row-specific actions are omitted or marked
+unavailable when the selected row does not support them. Refresh preserves
+prompt, selection, expansion, and the last usable rows if hydration reports a
+failure; failed operations retain their actionable error separately from
+non-fatal diagnostics.
 The optional `action_help` table enables a compact selection-aware action list.
 Its `key` defaults to `?`, `footer` controls the footer, and `descriptions` may
 map a key or action function to a custom label. Set `key = false` or
@@ -605,12 +673,16 @@ when its key conflicts with the help key; Sess never overwrites it. Help opens
 inside the picker lifecycle in both insert and normal mode without changing the
 prompt, selection, or filter. Narrow footers use a compact fallback.
 The optional preview pane is controlled by `preview.enabled` and uses
-`preview.width` as a fraction of the picker width. It is hidden on
-narrow terminals, and `show_snapshot_summary` and `show_agents` control its
-sections. Preview rendering uses a private scratch buffer that is cleaned up
-with the picker; it only consumes read-only metadata and snapshots, never
-sources a session file or invokes lifecycle operations. Missing/unreadable
-snapshots are shown as unavailable, corrupt/incompatible snapshots as invalid,
+`preview.width` as a fraction of the picker width. `preview.min_width` (default
+80) hides it when the result area is too narrow. It is hidden on narrow
+terminals, and `show_snapshot_summary` and `show_agents` control its
+sections. `show_editor_summary` and `show_action_hint` independently control
+its in-memory editor statistics and Enter hint; `max_agents` (a positive
+integer, default 8) bounds the agent section. Preview rendering uses a private
+scratch buffer that is cleaned up with the picker; it only consumes read-only
+metadata and snapshots, never sources a session file or invokes lifecycle
+operations. Missing/unreadable snapshots are shown as unavailable;
+corrupt/incompatible snapshots are shown as invalid,
 deleted records show their deletion time
 and restore key, and active agents show loading or stale when data is not ready.
 The active picker uses

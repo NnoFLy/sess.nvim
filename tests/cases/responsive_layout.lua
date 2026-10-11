@@ -113,6 +113,31 @@ assert(vim.fn.strdisplaywidth(rows[2].display) <= 28)
 assert(rows[2].display:find("代理", 1, true))
 assert(not rows[2].display:find("this verbose information must be shortened", 1, true))
 
+-- Even fixed tree, padding, and state columns must fit genuinely narrow
+-- result windows rather than relying on the normal-width budget.
+for _, width in ipairs({ 0, 1, 2, 3, 5, 7 }) do
+    local narrow = finders.format_session_display(session, {
+        mark = "@frontend",
+        mark_width = 10,
+        name_width = vim.fn.strdisplaywidth(session.metadata.name),
+        display = { available_width = width, path_style = "full", highlights = {} },
+    })
+    assert(vim.fn.strdisplaywidth(narrow) <= width, "fixed columns exceed width " .. width)
+end
+local narrow_active_rows = finders.build_active_entries(
+    { session },
+    { responsive = {} },
+    { responsive = true },
+    nil,
+    {},
+    { responsive = "@frontend" },
+    nil,
+    { available_width = 2, path_style = "full", highlights = {} }
+)
+for _, row in ipairs(narrow_active_rows) do
+    assert(vim.fn.strdisplaywidth(row.display) <= 2, "active row exceeds narrow width")
+end
+
 -- The entry displayer pads each configured item. Empty fitted parts must not
 -- be passed to it, or an omitted info part can overflow the layout width.
 local rendered_item_sets = {}
@@ -215,6 +240,7 @@ package.loaded["telescope.pickers"] = {
             selection_caret = "",
             layout_config = options.layout_config,
             finder = options.finder,
+            attach_mappings = options.attach_mappings,
         }
         function picker:find() end
         function picker:refresh(finder)
@@ -240,6 +266,7 @@ local api = require("sess.api")
 local ordinary_directory = fixture.directory("responsive-action-with-a-very-long-directory-name")
 local _, create_err, ordinary_session = api.session.create(ordinary_directory)
 assert(ordinary_session, create_err)
+assert(api.session.toggle_pin(ordinary_session))
 local _, action_err, action_session = api.session.create(fixture.directory("responsive-action"))
 assert(action_session, action_err)
 vim.o.columns = 100
@@ -281,6 +308,55 @@ assert(picker.layout_updates == nil)
 local wide_row = ordinary_row(picker.finder)
 assert(wide_row and wide_row.display ~= narrow_row.display)
 assert(vim.fn.strdisplaywidth(wide_row.display) <= 100)
+
+-- Auto density follows the actual result-window width on resize, rather than
+-- the terminal width used before Telescope lays out the picker.
+config.values.display.mode = "auto"
+config.values.display.compact_width = 100
+vim.o.columns = 80
+vim.api.nvim_win_set_width(picker.results_win, 50)
+pickers.sess()
+local auto_picker = picker_instances[#picker_instances]
+assert(config.values.display.mode == "auto")
+assert(layout.display_mode(config.values.display, 50) == "compact")
+local auto_narrow_finder = finders.generate_new_finder({
+    available_width = 50,
+    result_width = 50,
+})
+local auto_narrow = ordinary_row(auto_narrow_finder)
+assert(auto_narrow and vim.fn.strdisplaywidth(auto_narrow.display) <= 50)
+vim.o.columns = 160
+vim.api.nvim_win_set_width(auto_picker.results_win, 120)
+vim.api.nvim_exec_autocmds("VimResized", {})
+local auto_wide_finder = finders.generate_new_finder({
+    available_width = 120,
+    result_width = 120,
+})
+local auto_wide = ordinary_row(auto_wide_finder)
+assert(auto_wide and auto_wide.display ~= auto_narrow.display)
+assert(layout.display_mode(config.values.display, 120) == "detailed")
+
+-- Density mappings do not replace a configured action, while false explicitly
+-- disables the generated mapping in both picker modes.
+local custom_density = function() end
+config.values.display.mode = "detailed"
+config.values.mappings = { i = { ["<C-g>"] = custom_density }, n = {} }
+pickers.sess()
+local conflict_picker = picker_instances[#picker_instances]
+local conflict_mappings = {}
+conflict_picker.attach_mappings(1, function(mode, key, action)
+    conflict_mappings[mode .. key] = action
+end)
+assert(conflict_mappings["i<C-g>"] == custom_density)
+config.values.mappings = { i = { ["<C-g>"] = false }, n = {} }
+pickers.sess()
+local disabled_mapping_picker = picker_instances[#picker_instances]
+local disabled_mappings = {}
+disabled_mapping_picker.attach_mappings(1, function(mode, key, action)
+    disabled_mappings[mode .. key] = action
+end)
+assert(disabled_mappings["i<C-g>"] == nil)
+config.values.mappings = { i = {}, n = {} }
 vim.o.columns = 160
 vim.api.nvim_exec_autocmds("VimResized", {})
 assert(picker.previewer ~= nil)
@@ -381,6 +457,24 @@ end
 require("telescope._extensions.sess.actions").toggle_pin_session(0)
 assert(action_width == measured_width)
 finders_module.generate_new_finder = original_generate_new_finder
+
+-- Density refreshes keep path completion mode and its selected directory,
+-- rather than replacing the directory finder with the normal session finder.
+local original_generate_directory_finder = finders_module.generate_directory_finder
+local directory_prompt
+finders_module.generate_directory_finder = function(prompt, options)
+    directory_prompt = prompt
+    return { results = {} }
+end
+picker._sess_path_mode = true
+action_state.get_current_line = function()
+    return "/projects/path"
+end
+selected = { value = { directory = true, path = "/projects/path" } }
+require("telescope._extensions.sess.actions").toggle_display(0)
+assert(directory_prompt == "/projects/path")
+assert(picker.finder.results and #picker.finder.results == 0)
+finders_module.generate_directory_finder = original_generate_directory_finder
 
 picker._sess_layout_stop()
 vim.api.nvim_buf_delete(picker.prompt_bufnr, { force = true })
