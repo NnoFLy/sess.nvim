@@ -271,6 +271,20 @@ local function is_clean_empty_buffer(buf)
         and vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1] == ""
 end
 
+local function remove_restore_placeholder(buf, diagnostics)
+    if not is_clean_empty_buffer(buf) or #vim.fn.win_findbuf(buf) > 0 then
+        return
+    end
+
+    local removed, remove_err = pcall(vim.api.nvim_buf_delete, buf, {})
+    if not removed then
+        table.insert(
+            diagnostics,
+            "failed to remove temporary restore buffer: " .. tostring(remove_err)
+        )
+    end
+end
+
 function M.empty(cwd, options)
     M.hide()
     command("cd", cwd)
@@ -366,8 +380,10 @@ function M.restore(view, rollback)
     local diagnostics = {}
 
     for index, tab in ipairs(view.tabs) do
+        local restore_placeholder
         if index > 1 then
             vim.cmd("tabnew")
+            restore_placeholder = vim.api.nvim_get_current_buf()
         end
 
         -- New tabs inherit the previous window's local cwd. Clear inherited
@@ -443,6 +459,8 @@ function M.restore(view, rollback)
                 end
             end
         end
+
+        remove_restore_placeholder(restore_placeholder, diagnostics)
 
         if mapping[tab.current] then
             local focused, focus_err = pcall(vim.api.nvim_set_current_win, mapping[tab.current])

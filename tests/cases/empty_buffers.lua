@@ -36,3 +36,15 @@ fixture.equal({ "keep this edit" }, vim.api.nvim_buf_get_lines(first_buffer, 0, 
 assert(api.session.load(first))
 fixture.equal(1, listed_unnamed())
 fixture.equal(first_buffer, vim.api.nvim_get_current_buf())
+
+-- Restoring a multi-tab session must remove the clean placeholder created by
+-- :tabnew instead of leaving another listed unnamed buffer behind.
+vim.cmd("tabnew")
+local named_tab_buffer = vim.api.nvim_get_current_buf()
+vim.api.nvim_buf_set_name(named_tab_buffer, first.metadata.cwd .. "/tab.txt")
+
+ok, err = api.session.create(fixture.directory("fourth"))
+assert(ok, err)
+local unnamed_buffers_before_restore = listed_unnamed()
+assert(api.session.load(first))
+fixture.equal(unnamed_buffers_before_restore, listed_unnamed())
