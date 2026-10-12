@@ -297,7 +297,9 @@ local function directory_score(prompt, entry)
     if candidate:sub(1, #typed) == typed then
         return 0
     end
-    return -1
+    -- Telescope path mode enumerates fuzzy basename matches as well as exact
+    -- prefixes. Keep those rows eligible while preserving prefix priority.
+    return fuzzy_matches(candidate, typed) and 1 or -1
 end
 
 local function base_score(base, prompt, entry)

@@ -758,7 +758,7 @@ end
 local function build_directory_finder(prompt, display_opts, agents_by_id, cached_candidates, search_options, context)
     local candidates, err = cached_candidates, nil
     if not candidates then
-        candidates, err = path.enumerate(prompt)
+        candidates, err = path.enumerate(prompt, { fuzzy = true })
         if err then
             log.error(err)
         end
@@ -849,7 +849,7 @@ local function build_directory_finder(prompt, display_opts, agents_by_id, cached
 end
 
 function M.generate_directory_finder(prompt, display_opts, callback, previous_snapshot, search_options, context)
-    local candidates, err = path.enumerate(prompt)
+    local candidates, err = path.enumerate(prompt, { fuzzy = true })
     if err then
         log.error(err)
     end

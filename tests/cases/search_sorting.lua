@@ -408,6 +408,7 @@ local escaped_path_entry = {
     ordinal = "./project with space/",
 }
 assert(sorter.scoring_function("./project\\ with", escaped_path_entry) >= 0)
+assert(sorter.scoring_function("./pwt", escaped_path_entry) >= 0)
 assert(sorter.scoring_function("./missing", escaped_path_entry) < 0)
 
 api.items.get_items = original_get_items

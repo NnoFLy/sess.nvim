@@ -69,6 +69,20 @@ function M.normalize_existing(value)
     return normalized
 end
 
+local function fuzzy_matches(value, query)
+    value = value:lower()
+    query = query:lower()
+    local start = 1
+    for _, character in ipairs(vim.fn.split(query, "\\zs")) do
+        local _, finish = value:find(character, start, true)
+        if not finish then
+            return false
+        end
+        start = finish + 1
+    end
+    return true
+end
+
 local function split(value)
     local trailing_slash = value:sub(-1) == "/"
     local normalized = absolute(value)
@@ -109,11 +123,12 @@ end
 
 ---@param input string
 ---@return table[], string?
-function M.enumerate(input)
+function M.enumerate(input, options)
     if type(input) ~= "string" or not M.is_path(input) then
         return {}, "directory completion requires a path"
     end
 
+    options = options or {}
     local value = unescape(input)
     local parent, filter, trailing_slash = split(value)
     if vim.fn.isdirectory(parent) == 0 then
@@ -146,12 +161,8 @@ function M.enumerate(input)
             local child_path = vim.fs.joinpath(parent, name)
             local is_directory = kind == "directory"
                 or (kind == "link" and vim.fn.isdirectory(child_path) == 1)
-            if
-                is_directory
-                and name ~= "."
-                and name ~= ".."
-                and vim.startswith(name, filter)
-            then
+            local matches = options.fuzzy and fuzzy_matches or vim.startswith
+            if is_directory and name ~= "." and name ~= ".." and matches(name, filter) then
                 local normalized = vim.fs.normalize(child_path)
                 if not seen[normalized] then
                     results[#results + 1] = directory_entry(

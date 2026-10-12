@@ -190,9 +190,10 @@ selected session, agent, or directory by stable identity.
 <C-b> prompts
 for and assigns a mark to the selected session. A prompt
 beginning with `~/`, `/`, `./`, or `../` switches to immediate directory
-completion and includes a `./` entry for the typed directory. In path mode,
-<Tab> inserts the selected directory with a trailing slash and keeps the
-picker open. <Enter> loads or creates its session. Creating a session opens the default file
+completion and includes a `./` entry for the typed directory. Telescope path
+mode also accepts fuzzy child-directory matches; command-line completion remains
+prefix-based. In path mode, <Tab> inserts the selected directory with a trailing
+slash and keeps the picker open. <Enter> loads or creates its session. Creating a session opens the default file
 explorer in the project root. Returning to a non-path prompt restores the
 normal picker.
 

@@ -26,6 +26,11 @@ fixture.equal(1, #entries)
 fixture.equal(project, entries[1].path)
 fixture.equal("./project with space/", entries[1].prompt)
 
+local fuzzy_entries, fuzzy_err = path.enumerate("./pws", { fuzzy = true })
+assert(not fuzzy_err)
+fixture.equal(1, #fuzzy_entries)
+fixture.equal(project, fuzzy_entries[1].path)
+
 local escaped_entries, escaped_err = path.enumerate("./project\\ with")
 assert(not escaped_err)
 fixture.equal(project, escaped_entries[1].path)
