@@ -35,7 +35,10 @@ render("• Working (2s) · esc to interrupt", "working")
 local agent_id = "terminal:" .. terminal
 assert(api.agent.focus(session.id, agent_id))
 assert(next(require("sess.state").get_agents(session.id)) == nil)
-render("Action Required\r\nAllow command? [y/n]", "blocked")
+-- Approval text without a current prompt marker is historical scrollback,
+-- not enough evidence to report blocked.
+render("Action Required\r\nAllow command? [y/n]", "unknown")
+render("❯ Action Required\r\nAllow command? [y/n]", "blocked")
 render("› ", "idle")
 render("Unrecognised screen", "unknown")
 

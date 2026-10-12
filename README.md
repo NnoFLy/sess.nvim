@@ -194,7 +194,19 @@ api.agent.update(nil, "agent-1", {
 })
 
 api.agent.focus(nil, "agent-1")
+
+-- Read-only status evidence for diagnostics and integrations.
+local ok, err, explanation, diagnostics = api.agent.explain(nil, "agent-1")
 ```
+
+`api.agent.list()` returns compact agent rows. `api.agent.explain(target, agent_id)` is a
+read-only query returning the effective status, its source (`integration`, `screen`,
+`fallback`, `stale`, or `unknown`), bounded evidence, identity and manifest details, the
+matched rule, screen/cache metadata, and diagnostics. Operation errors are returned as
+`err`; probe and observation problems are non-fatal diagnostics returned in the fourth
+value and included in `explanation.diagnostics`. Explicit integration statuses remain
+authoritative, while screen observations are derived at runtime and never persisted.
+
 
 ## Hooks and events
 

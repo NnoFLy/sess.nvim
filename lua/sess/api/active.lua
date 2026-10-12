@@ -4,6 +4,20 @@ local state = require("sess.api.state")
 
 local M = {}
 
+local MAX_DIAGNOSTICS = 64
+local MAX_DIAGNOSTIC_LENGTH = 240
+local MAX_AGENTS = 256
+
+local function append_diagnostic(result, value)
+    if #result.diagnostics >= MAX_DIAGNOSTICS then return end
+    if type(value) ~= "string" then
+        value = "agent status diagnostic is malformed"
+    elseif #value > MAX_DIAGNOSTIC_LENGTH then
+        value = value:sub(1, MAX_DIAGNOSTIC_LENGTH)
+    end
+    result.diagnostics[#result.diagnostics + 1] = value
+end
+
 local function new_snapshot()
     local active = state.active()
     local current = state.current()
@@ -33,8 +47,9 @@ local function add_marks(result)
     for _, diagnostic in ipairs(diagnostics or {}) do result.diagnostics[#result.diagnostics + 1] = diagnostic end
     for _, entry in ipairs(entries or {}) do
         if not entry.stale then
-            result.marks_by_id[entry.id] = result.marks_by_id[entry.id]
-                and (result.marks_by_id[entry.id] .. " @" .. entry.mark)
+            local mark = result.marks_by_id[entry.id]
+            result.marks_by_id[entry.id] = mark
+                and (mark .. " @" .. entry.mark)
                 or ("@" .. entry.mark)
         end
     end
@@ -48,20 +63,41 @@ local function add_agents(result, session, previous)
     )
     local stale = false
     if not called then
-        result.diagnostics[#result.diagnostics + 1] = string.format(
+        append_diagnostic(result, string.format(
             "agent status probe failed for %s: %s",
             session.id,
             tostring(listed)
-        )
+        ))
         stale = true
     elseif not listed then
-        result.diagnostics[#result.diagnostics + 1] = list_err
+        append_diagnostic(result, list_err)
         stale = true
     end
-    for _, diagnostic in ipairs(diagnostics or {}) do
-        result.diagnostics[#result.diagnostics + 1] = diagnostic
+    if found ~= nil and type(found) ~= "table" then
+        append_diagnostic(result, "agent status result contained malformed agents")
         stale = true
+        found = {}
+    elseif type(found) == "table" and #found > MAX_AGENTS then
+        append_diagnostic(result, "agent status result contained too many agents")
+        stale = true
+        found = {}
     end
+    local probe_failed = false
+    for _, agent in ipairs(found or {}) do
+        if type(agent) == "table" and agent.probe_failed == true then
+            probe_failed = true
+            break
+        end
+    end
+    if diagnostics ~= nil and type(diagnostics) ~= "table" then
+        append_diagnostic(result, "agent status diagnostics were malformed")
+        stale = true
+    else
+        for _, diagnostic in ipairs(diagnostics or {}) do
+            append_diagnostic(result, diagnostic)
+        end
+    end
+    stale = stale or probe_failed
     result.stale_by_id[session.id] = stale or nil
     if stale and previous then
         result.agents_by_id[session.id] = vim.deepcopy(

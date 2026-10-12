@@ -162,7 +162,14 @@ changed statuses while it is open. This screen detection is a fallback: an
 explicit status supplied by an integration remains authoritative. The API
 returns (ok, err, result, diagnostics); list is sorted by agent id and all
 results are defensive copies. register, update, unregister, list, focus, and
-focused do not write storage. focus only operates on the current session; a
+focused do not write storage. `api.agent.explain(target, agent_id)` is a
+read-only query returning (ok, err, explanation, diagnostics). The explanation
+identifies the effective status source, bounded sanitized evidence, identity,
+manifest and matched rule, screen summary, cache state, and diagnostics. The
+error return is reserved for target/agent operation errors; probe and observation
+failures remain non-fatal diagnostics in the fourth return value and in
+explanation.diagnostics. Explanation results are defensive copies and do not
+expose raw terminal output. focus only operates on the current session; a
 missing or hidden target is a successful operation with an unavailable-target
 diagnostic. Agent records disappear only after a successful unload or delete
 and are never restored from disk.
