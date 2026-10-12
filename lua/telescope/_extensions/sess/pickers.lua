@@ -789,15 +789,17 @@ function M.active(opts)
         return finders.generate_active_finder_async(
             expanded_by_id,
             picker._sess_active_expand,
-            function(finder, next_rows, snapshot)
+            function(finder, next_rows, snapshot, unchanged)
                 picker._sess_active_loading = false
-                preview.invalidate(picker)
+                if not unchanged then
+                    preview.invalidate(picker)
+                end
                 -- The transactional poller commits the title only after the
                 -- candidate refresh succeeds. Keep the fallback mutation for
                 -- lightweight test/integration adapters that do not use the
                 -- transactional active-refresh implementation.
-                done(finder, next_rows, snapshot)
-                if not picker._sess_active_refresh_transactional then
+                done(finder, next_rows, snapshot, unchanged)
+                if not unchanged and not picker._sess_active_refresh_transactional then
                     picker._sess_active_commit_title(snapshot)
                 end
             end,

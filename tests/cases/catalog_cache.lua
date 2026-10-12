@@ -38,6 +38,27 @@ vim.uv.fs_read = fs_read
 assert(cached_again, cached_err)
 fixture.equal(cached, cached_again)
 
+-- Exact ID lookups must not rescan the whole catalog.
+local list_metadata = storage.list_metadata
+storage.list_metadata = function()
+    error("exact ID lookup should not list the catalog")
+end
+local direct_ok, direct_err, direct_item = api.session.get(item.id)
+storage.list_metadata = list_metadata
+assert(direct_ok, direct_err)
+fixture.equal(item.id, direct_item.id)
+
+-- Resolve all marks against one catalog snapshot instead of one scan per mark.
+local list_calls = 0
+storage.list_metadata = function(...)
+    list_calls = list_calls + 1
+    return list_metadata(...)
+end
+local marks_ok, marks_err = api.session.list_marks()
+storage.list_metadata = list_metadata
+assert(marks_ok, marks_err)
+fixture.equal(1, list_calls)
+
 -- External writers must invalidate cached presence, contents, and errors.
 local mark_path = fixture.root .. "/store/marks.json"
 assert(vim.uv.fs_unlink(mark_path))

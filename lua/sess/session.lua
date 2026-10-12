@@ -254,21 +254,19 @@ function M.get(id)
         return nil, err, "invalid-target"
     end
 
-    local sessions, list_err, diagnostics = M.list()
-    if list_err then
-        return nil, list_err, "storage"
+    local exists, exists_err = storage.exists(id)
+    if exists_err then
+        return nil, exists_err, "storage"
     end
-    for _, item in ipairs(sessions) do
-        if item.id == id then
-            return item
-        end
+    if not exists then
+        return nil, nil, "not-found"
     end
-    for _, diagnostic in ipairs(diagnostics) do
-        if diagnostic:match("session " .. vim.pesc(id) .. ":") then
-            return nil, diagnostic, "storage"
-        end
+
+    local item, read_err = read_session(id)
+    if not item then
+        return nil, read_err, "storage"
     end
-    return nil, nil, "not-found"
+    return item
 end
 
 ---@return Sess.Session[], string?, string[]
@@ -532,9 +530,34 @@ function M.list_marks()
     if not marks then
         return {}, err, {}
     end
+    if next(marks) == nil then
+        return {}, nil, {}
+    end
+
+    -- Resolve all marks against one catalog snapshot. Calling M.get() for each
+    -- mark turns a large mark registry into repeated catalog scans.
+    local sessions, list_err, list_diagnostics = M.list()
+    if list_err then
+        return {}, list_err, list_diagnostics or {}
+    end
+    local sessions_by_id = {}
+    for _, item in ipairs(sessions) do
+        sessions_by_id[item.id] = item
+    end
+
     local entries, diagnostics = {}, {}
     for mark, id in pairs(marks) do
-        local item, get_err = M.get(id)
+        local item = sessions_by_id[id]
+        local get_err
+        if not item then
+            get_err = "session not found: " .. id
+            for _, diagnostic in ipairs(list_diagnostics or {}) do
+                if diagnostic:match("session " .. vim.pesc(id) .. ":") then
+                    get_err = diagnostic
+                    break
+                end
+            end
+        end
         local stale_err
         if not item then
             stale_err = stale_mark_error(mark, id, get_err)

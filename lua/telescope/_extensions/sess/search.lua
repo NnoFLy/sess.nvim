@@ -433,6 +433,8 @@ function M.new_active_sorter(base, options)
     end
 
     local scoring = wrapped.scoring_function
+    local group_scores = {}
+    local group_prompt
     sorter._sess_search_sorter = true
     sorter._sess_active_sorter = true
     sorter.scoring_function = function(first, second, third, fourth)
@@ -449,15 +451,23 @@ function M.new_active_sorter(base, options)
             return row_score
         end
 
-        local group_entry = {
-            ordinal = group_ordinal,
-            search_fields = group_fields,
-        }
-        local group_score
-        if has_sorter_argument then
-            group_score = scoring(first, second, group_ordinal, group_entry)
-        else
-            group_score = scoring(first, group_entry)
+        local prompt = has_sorter_argument and second or first
+        if prompt ~= group_prompt then
+            group_prompt = prompt
+            group_scores = {}
+        end
+        local group_score = group_scores[group_ordinal]
+        if group_score == nil then
+            local group_entry = {
+                ordinal = group_ordinal,
+                search_fields = group_fields,
+            }
+            if has_sorter_argument then
+                group_score = scoring(first, second, group_ordinal, group_entry)
+            else
+                group_score = scoring(first, group_entry)
+            end
+            group_scores[group_ordinal] = group_score
         end
         return group_score >= 0 and group_score or row_score
     end
@@ -524,7 +534,12 @@ end
 function M.sort_sessions(sessions, mode, options_for)
     local decorated = {}
     for index, session in ipairs(sessions or {}) do
-        local value = vim.deepcopy(session)
+        -- Sorting only adds a temporary top-level field. Reusing nested
+        -- metadata avoids copying every active session on every poll.
+        local value = {}
+        for key, child in pairs(session) do
+            value[key] = child
+        end
         value.search_fields = session_values(session, options_for and options_for(session) or {})
         decorated[index] = value
     end

@@ -492,7 +492,9 @@ function M.build_active_entries(
             kind = "session",
             session_id = session.id,
             current = current,
-            session = vim.deepcopy(session),
+            -- The snapshot is immutable for the lifetime of this finder.
+            -- Avoid copying metadata for every header and child row.
+            session = session,
             expanded = expanded,
             display = display_parts_text(session_parts),
             display_parts = session_parts,
@@ -513,7 +515,7 @@ function M.build_active_entries(
                 entries[#entries + 1] = {
                     kind = "placeholder",
                     session_id = session.id,
-                    session = vim.deepcopy(session),
+                    session = session,
                     display = display_parts_text(placeholder_parts),
                     display_parts = placeholder_parts,
                     ordinal = table.concat(
@@ -580,7 +582,7 @@ function M.build_active_entries(
                         session_id = session.id,
                         current = current,
                         agent_id = agent.id,
-                        agent = vim.deepcopy(agent),
+                        agent = agent,
                         display = display_parts_text(agent_parts),
                         display_parts = agent_parts,
                         search_fields = agent_search_fields,
@@ -677,6 +679,17 @@ function M.generate_active_finder_async(
     active_expand = active_expand or "current"
     local load_marks = not (previous_snapshot and previous_snapshot.marks_loaded)
     return api.active.snapshot_async(function(snapshot)
+        if previous_snapshot
+            and previous_snapshot.signature
+            and snapshot.signature == previous_snapshot.signature
+        then
+            local called, callback_err = pcall(callback, nil, nil, snapshot, true)
+            if not called and on_error then
+                on_error(callback_err)
+            end
+            return
+        end
+
         local ok, finder, rows, built_snapshot = pcall(
             active_finder_from_snapshot,
             snapshot,
@@ -692,7 +705,7 @@ function M.generate_active_finder_async(
             end
             return
         end
-        local called, callback_err = pcall(callback, finder, rows, built_snapshot)
+        local called, callback_err = pcall(callback, finder, rows, built_snapshot, false)
         if not called and on_error then
             on_error(callback_err)
         end
