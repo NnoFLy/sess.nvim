@@ -1249,9 +1249,6 @@ end
 
 function M.read_marks()
     assert_initialized()
-    if marks_cache then
-        return vim.deepcopy(marks_cache)
-    end
     local trusted, trust_err = trusted_dir(root_path, "storage directory")
     if not trusted then
         return nil, trust_err
@@ -1260,6 +1257,9 @@ function M.read_marks()
     local safe, present_or_err = validate_mark_registry_path(path)
     if not safe then
         return nil, present_or_err
+    end
+    if marks_cache then
+        return vim.deepcopy(marks_cache)
     end
     if not present_or_err then
         marks_cache = {}
