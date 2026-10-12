@@ -334,19 +334,18 @@ Set `search.cycle_sort` to `true` (default key `<C-s>`), a key string, or
 `pinned`, `activity`, and `name`. Existing mappings win; use `false` for a mode
 to disable it. The mapping preserves the prompt and selected session, agent, or
 directory when the order changes.
-The active-session picker provides a conflict-safe manual refresh mapping
-(`<C-r>` by default) and `<C-o>` to focus a selected agent; these actions are
-safe and do not load or unload sessions. Configure `active.refresh_key` with a
-key or `false` to replace or disable refresh. With `active.header_navigation`
-enabled (the default), `<C-j>` and `<C-k>` move to the next and previous
-session headers; configure their keys with `next_header_key` and
-`previous_header_key`, or set header navigation to `false`. Generated mappings
-are added only when the key is unclaimed, so `active_mappings` and picker
-mappings always take precedence. Header arrows indicate expansion state, and
-agent summaries include textual loading, stale, blocked, and unknown states. Refresh
+The active-session picker starts with `mappings`, then overrides `<Tab>` and
+`<Enter>` with expansion and switch/focus actions. Its other active-only actions,
+including `<S-Tab>`, `<C-o>`, refresh, and header navigation, are added only when
+their keys are unclaimed. Configure `active.refresh_key` with a key or `false`
+to replace or disable refresh. With `active.header_navigation` enabled (the
+default), `<C-j>` and `<C-k>` move to the next and previous session headers;
+configure their keys with `next_header_key` and `previous_header_key`, or set
+header navigation to `false`. Existing `mappings` entries always win except for
+`<Tab>` and `<Enter>`. Header arrows indicate expansion state, and agent
+summaries include textual loading, stale, blocked, and unknown states. Refresh
 preserves prompt, selection, and expansion; a disappeared agent selects its
-parent header. Override or disable any mapping with `mappings` or
-`active_mappings` (use `false`). The prompt keeps only the `? - help` hint; the
+parent header.
 `?` popup describes applicable actions for the selected row, marking row-specific
 actions unavailable when they do not apply. The private preview is read-only: it
 shows identity, state, and editor statistics when available, plus snapshot
