@@ -235,15 +235,19 @@ local CATALOG_VERSION = 1
 -- of truth for direct storage APIs and catalog rebuilds.
 local catalog_cache ---@type table<string, Sess.CatalogRecord>?
 local catalog_diagnostics ---@type string[]?
+local catalog_skipped = {}
 local marks_cache ---@type table<string, Sess.SessionId>?
+local marks_cache_stamp
 
 local function invalidate_catalog()
     catalog_cache = nil
     catalog_diagnostics = nil
+    catalog_skipped = {}
 end
 
 local function invalidate_marks()
     marks_cache = nil
+    marks_cache_stamp = nil
 end
 
 -- Compatibility export; mark syntax itself is domain-owned by sess.mark.
@@ -811,25 +815,29 @@ local function validate_metadata(data)
     return data --[[@as Sess.SessionMetadata]]
 end
 
+local function file_stamp(stat)
+    local mtime, ctime = stat.mtime or {}, stat.ctime or {}
+    return {
+        size = stat.size,
+        sec = mtime.sec,
+        nsec = mtime.nsec,
+        dev = stat.dev,
+        ino = stat.ino,
+        ctime_sec = ctime.sec,
+        ctime_nsec = ctime.nsec,
+    }
+end
+
 local function metadata_stamp(path)
     local stat = vim.uv.fs_lstat(path)
     if not stat or stat.type ~= "file" then
         return nil
     end
-    local mtime = stat.mtime or {}
-    return {
-        size = stat.size,
-        sec = type(mtime) == "table" and mtime.sec or nil,
-        nsec = type(mtime) == "table" and mtime.nsec or nil,
-    }
+    return file_stamp(stat)
 end
 
 local function stamp_matches(left, right)
-    return left
-        and right
-        and left.size == right.size
-        and left.sec == right.sec
-        and left.nsec == right.nsec
+    return left and right and vim.deep_equal(left, right)
 end
 
 local function catalog_file_path()
@@ -857,6 +865,10 @@ local function catalog_record(metadata, stamp)
         size = stamp and stamp.size,
         mtime_sec = stamp and stamp.sec,
         mtime_nsec = stamp and stamp.nsec,
+        dev = stamp and stamp.dev,
+        ino = stamp and stamp.ino,
+        ctime_sec = stamp and stamp.ctime_sec,
+        ctime_nsec = stamp and stamp.ctime_nsec,
     }
 end
 
@@ -865,6 +877,10 @@ local function catalog_record_stamp(record)
         size = record.size,
         sec = record.mtime_sec,
         nsec = record.mtime_nsec,
+        dev = record.dev,
+        ino = record.ino,
+        ctime_sec = record.ctime_sec,
+        ctime_nsec = record.ctime_nsec,
     }
 end
 
@@ -1237,14 +1253,21 @@ local function validate_mark_registry_path(path)
     local stat, err, code = vim.uv.fs_lstat(path)
     if not stat then
         if code == "ENOENT" then
-            return true, false
+            return true, false, nil
         end
         return false, "failed to access mark registry: " .. tostring(err or path)
     end
     if stat.type ~= "file" then
         return false, "untrusted mark registry path (expected a regular file): " .. path
     end
-    return true, true
+    return true, true, file_stamp(stat)
+end
+
+local function same_mark_stamp(left, right)
+    if not left or not right then
+        return left == right
+    end
+    return stamp_matches(left, right)
 end
 
 function M.read_marks()
@@ -1254,26 +1277,31 @@ function M.read_marks()
         return nil, trust_err
     end
     local path = join(root_path, "marks.json")
-    local safe, present_or_err = validate_mark_registry_path(path)
+    local safe, present_or_err, stamp = validate_mark_registry_path(path)
     if not safe then
+        invalidate_marks()
         return nil, present_or_err
     end
-    if marks_cache then
+    if marks_cache and same_mark_stamp(marks_cache_stamp, stamp) then
         return vim.deepcopy(marks_cache)
     end
     if not present_or_err then
         marks_cache = {}
+        marks_cache_stamp = nil
         return {}
     end
     local data, read_err = read_json(path)
     if not data then
+        invalidate_marks()
         return nil, read_err
     end
     local valid, validation_err = validate_marks(data)
     if not valid then
+        invalidate_marks()
         return nil, validation_err
     end
     marks_cache = vim.deepcopy(valid)
+    marks_cache_stamp = stamp
     return vim.deepcopy(valid)
 end
 
@@ -1297,11 +1325,11 @@ function M.write_marks(marks)
     if next(marks) == nil then
         data.marks = vim.empty_dict()
     end
-    local written, write_err = write_json(path, data)
-    if written then
-        invalidate_marks()
-    end
-    return written, write_err
+    -- Atomic replacement may commit before reporting a descriptor cleanup
+    -- failure. Invalidate before writing so every outcome rereads the current
+    -- on-disk registry rather than returning a stale cached copy.
+    invalidate_marks()
+    return write_json(path, data)
 end
 
 -- Session discovery
@@ -1344,11 +1372,12 @@ local function rebuild_catalog(initial_diagnostics)
         return {}, list_err, initial_diagnostics or {}
     end
 
-    local records, diagnostics = {}, initial_diagnostics or {}
+    local records, diagnostics, skipped = {}, initial_diagnostics or {}, {}
     for _, id in ipairs(ids) do
         local valid, id_err = validate_id(id)
         if not valid then
             diagnostics[#diagnostics + 1] = "failed to load session " .. id .. ": " .. id_err
+            skipped[id] = false
         else
             local paths = session_paths(id)
             local data, read_err = read_json(paths.metadata)
@@ -1368,6 +1397,9 @@ local function rebuild_catalog(initial_diagnostics)
             else
                 diagnostics[#diagnostics + 1] = "failed to load session " .. id .. ": " .. tostring(validation_err)
             end
+            if not records[id] then
+                skipped[id] = metadata_stamp(paths.metadata) or false
+            end
         end
     end
 
@@ -1377,23 +1409,33 @@ local function rebuild_catalog(initial_diagnostics)
     end
     catalog_cache = records
     catalog_diagnostics = diagnostics
+    catalog_skipped = skipped
     return records, nil, diagnostics
 end
 
-local function catalog_matches_store(records, ids)
+local function catalog_matches_store(records, ids, skipped)
     local seen = {}
     for _, id in ipairs(ids) do
         local valid = validate_id(id)
-        if not valid then
-            return false
-        end
         seen[id] = true
-        local record = records[id]
-        if not record or not record.metadata then
-            return false
+        if not valid then
+            if not skipped or skipped[id] ~= false then
+                return false
+            end
+        else
+            local record = records[id]
+            local stamp = metadata_stamp(session_paths(id).metadata)
+            if record then
+                if not stamp_matches(stamp, catalog_record_stamp(record)) then
+                    return false
+                end
+            elseif not skipped or skipped[id] == nil or not vim.deep_equal(stamp or false, skipped[id]) then
+                return false
+            end
         end
-        local stamp = metadata_stamp(session_paths(id).metadata)
-        if not stamp_matches(stamp, catalog_record_stamp(record)) then
+    end
+    for id in pairs(skipped or {}) do
+        if not seen[id] then
             return false
         end
     end
@@ -1408,7 +1450,7 @@ end
 local function load_catalog()
     if catalog_cache then
         local ids, list_err = M.list()
-        if not list_err and catalog_matches_store(catalog_cache, ids) then
+        if not list_err and catalog_matches_store(catalog_cache, ids, catalog_skipped) then
             return catalog_cache, nil, catalog_diagnostics or {}
         end
         if list_err then
@@ -1434,7 +1476,11 @@ local function load_catalog()
                     or not validate_metadata(record.metadata)
                     or type(record.size) ~= "number"
                     or type(record.mtime_sec) ~= "number"
-                    or type(record.mtime_nsec) ~= "number"
+                    or (record.mtime_nsec ~= nil and type(record.mtime_nsec) ~= "number")
+                    or (record.dev ~= nil and type(record.dev) ~= "number")
+                    or (record.ino ~= nil and type(record.ino) ~= "number")
+                    or (record.ctime_sec ~= nil and type(record.ctime_sec) ~= "number")
+                    or (record.ctime_nsec ~= nil and type(record.ctime_nsec) ~= "number")
                 then
                     valid_records = false
                     break
@@ -1476,7 +1522,7 @@ function M.list_metadata()
 end
 
 local function update_catalog_record(id, metadata)
-    local records, load_err = load_catalog()
+    local records, load_err, diagnostics = load_catalog()
     if load_err then
         invalidate_catalog()
         return false, load_err
@@ -1493,7 +1539,7 @@ local function update_catalog_record(id, metadata)
         return false, write_err
     end
     catalog_cache = records
-    catalog_diagnostics = {}
+    catalog_diagnostics = diagnostics or {}
     return true
 end
 
