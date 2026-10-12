@@ -254,36 +254,33 @@ function M.get(id)
         return nil, err, "invalid-target"
     end
 
-    local exists, exists_err = storage.exists(id)
-    if exists_err then
-        return nil, exists_err, "storage"
+    local sessions, list_err, diagnostics = M.list()
+    if list_err then
+        return nil, list_err, "storage"
     end
-
-    if not exists then
-        return nil, nil, "not-found"
+    for _, item in ipairs(sessions) do
+        if item.id == id then
+            return item
+        end
     end
-
-    return read_session(id)
+    for _, diagnostic in ipairs(diagnostics) do
+        if diagnostic:match("session " .. vim.pesc(id) .. ":") then
+            return nil, diagnostic, "storage"
+        end
+    end
+    return nil, nil, "not-found"
 end
 
 ---@return Sess.Session[], string?, string[]
 function M.list()
-    local ids, err = storage.list()
+    local metadata, err, diagnostics = storage.list_metadata()
     if err then
-        return {}, err, {}
+        return {}, err, diagnostics or {}
     end
 
     local sessions = {}
-    local diagnostics = {}
-
-    for _, id in ipairs(ids) do
-        local called, item, item_err = pcall(read_session, id)
-        if called and item then
-            table.insert(sessions, item)
-        else
-            local load_err = called and item_err or item
-            table.insert(diagnostics, "failed to load session " .. id .. ": " .. tostring(load_err))
-        end
+    for id, item_metadata in pairs(metadata) do
+        table.insert(sessions, { id = id, metadata = item_metadata })
     end
 
     table.sort(sessions, function(a, b)
