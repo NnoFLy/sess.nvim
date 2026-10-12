@@ -131,7 +131,8 @@ positions, buffer listing, and working-directory scopes without reloading the
 snapshot.
 
 Sessions share buffers, so opening a file that is already open usually reuses
-its buffer. Window IDs and some plugin-specific window settings may change.
+its buffer. Clean unnamed transition buffers are reused rather than accumulated.
+Window IDs and some plugin-specific window settings may change.
 
 Operations are deliberately conservative:
 

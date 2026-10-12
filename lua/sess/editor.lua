@@ -258,10 +258,35 @@ function M.hide()
     end
 end
 
-function M.empty(cwd)
+local function is_clean_empty_buffer(buf)
+    if not buf or not vim.api.nvim_buf_is_valid(buf) then
+        return false
+    end
+
+    if vim.bo[buf].modified or vim.api.nvim_buf_get_name(buf) ~= "" then
+        return false
+    end
+
+    return vim.api.nvim_buf_line_count(buf) == 1
+        and vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1] == ""
+end
+
+function M.empty(cwd, options)
     M.hide()
     command("cd", cwd)
-    local empty = vim.api.nvim_create_buf(true, false)
+
+    local empty
+    if options and options.reuse_clean and is_clean_empty_buffer(parking) then
+        empty = parking
+        if vim.bo[empty].buftype == "nofile" then
+            vim.bo[empty].buftype = ""
+        end
+        vim.bo[empty].bufhidden = "hide"
+        vim.bo[empty].buflisted = true
+    else
+        empty = vim.api.nvim_create_buf(true, false)
+    end
+
     local changed, change_err = pcall(vim.api.nvim_win_set_buf, 0, empty)
     if not changed then
         pcall(vim.api.nvim_buf_delete, empty, { force = true })

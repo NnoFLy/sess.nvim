@@ -208,7 +208,8 @@ protected during transitions, then restored.
 
 Returning to a still-active session restores its live buffer IDs,
 layout, cursor positions, listing and cwd scopes rather than sourcing Vimscript
-and restarting its terminals. This is not full workspace isolation: buffers are
+and restarting its terminals. Clean unnamed transition buffers are reused
+rather than accumulated. This is not full workspace isolation: buffers are
 shared; the same file in two sessions generally uses the same buffer. Window
 IDs may change; not all window-local/plugin settings can be reconstructed.
 User autocommands or trusted sourced code can still explicitly destroy state.
