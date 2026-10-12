@@ -194,9 +194,19 @@ assert(not session_entry.display:find("[last]", 1, true))
 
 local pickers = require("telescope._extensions.sess.pickers")
 local active_actions = require("telescope._extensions.sess.actions")
+local api = require("sess.api")
+local original_active_state = api.state.active
+local active_state_reads = 0
+api.state.active = function(...)
+    active_state_reads = active_state_reads + 1
+    return original_active_state(...)
+end
 pickers.sess()
 pickers.restore()
+active_state_reads = 0
 pickers.active()
+api.state.active = original_active_state
+assert(active_state_reads == 1, "active picker should read active state once")
 assert(active_poll_interval == 250)
 for _, options in ipairs(picker_options) do
     assert(options.sorting_strategy == "ascending")

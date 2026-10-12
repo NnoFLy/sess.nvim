@@ -3,15 +3,37 @@ fixture.setup()
 local api = require("sess.api")
 local path = require("sess.ui.path")
 
+for _, prefix in ipairs({ "./", "../", "~/", "/" }) do
+    assert(path.is_path(prefix), "expected path prefix to be recognized: " .. prefix)
+end
+for _, input in ipairs({ "", "project", "path:project" }) do
+    assert(not path.is_path(input), "unexpected path prefix: " .. input)
+end
+
 local project = fixture.directory("project with space")
 fixture.directory("project with space/child")
 fixture.directory("project with space/other")
+
+local parent_entries, parent_err = path.enumerate("../")
+assert(not parent_err)
+assert(parent_entries[1].is_self)
+fixture.equal(vim.fs.normalize(vim.fn.getcwd() .. "/.."), parent_entries[1].path)
+fixture.equal("../", parent_entries[1].prompt)
 
 local entries, err = path.enumerate("./project")
 assert(not err)
 fixture.equal(1, #entries)
 fixture.equal(project, entries[1].path)
 fixture.equal("./project with space/", entries[1].prompt)
+
+local fuzzy_entries, fuzzy_err = path.enumerate("./pws", { fuzzy = true })
+assert(not fuzzy_err)
+fixture.equal(1, #fuzzy_entries)
+fixture.equal(project, fuzzy_entries[1].path)
+
+local escaped_entries, escaped_err = path.enumerate("./project\\ with")
+assert(not escaped_err)
+fixture.equal(project, escaped_entries[1].path)
 
 local children, children_err = path.enumerate("./project with space/")
 assert(not children_err)
@@ -21,7 +43,15 @@ fixture.equal("child", children[2].name)
 fixture.equal("other", children[3].name)
 
 vim.notify = function() end
+vim.fn.mkdir(vim.fs.joinpath(vim.env.HOME, "completion-home"), "p")
 require("sess.ui.command").setup()
+
+for _, prefix in ipairs({ "~/", "./", "../", "/" }) do
+    local completions = vim.fn.getcompletion("Sess load " .. prefix, "cmdline")
+    assert(#completions > 0, "expected directory completion for " .. prefix)
+    assert(not vim.list_contains(completions, prefix), "exact path should not hide siblings: " .. prefix)
+end
+
 local matches = vim.fn.getcompletion("Sess load ./project", "cmdline")
 assert(vim.list_contains(matches, "./project\\ with\\ space/"))
 

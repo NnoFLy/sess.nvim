@@ -163,6 +163,14 @@ local function update_preview_layout(picker, previewer, preview_config, explicit
     end
 end
 
+local function path_selection_key(prompt, picker)
+    local normalized = path.normalize_existing(prompt)
+    if normalized then
+        return selection.key({ directory = true, path = normalized })
+    end
+    return selection.current_key(picker)
+end
+
 local function preview_context(options)
     options = options or {}
     return {
@@ -309,16 +317,16 @@ local function make_picker(opts, restore_picker)
         return options
     end
 
-    local function refresh_preserving_selection(next_finder)
+    local function refresh_preserving_selection(next_finder, preferred_key)
         clear_transient_action_status(picker)
-        local key = selection.current_key(picker)
+        local key = preferred_key or selection.current_key(picker)
         -- Hydration and resize callbacks run after the picker is visible. A
         -- renderer can mutate Telescope before raising, so use the same
         -- transaction as lifecycle refreshes and retain the last good rows.
         return actions.transactional_refresh(picker, next_finder, key)
     end
 
-    local function hydrate_finder(generator)
+    local function hydrate_finder(generator, preferred_key)
         finder_generation = finder_generation + 1
         local generation = finder_generation
         if finder_cancel then
@@ -335,7 +343,7 @@ local function make_picker(opts, restore_picker)
                 return
             end
             local ok, refreshed = pcall(function()
-                return refresh_preserving_selection(finder)
+                return refresh_preserving_selection(finder, preferred_key)
             end)
             if not ok or refreshed == false then
                 -- The candidate snapshot belongs to the candidate rows. Keep
@@ -354,6 +362,24 @@ local function make_picker(opts, restore_picker)
             pcall(vim.api.nvim_del_autocmd, autocmd)
         end
         hydration_close_autocmds = {}
+    end
+
+    local function directory_context()
+        if not picker._sess_directory_context then
+            picker._sess_directory_context = finders.directory_context()
+        end
+        return picker._sess_directory_context
+    end
+
+    local function directory_finder(prompt, display_opts)
+        return finders.generate_directory_finder(
+            prompt,
+            display_opts,
+            nil,
+            nil,
+            search_options,
+            directory_context()
+        )
     end
 
     local function install_hydration_close_hooks()
@@ -415,17 +441,14 @@ local function make_picker(opts, restore_picker)
         picker_opts.on_input_filter_cb = function(prompt)
             clear_transient_action_status(picker)
             if path.is_path(prompt) then
+                invalidate_hydration()
                 local display_opts = display_options()
-                local updated_finder = hydrate_finder(function(callback, previous_snapshot)
-                    return finders.generate_directory_finder(
-                        prompt,
-                        display_opts,
-                        callback,
-                        previous_snapshot,
-                        search_options
-                    )
-                end)
-                selection.queue(picker, updated_finder, selection.current_key(picker))
+                local preferred_key = path_selection_key(prompt, picker)
+                -- Directory completion is already filesystem-backed. Do not
+                -- start an agent probe for every prompt character; that makes
+                -- path entry compete with typing and rarely changes a row.
+                local updated_finder = directory_finder(prompt, display_opts)
+                selection.queue(picker, updated_finder, preferred_key)
                 path_mode = true
                 picker._sess_path_mode = true
                 return { updated_finder = updated_finder }
@@ -434,6 +457,7 @@ local function make_picker(opts, restore_picker)
             if path_mode then
                 path_mode = false
                 picker._sess_path_mode = false
+                picker._sess_directory_context = nil
                 local display_opts = display_options()
                 local updated_finder = hydrate_finder(function(callback, previous_snapshot)
                     return finders.generate_new_finder(
@@ -540,9 +564,7 @@ local function make_picker(opts, restore_picker)
             refresh_preserving_selection(finders.generate_deleted_finder(display_opts, search_options))
         elseif path_mode then
             local prompt = action_state.get_current_line() or ""
-            refresh_preserving_selection(
-                finders.generate_directory_finder(prompt, display_opts, nil, nil, search_options)
-            )
+            refresh_preserving_selection(directory_finder(prompt, display_opts))
         else
             refresh_preserving_selection(
                 finders.generate_new_finder(display_opts, nil, nil, search_options)
@@ -567,36 +589,21 @@ local function make_picker(opts, restore_picker)
             refresh_preserving_selection(finders.generate_deleted_finder(display_opts, search_options))
         elseif path_mode then
             local prompt = action_state.get_current_line() or ""
-            refresh_preserving_selection(
-                finders.generate_directory_finder(prompt, display_opts, nil, nil, search_options)
-            )
+            refresh_preserving_selection(directory_finder(prompt, display_opts))
         else
             refresh_preserving_selection(
                 finders.generate_new_finder(display_opts, nil, nil, search_options)
             )
         end
-        if not restore_picker then
-            if path_mode then
-                local prompt = action_state.get_current_line() or ""
-                hydrate_finder(function(callback, previous_snapshot)
-                    return finders.generate_directory_finder(
-                        prompt,
-                        display_opts,
-                        callback,
-                        previous_snapshot,
-                        search_options
-                    )
-                end)
-            else
-                hydrate_finder(function(callback, previous_snapshot)
-                    return finders.generate_new_finder(
-                        display_opts,
-                        callback,
-                        previous_snapshot,
-                        search_options
-                    )
-                end)
-            end
+        if not restore_picker and not path_mode then
+            hydrate_finder(function(callback, previous_snapshot)
+                return finders.generate_new_finder(
+                    display_opts,
+                    callback,
+                    previous_snapshot,
+                    search_options
+                )
+            end)
         end
     end)
 end
@@ -620,18 +627,18 @@ function M.active(opts)
         opts.search or {}
     )
     local active_expand = config.values.active_expand
+    -- Keep expansion state and the initial finder on one snapshot for consistency.
+    local initial_snapshot = require("sess.api").active.initial_snapshot()
     local expanded = {}
-    local current = state.current()
-    for _, session in ipairs(state.active()) do
+    for _, session in ipairs(initial_snapshot.sessions) do
         local should_expand = active_expand == "all"
         if active_expand == "current" then
-            should_expand = current ~= nil and current.id == session.id
+            should_expand = initial_snapshot.current_id == session.id
         end
         expanded[session.id] = should_expand
     end
     -- Show session headers before hydrating agents and marks so large active
     -- session sets stay responsive.
-    local initial_snapshot = require("sess.api").active.initial_snapshot()
     local finder, rows = finders.generate_active_finder_from_snapshot(
         initial_snapshot,
         expanded,

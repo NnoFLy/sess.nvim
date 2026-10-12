@@ -1,3 +1,5 @@
+local path = require("sess.ui.path")
+
 local M = {}
 
 local allowed_fields = {
@@ -269,6 +271,37 @@ local function entry_fields(entry)
         or {}
 end
 
+local function unescape(value)
+    return path.unescape(text(value))
+end
+
+local function path_prompt(value)
+    value = unescape(value)
+    return value:match("^~/") ~= nil
+        or value:match("^/") ~= nil
+        or value:match("^%./") ~= nil
+        or value:match("^%.%./") ~= nil
+end
+
+-- Directory enumeration performs the authoritative prefix match. Running the
+-- normal fuzzy sorter on the same prompt makes aliases such as ./ and ~/ look
+-- like ordinary search text, which can hide valid siblings and reorder them.
+local function directory_score(prompt, entry)
+    local value = entry and entry.value
+    if not value or value.directory ~= true or not path_prompt(prompt) then
+        return nil
+    end
+
+    local typed = unescape(prompt)
+    local candidate = unescape(value.prompt)
+    if candidate:sub(1, #typed) == typed then
+        return 0
+    end
+    -- Telescope path mode enumerates fuzzy basename matches as well as exact
+    -- prefixes. Keep those rows eligible while preserving prefix priority.
+    return fuzzy_matches(candidate, typed) and 1 or -1
+end
+
 local function base_score(base, prompt, entry)
     if not base then
         return 1
@@ -299,22 +332,31 @@ local function base_score(base, prompt, entry)
     return score
 end
 
-local function rank_bonus(fields, query)
+local function rank_penalty(fields, query)
     query = lower(query)
+    if query == "" then
+        return 0
+    end
+
     local name = lower(fields.name)
     local mark = lower(fields.mark)
     if name == query then
-        return 1000000
-    elseif mark == query then
-        return 900000
+        return 0
     elseif name:sub(1, #query) == query then
-        return 100000
+        return 10
+    elseif name:find(query, 1, true) then
+        -- A name match must beat a path match even when the name contains the
+        -- query instead of starting with it. Telescope's base sorter scores
+        -- the combined ordinal and can otherwise prefer a path match.
+        return 20
+    elseif fuzzy_matches(name, query) then
+        return 30
+    elseif mark == query then
+        return 40
     elseif mark:sub(1, #query) == query then
-        return 90000
-    elseif lower(fields.cwd):find(query, 1, true) then
-        return 1000
+        return 50
     end
-    return 0
+    return 1000
 end
 
 function M.new_sorter(base, options)
@@ -341,6 +383,11 @@ function M.new_sorter(base, options)
             -- Keep direct calls useful for integrations and unit tests.
             prompt, entry = first, second
         end
+        local directory_result = directory_score(prompt, entry)
+        if directory_result ~= nil then
+            return directory_result
+        end
+
         local fields = entry_fields(entry)
         local filter = M.parse_filter(prompt, options)
         local query = filter and filter.query or prompt
@@ -361,7 +408,7 @@ function M.new_sorter(base, options)
         if score < 0 then
             return -1
         end
-        return score + rank_bonus(fields, query)
+        return score + rank_penalty(fields, query)
     end
     return sorter
 end

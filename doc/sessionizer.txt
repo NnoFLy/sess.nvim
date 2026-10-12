@@ -170,8 +170,8 @@ and are never restored from disk.
 The session Telescope picker normally shows available sessions. Search covers
 names, working directories, marks, pinned/last labels, current/active state,
 and agent name, status, and info. Each entry keeps the complete searchable
-record in its ordinal, so custom sorters can use the same data. Exact name and
-mark matches rank above loose path matches. Optional prefixes are `@a`,
+record in its ordinal for custom sorters. Name matches rank above path-only
+matches; exact name and mark matches rank highest. Optional prefixes are `@a`,
 `path:frontend`, `status:working`, and `agent:pi`; prefixes preserve spaces and
 shell-like characters, and invalid syntax is treated as ordinary text. Configure
 `search.fields`, `search.filters`, and `search.sort` (`default`, `recent`,
@@ -190,9 +190,10 @@ selected session, agent, or directory by stable identity.
 <C-b> prompts
 for and assigns a mark to the selected session. A prompt
 beginning with `~/`, `/`, `./`, or `../` switches to immediate directory
-completion and includes a `./` entry for the typed directory. In path mode,
-<Tab> inserts the selected directory with a trailing slash and keeps the
-picker open. <Enter> loads or creates its session. Creating a session opens the default file
+completion and includes a `./` entry for the typed directory. Telescope path
+mode also accepts fuzzy child-directory matches; command-line completion remains
+prefix-based. In path mode, <Tab> inserts the selected directory with a trailing
+slash and keeps the picker open. <Enter> loads or creates its session. Creating a session opens the default file
 explorer in the project root. Returning to a non-path prompt restores the
 normal picker.
 
@@ -207,7 +208,8 @@ protected during transitions, then restored.
 
 Returning to a still-active session restores its live buffer IDs,
 layout, cursor positions, listing and cwd scopes rather than sourcing Vimscript
-and restarting its terminals. This is not full workspace isolation: buffers are
+and restarting its terminals. Clean unnamed transition buffers are reused
+rather than accumulated. This is not full workspace isolation: buffers are
 shared; the same file in two sessions generally uses the same buffer. Window
 IDs may change; not all window-local/plugin settings can be reconstructed.
 User autocommands or trusted sourced code can still explicitly destroy state.
@@ -499,6 +501,8 @@ emit SessSaved before destination operations. Create emits SessCreated, not
 SessLoaded. Switching does not unload the outgoing session. Explicit unload
 emits SessUnloaded. Current deletion emits SessUnloaded then SessDeleted;
 non-current deletion emits only SessDeleted. Same-session load emits nothing.
+During VimLeavePre autosave, persistence still runs but hooks and User events
+are skipped because the editor is already shutting down.
 
 Post-hook and subscriber errors never turn completed operations into failures.
 Neovim may display subscriber errors itself; errors exposed through its API or
@@ -552,10 +556,11 @@ leave partial editor changes. Post-save/load metadata failures are diagnostics
 if the snapshot/editor change has already completed.
 
 Unload rechecks buffer identity, modified text and live job IDs after consent
-and before each deletion. New resources or edits abort and require a retry.
-Terminal output alone does not invalidate consent. File writes, wiped buffers
-and stopped processes cannot be rolled back. A failed write can leave earlier
-files saved; a teardown failure can leave some buffers/jobs already closed.
+and before each deletion. Queued editor callbacks are drained before final
+teardown checks. New resources or edits abort and require a retry. Terminal
+output alone does not invalidate consent. File writes, wiped buffers and
+stopped processes cannot be rolled back. A failed write can leave earlier files
+saved; a teardown failure can leave some buffers/jobs already closed.
 Remaining editor state is restored where possible; failure does not emit
 SessUnloaded or remove the session from active records.
 

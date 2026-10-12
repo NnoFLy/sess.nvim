@@ -131,7 +131,8 @@ positions, buffer listing, and working-directory scopes without reloading the
 snapshot.
 
 Sessions share buffers, so opening a file that is already open usually reuses
-its buffer. Window IDs and some plugin-specific window settings may change.
+its buffer. Clean unnamed transition buffers are reused rather than accumulated.
+Window IDs and some plugin-specific window settings may change.
 
 Operations are deliberately conservative:
 
@@ -230,8 +231,10 @@ Available events are `SessCreated`, `SessLoaded`, `SessSaved`, `SessUnloaded`,
 `SessUnmarked`.
 
 State is committed before `after_operation` runs and before the event fires.
-Observers can query state but cannot start another lifecycle mutation. Errors
-from post-operation hooks and subscribers do not undo a successful operation.
+Observers can query state but cannot start another lifecycle mutation. During
+exit autosave, persistence still runs but hooks and User events are skipped
+because the editor is shutting down. Errors from post-operation hooks and
+subscribers do not undo a successful operation.
 
 ## Telescope picker
 
@@ -305,8 +308,9 @@ to another key or `false` to change or disable this mapping. Search covers
 names, paths, marks, session state, and agent details. Configure `search.fields`,
 `search.filters`, and `search.sort` (`default`, `recent`, `pinned`, `activity`,
 or `name`) to control interpretation and ordering; custom sorters still receive
-complete searchable ordinals. Exact name and mark matches remain ahead of loose
-path matches, and malformed filter-looking text remains ordinary search text.
+complete searchable ordinals. Name matches rank ahead of path-only matches;
+exact name and mark matches rank highest. Malformed filter-looking text remains
+ordinary search text.
 The default insert/normal mappings include `<C-y>` to copy the selected complete
 session path. Search supports practical match counts, interpreted filters (such
 as `status:working`), and non-default sort modes without adding status text to

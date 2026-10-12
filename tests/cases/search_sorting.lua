@@ -113,7 +113,11 @@ local sorter = search.new_sorter({
 }, config.values.search)
 local exact = entry("frontend", "/tmp/other", "")
 local path = entry("other", "/tmp/frontend", "")
-assert(sorter.scoring_function("frontend", exact) > sorter.scoring_function("frontend", path))
+-- Lower scores sort first, so name matches must beat path-only matches.
+local path_score = sorter.scoring_function("frontend", path)
+assert(sorter.scoring_function("frontend", exact) < path_score)
+local name_substring = entry("my-frontend-app", "/tmp/other", "")
+assert(sorter.scoring_function("frontend", name_substring) < path_score)
 -- Telescope passes the sorter, prompt, ordinal, and entry to scoring_function.
 -- The extension must use the entry argument rather than the ordinal string.
 assert(sorter.scoring_function(sorter, "frontend", exact.ordinal, exact) > 0)
@@ -382,6 +386,30 @@ assert(
 assert(hydrated_directory_finder)
 assert(directory_cancel)
 assert(#hydrated_directory_finder.results == #initial_directory_finder.results)
+
+-- Directory rows must remain visible when the prompt is a path alias. The
+-- regular session sorter still filters the directory finder, so this guards
+-- the contract between path mode and searchable ordinals.
+for _, prompt in ipairs({ "./", "../", "~/", "/", fixture.root .. "/", "./finder-directory" }) do
+    local finder = finders.generate_directory_finder(prompt)
+    assert(#finder.results > 0, "no directory results for " .. prompt)
+    local entry = finder.entry_maker(finder.results[1])
+    assert(entry.value.directory)
+    assert(entry.ordinal:find(prompt, 1, true), "directory ordinal lost prompt " .. prompt)
+    assert(
+        sorter.scoring_function(prompt, entry) >= 0,
+        "directory prompt was rejected by sorter: " .. prompt
+    )
+end
+
+local escaped_path_entry = {
+    value = { directory = true, prompt = "./project with space/" },
+    search_fields = {},
+    ordinal = "./project with space/",
+}
+assert(sorter.scoring_function("./project\\ with", escaped_path_entry) >= 0)
+assert(sorter.scoring_function("./pwt", escaped_path_entry) >= 0)
+assert(sorter.scoring_function("./missing", escaped_path_entry) < 0)
 
 api.items.get_items = original_get_items
 api.active.snapshot = original_snapshot

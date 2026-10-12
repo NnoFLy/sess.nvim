@@ -78,7 +78,7 @@ function M.run(destination, options, context)
             return editor.restore(view)
         end
 
-        editor.empty(item.metadata.cwd)
+        editor.empty(item.metadata.cwd, { reuse_clean = true })
         local snapshot_path = assert(storage.get_session_path(item.id))
         local snapshot_content, snapshot_err = storage.read_session(item.id)
         if not snapshot_content then

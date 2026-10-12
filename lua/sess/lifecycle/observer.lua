@@ -44,6 +44,13 @@ function M.finish(operation, item, callbacks, diagnostics, details)
         payload[key] = vim.deepcopy(value)
     end
 
+    -- VimLeavePre can run while plugin windows and buffers are already being
+    -- dismantled. Persistence still completes, but UI observers must not run
+    -- against that closing editor state.
+    if (tonumber(vim.v.exiting) or 0) ~= 0 then
+        return true, nil, item, diagnostics
+    end
+
     if callbacks.after_operation then
         local ok, err = pcall(callbacks.after_operation, vim.deepcopy(payload))
         if not ok then

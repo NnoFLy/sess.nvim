@@ -56,7 +56,7 @@ function M.run(cwd, options, context)
     local created
     local create_diagnostic
     local changed, change_err = rollback.change(function()
-        editor.empty(item.metadata.cwd)
+        editor.empty(item.metadata.cwd, { reuse_clean = true })
 
         local create_err
         created, create_err, create_diagnostic = catalog.create(request)

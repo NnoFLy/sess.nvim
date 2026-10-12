@@ -66,7 +66,7 @@ function M.capture()
     }
 
     for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-        if not is_ui2_buffer(buf) then
+        if not is_ui2_buffer(buf) and not vim.b[buf].sess_mark_window then
             view.listing[buf] = vim.bo[buf].buflisted
             if vim.bo[buf].buflisted then
                 view.buffers[buf] = true
@@ -136,7 +136,7 @@ function M.protected(fn)
 
     local ok, result = xpcall(function()
         for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-            if not is_ui2_buffer(buf) then
+            if not is_ui2_buffer(buf) and not vim.b[buf].sess_mark_window then
                 hidden[buf] = vim.bo[buf].bufhidden
                 vim.bo[buf].bufhidden = "hide"
             end
@@ -181,16 +181,44 @@ function M.protected(fn)
     return true, result[1]
 end
 
+local function close_window(win)
+    local valid, is_valid = pcall(vim.api.nvim_win_is_valid, win)
+    if not valid or not is_valid then
+        return true
+    end
+
+    local closed, err = pcall(vim.api.nvim_win_close, win, false)
+    if not closed then
+        return false, tostring(err)
+    end
+
+    return true
+end
+
 function M.hide()
     -- Close views, not buffers. No bang: errors must not force-discard data.
     for _, win in ipairs(vim.api.nvim_list_wins()) do
-        local config = vim.api.nvim_win_get_config(win)
-        if (config.relative ~= "" or config.external) and not is_ui2_window(win) then
-            vim.api.nvim_win_close(win, false)
+        local valid, config = pcall(vim.api.nvim_win_get_config, win)
+        if valid and (config.relative ~= "" or config.external) and not is_ui2_window(win) then
+            local closed, err = close_window(win)
+            if not closed then
+                error(err)
+            end
         end
     end
 
-    vim.cmd("silent tabonly")
+    local tabs_closed, tabs_err = pcall(vim.cmd, "silent tabonly")
+    if not tabs_closed then
+        error(tostring(tabs_err))
+    end
+
+    -- Tab teardown can queue plugin callbacks that still refer to the buffers
+    -- being hidden. Let those callbacks observe the live buffers before the
+    -- caller performs any destructive unload step.
+    local drained, drain_err = pcall(vim.wait, 0)
+    if not drained then
+        error(tostring(drain_err))
+    end
 
     local current_tab = vim.api.nvim_get_current_tabpage()
     local keep
@@ -206,7 +234,10 @@ function M.hide()
         vim.api.nvim_set_current_win(keep)
         for _, win in ipairs(vim.api.nvim_tabpage_list_wins(current_tab)) do
             if win ~= keep and not is_ui2_window(win) then
-                vim.api.nvim_win_close(win, false)
+                local closed, err = close_window(win)
+                if not closed then
+                    error(err)
+                end
             end
         end
     end
@@ -215,56 +246,116 @@ function M.hide()
         parking = vim.api.nvim_create_buf(false, true)
     end
 
-    vim.api.nvim_win_set_buf(0, parking)
+    local parked, park_err = pcall(vim.api.nvim_win_set_buf, 0, parking)
+    if not parked then
+        error(tostring(park_err))
+    end
 
     for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-        if not is_ui2_buffer(buf) then
+        if not is_ui2_buffer(buf) and not vim.b[buf].sess_mark_window then
             vim.bo[buf].buflisted = false
         end
     end
 end
 
-function M.empty(cwd)
+local function is_clean_empty_buffer(buf)
+    if not buf or not vim.api.nvim_buf_is_valid(buf) then
+        return false
+    end
+
+    if vim.bo[buf].modified or vim.api.nvim_buf_get_name(buf) ~= "" then
+        return false
+    end
+
+    return vim.api.nvim_buf_line_count(buf) == 1
+        and vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1] == ""
+end
+
+function M.empty(cwd, options)
     M.hide()
     command("cd", cwd)
-    vim.api.nvim_win_set_buf(0, vim.api.nvim_create_buf(true, false))
+
+    local empty
+    if options and options.reuse_clean and is_clean_empty_buffer(parking) then
+        empty = parking
+        if vim.bo[empty].buftype == "nofile" then
+            vim.bo[empty].buftype = ""
+        end
+        vim.bo[empty].bufhidden = "hide"
+        vim.bo[empty].buflisted = true
+    else
+        empty = vim.api.nvim_create_buf(true, false)
+    end
+
+    local changed, change_err = pcall(vim.api.nvim_win_set_buf, 0, empty)
+    if not changed then
+        pcall(vim.api.nvim_buf_delete, empty, { force = true })
+        error(tostring(change_err))
+    end
     vim.v.this_session = ""
 end
 
 local function layout(node, windows, win, mapping)
+    local valid, is_valid = pcall(vim.api.nvim_win_is_valid, win)
+    if not valid or not is_valid then
+        return false, "window disappeared while restoring session layout"
+    end
+
     if node[1] == "leaf" then
         local saved = windows[node[2]]
         if not saved then
-            return
+            return true
         end
 
         mapping[node[2]] = win
-        if vim.api.nvim_buf_is_valid(saved.buf) then
-            vim.api.nvim_win_set_buf(win, saved.buf)
+        local buffer_valid, is_buffer_valid = pcall(vim.api.nvim_buf_is_valid, saved.buf)
+        if buffer_valid and is_buffer_valid then
+            local changed, change_err = pcall(vim.api.nvim_win_set_buf, win, saved.buf)
+            if not changed then
+                return false, tostring(change_err)
+            end
         end
 
-        vim.api.nvim_win_call(win, function()
+        local called, call_err = pcall(vim.api.nvim_win_call, win, function()
             if saved.cwd then
                 command("lcd", saved.cwd)
             end
 
             vim.fn.winrestview(saved.view)
         end)
+        if not called then
+            return false, tostring(call_err)
+        end
 
-        return
+        return true
     end
 
     local children, handles = node[2], { win }
 
     for i = 2, #children do
-        vim.api.nvim_set_current_win(handles[i - 1])
-        vim.cmd(node[1] == "row" and "rightbelow vsplit" or "rightbelow split")
+        local focused, focus_err = pcall(vim.api.nvim_set_current_win, handles[i - 1])
+        if not focused then
+            return false, tostring(focus_err)
+        end
+
+        local split, split_err = pcall(
+            vim.cmd,
+            node[1] == "row" and "rightbelow vsplit" or "rightbelow split"
+        )
+        if not split then
+            return false, tostring(split_err)
+        end
         handles[i] = vim.api.nvim_get_current_win()
     end
 
     for i, child in ipairs(children) do
-        layout(child, windows, handles[i], mapping)
+        local restored, restore_err = layout(child, windows, handles[i], mapping)
+        if not restored then
+            return false, restore_err
+        end
     end
+
+    return true
 end
 
 function M.restore(view, rollback)
@@ -287,7 +378,15 @@ function M.restore(view, rollback)
         end
 
         local mapping = {}
-        layout(tab.layout, tab.windows, vim.api.nvim_get_current_win(), mapping)
+        local laid_out, layout_err = layout(
+            tab.layout,
+            tab.windows,
+            vim.api.nvim_get_current_win(),
+            mapping
+        )
+        if not laid_out then
+            error(layout_err)
+        end
 
         for old, win in pairs(mapping) do
             local width_ok, width_err = pcall(
@@ -310,32 +409,46 @@ function M.restore(view, rollback)
             if not height_ok then
                 table.insert(
                     diagnostics,
-                    string.format("failed to restore window %s height: %s", old, tostring(height_err))
+                    string.format(
+                        "failed to restore window %s height: %s",
+                        old,
+                        tostring(height_err)
+                    )
                 )
             end
         end
 
         for _, float in ipairs(tab.floats) do
-            if vim.api.nvim_buf_is_valid(float.saved.buf) then
+            local buffer_valid, is_buffer_valid = pcall(vim.api.nvim_buf_is_valid, float.saved.buf)
+            if buffer_valid and is_buffer_valid then
                 local config = vim.deepcopy(float.config)
                 if config.relative == "win" then
                     config.win = mapping[config.win] or vim.api.nvim_get_current_win()
                 end
 
-                local win = vim.api.nvim_open_win(float.saved.buf, false, config)
+                local opened, win = pcall(vim.api.nvim_open_win, float.saved.buf, false, config)
+                if not opened then
+                    error(tostring(win))
+                end
                 mapping[float.id] = win
-                vim.api.nvim_win_call(win, function()
+                local called, call_err = pcall(vim.api.nvim_win_call, win, function()
                     if float.saved.cwd then
                         command("lcd", float.saved.cwd)
                     end
 
                     vim.fn.winrestview(float.saved.view)
                 end)
+                if not called then
+                    error(tostring(call_err))
+                end
             end
         end
 
         if mapping[tab.current] then
-            vim.api.nvim_set_current_win(mapping[tab.current])
+            local focused, focus_err = pcall(vim.api.nvim_set_current_win, mapping[tab.current])
+            if not focused then
+                error(tostring(focus_err))
+            end
         end
 
         if tab.id == view.current then
@@ -350,7 +463,10 @@ function M.restore(view, rollback)
     end
 
     if selected then
-        vim.api.nvim_set_current_win(selected)
+        local focused, focus_err = pcall(vim.api.nvim_set_current_win, selected)
+        if not focused then
+            error(tostring(focus_err))
+        end
     end
 
     vim.v.this_session = view.this_session
