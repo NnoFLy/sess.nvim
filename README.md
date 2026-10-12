@@ -269,7 +269,7 @@ require("telescope").setup({
                 ascii_fallback = false,
                 toggle_key = "<C-g>", -- false disables the density mapping
                 show_metadata = true,
-                show_agent_summary = true,
+                show_agent_summary = true, -- active-session header counts
                 path_style = "full", -- full | relative | short
                 -- highlights = { current = "TelescopeResultsIdentifier" },
             },
@@ -312,12 +312,13 @@ require("telescope").setup({
 
 The picker can load, create, pin, mark, rename, unload, delete, and restore
 sessions. `compact` rows keep state, mark, name, and a useful path; `detailed`
-rows add metadata and agent summaries. `auto` uses the actual results-window
+rows add last-used time and session age. `auto` uses the actual results-window
 width and switches to compact below `display.compact_width` (100 by default).
 By default, `<C-g>` toggles the regular picker between compact and
 detailed row density (the default density is `detailed`); set `display.toggle_key`
-to another key or `false` to change or disable this mapping. Search covers
-names, paths, marks, session state, and agent details. Configure `search.fields`,
+to another key or `false` to change or disable this mapping. Regular rows omit
+agent summaries; use `:Sess active` for live agent details. Search covers names,
+paths, marks, session state, and agent details. Configure `search.fields`,
 `search.filters`, and `search.sort` (`default`, `recent`, `pinned`, `activity`,
 or `name`) to control interpretation and ordering; custom sorters still receive
 complete searchable ordinals. Name matches rank ahead of path-only matches;
@@ -334,8 +335,9 @@ Set `search.cycle_sort` to `true` (default key `<C-s>`), a key string, or
 `pinned`, `activity`, and `name`. Existing mappings win; use `false` for a mode
 to disable it. The mapping preserves the prompt and selected session, agent, or
 directory when the order changes.
-The active-session picker starts with `mappings`, but reserves `<Tab>`,
-`<Enter>`, and `<S-Tab>` for expansion and switch/focus actions. Other active-only
+The active-session picker starts with `mappings`, omits the pinned column from
+session headers, and reserves `<Tab>`, `<Enter>`, and `<S-Tab>` for expansion,
+switch, and focus actions. Other active-only
 actions, including `<C-o>`, refresh, and header navigation, are added only when
 their keys are unclaimed. Configure `active.refresh_key` with a key or `false`
 to replace or disable refresh. With `active.header_navigation` enabled (the

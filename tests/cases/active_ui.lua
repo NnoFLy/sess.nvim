@@ -124,8 +124,13 @@ local all_headers = session_headers(all_finder.results)
 assert(all_headers[first.id].expanded)
 assert(all_headers[second.id].expanded)
 assert(all_headers[first.id].display:find("@s", 1, true))
-assert(all_headers[first.id].display:find("▾", 1, true))
+assert(all_headers[first.id].display:find("▾ ◆ ", 1, true) == 1)
+assert(not all_headers[first.id].display:find("★", 1, true))
 assert(not all_headers[first.id].display:find("expanded", 1, true))
+assert(
+    finders.format_session_metadata({ last_used_at = 7200, created_at = 0 }, 10800)
+        == "last used 1h ago · age unknown"
+)
 assert(all_finder.results[2].kind == "placeholder")
 
 local current_finder = finders.generate_active_finder({}, "current")
@@ -150,7 +155,7 @@ local active_rows = finders.build_active_entries(
     {
         {
             id = "fake",
-            metadata = { name = "project", cwd = "/tmp/project" },
+            metadata = { name = "project", cwd = "/tmp/project", pinned = true },
         },
     },
     {
@@ -166,6 +171,7 @@ local active_rows = finders.build_active_entries(
 )
 assert(active_rows[1].display:find("/tmp/project", 1, true))
 assert(active_rows[1].display:find("agents 2 working 1 idle", 1, true))
+assert(not active_rows[1].display:find("★", 1, true))
 assert(active_rows[2].display:find("─", 1, true))
 assert(active_rows[2].display:find("working", 1, true))
 assert(active_rows[2].display:find("implementing auth", 1, true))
@@ -184,7 +190,9 @@ for _, raw in ipairs(session_finder.results) do
 end
 assert(session_entry)
 assert(session_entry.display:find("@s", 1, true))
-assert(session_entry.display:find("agents loading", 1, true))
+assert(session_entry.display:find("last used", 1, true))
+assert(session_entry.display:find("age", 1, true))
+assert(not session_entry.display:find("agents", 1, true))
 local previous_icon = session_entry.display:find("◆", 1, true)
 local session_name = session_entry.display:find("@s", 1, true)
 assert(previous_icon and previous_icon < session_name)

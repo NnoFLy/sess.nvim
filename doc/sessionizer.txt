@@ -112,22 +112,23 @@ COMMANDS                                                     *sess-commands*
 
 :Sess active                                                 *:Sess-active*
     Open the active-session dashboard. All Sess pickers display results
-    top-to-bottom with the input prompt at the top. Regular session rows share
-    the active-session layout: ● current, ○ active, · inactive, and + new
-    directory. ◆ marks the previous session in the same state column,
-    replacing its state icon. ★ marks pinned rows between the expansion and
-    state columns. Marks, names and paths stay aligned. The current session is
-    omitted from the regular picker. Active sessions are shown as tree-style
-    groups with strongly distinguished headers and agent rows; the title and
-    headers include compact session/agent counts. Sessions start collapsed.
+    top-to-bottom with the input prompt at the top. Regular session rows use
+    ● current, ○ active, · inactive, and + new directory state markers. ◆ marks
+    the previous session, and ★ marks pinned regular rows. Marks, names and
+    paths stay aligned. The current session is omitted from the regular picker.
+    Detailed regular rows also show relative last-used time and session age;
+    agent summaries are not shown there. Active session headers omit the pinned
+    column. Active sessions are tree-style groups with distinct headers and
+    agent rows; the title and headers include compact session/agent counts.
+    Sessions start collapsed.
     Configure Telescope's active_expand option as "all", "current", or "none"
     to change the initial expansion. <Tab> expands/collapses the selected
     group; <S-Tab> expands/collapses all groups; <Enter> switches and focuses.
-    Each session header ends with agent counts such as "agents 1 working 2 idle";
+    Each active session header ends with counts such as "agents 1 working 2 idle";
     loading and stale probes are shown explicitly. Current headers, focused
     agents, blocked/unknown statuses, and stale data have distinct visual
-    treatment. Empty groups show a non-actionable "no agents" row. <C-b> prompts for a
-    mark on the selected session. Marks appear on active session headers and
+    treatment. Empty groups show a non-actionable "no agents" row. <C-b> prompts
+    for a mark on the selected session. Marks appear on active session headers and
     regular picker rows. Known agent commands
     running in terminal buffers (including pi, codex, claude, and opencode) are
     detected; integrations may also register agents explicitly. Enter loads
@@ -598,7 +599,7 @@ Install telescope.nvim and plenary.nvim, then: >
                     ascii_fallback = false,
                     toggle_key = "<C-g>", -- false disables the density mapping
                     show_metadata = true,
-                    show_agent_summary = true,
+                    show_agent_summary = true, -- active-session header counts
                     path_style = "full", -- full | relative | short
                     -- highlights = { current = "TelescopeResultsIdentifier" },
                 },
@@ -653,20 +654,24 @@ during Telescope setup. The search table also accepts boolean `show_count` and
 `show_sort`, plus `cycle_sort` as false, true, a key, or per-mode mapping.
 The prompt contains only the `? - help` hint by default; search feedback settings
 remain accepted for compatibility but are not rendered there.
-The table also accepts show_metadata and
-show_agent_summary booleans, plus path_style "full", "relative", or "short".
+The table also accepts show_metadata and show_agent_summary booleans, plus
+path_style "full", "relative", or "short". show_metadata controls last-used
+and age labels in regular detailed rows; show_agent_summary controls active
+session header counts.
 `highlights` overrides semantic Telescope highlight group names by field;
 accepted fields include current, active, inactive, new, mark, name, cwd,
 metadata, agent, working, idle, blocked, done, unknown, focused, and stale.
 Rows measure the active Telescope result window in screen cells, retain complete
 searchable ordinals, and recompute after terminal resize. Long paths shorten from
-the middle and verbose agent info from the end without hiding state or names.
+the middle and verbose active-agent info from the end without hiding state or
+names.
 At narrow widths secondary labels collapse to symbols or disappear, while tree
 rows retain enough indentation for hierarchy. The preview uses `min_width`
 (default 80) to hide itself when the result area is too small.
-Regular and active session identity columns are shared, including Unicode-safe
-mark/name alignment. Default regular-picker insert/normal mappings include
-`<C-y>` to copy the selected complete session path. The active picker starts
+Regular session identity columns remain Unicode-safe with aligned
+mark/name columns; active headers omit the pinned column. Default regular-picker
+insert/normal mappings include `<C-y>` to copy the selected complete session
+path. The active picker starts
 with `mappings`, but reserves `<Tab>`, `<Enter>`, and `<S-Tab>` for expansion and
 switch/focus. Other active-only mappings, including refresh, focus-agent, and
 header navigation, are added only when their keys are unclaimed. Configure or

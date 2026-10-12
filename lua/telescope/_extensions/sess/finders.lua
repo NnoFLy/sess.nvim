@@ -46,6 +46,39 @@ local function normalized_status(status)
     return status_symbols[status] and status or "unknown"
 end
 
+local function relative_time(timestamp, now)
+    timestamp = tonumber(timestamp)
+    if not timestamp or timestamp <= 0 then
+        return nil
+    end
+
+    local seconds = math.max(0, (now or os.time()) - timestamp)
+    if seconds < 60 then
+        return "now"
+    elseif seconds < 3600 then
+        return string.format("%dm ago", math.floor(seconds / 60))
+    elseif seconds < 86400 then
+        return string.format("%dh ago", math.floor(seconds / 3600))
+    elseif seconds < 604800 then
+        return string.format("%dd ago", math.floor(seconds / 86400))
+    elseif seconds < 2592000 then
+        return string.format("%dw ago", math.floor(seconds / 604800))
+    elseif seconds < 31536000 then
+        return string.format("%dmo ago", math.floor(seconds / 2592000))
+    end
+    return string.format("%dy ago", math.floor(seconds / 31536000))
+end
+
+function M.format_session_metadata(metadata, now, separator)
+    metadata = metadata or {}
+    return string.format(
+        "last used %s %s age %s",
+        relative_time(metadata.last_used_at, now) or "never",
+        separator or icons.for_display(configured_display()).separator,
+        relative_time(metadata.created_at, now) or "unknown"
+    )
+end
+
 local function agent_status_text(agents, loaded, stale)
     if not loaded then
         return "agents loading"
@@ -127,8 +160,8 @@ local function display_options(options)
     end
     options.mode = layout.display_mode(options, options.result_width)
     options.symbols = icons.for_display(options)
-    -- Compact rows retain state, marks, and other session metadata. Agent
-    -- summaries remain the density-specific content reserved for detailed rows.
+    -- Compact rows retain session metadata; active agent summaries are shown
+    -- only in detailed rows.
     if options.mode == "compact" then
         options.show_agent_summary = false
     end
@@ -216,49 +249,51 @@ local function session_display_parts(session, opts)
     if opts.path_width then
         cwd = layout.truncate_middle(cwd, opts.path_width, symbols.ellipsis)
     end
-    local pinned = display.show_metadata ~= false and session.metadata.pinned
+    local show_pinned = display.show_metadata ~= false and opts.show_pinned ~= false
+    local pinned = show_pinned and session.metadata.pinned
     local parts = {
         { text = tree },
-        {
+    }
+    if show_pinned then
+        parts[#parts + 1] = {
             text = pinned and (symbols.metadata.pinned .. " ") or "  ",
             highlight = pinned and highlights.metadata or nil,
-        },
-        { text = marker .. " ", highlight = marker_highlight },
-        {
-            text = pad(opts.mark or "", opts.mark_width or 2) .. " ",
-            highlight = highlights.mark,
-            omit_priority = 2,
-        },
-        {
-            text = pad(name, opts.name_width or 0),
-            highlight = opts.name_highlight or highlights.name,
-            shrink_priority = 3,
-            min_width = 1,
-        },
-        { text = "  " },
-        {
-            text = cwd,
-            highlight = highlights.cwd,
-            truncate = "middle",
-            ellipsis = symbols.ellipsis,
-            shrink_priority = 1,
-            min_width = 1,
-            expendable = true,
-            -- An explicitly requested path width is useful to pure callers and
-            -- should not disappear merely because the rest is very narrow.
-            omit_priority = opts.path_width == nil and 3 or nil,
-        },
+        }
+    end
+    parts[#parts + 1] = { text = marker .. " ", highlight = marker_highlight }
+    parts[#parts + 1] = {
+        text = pad(opts.mark or "", opts.mark_width or 2) .. " ",
+        highlight = highlights.mark,
+        omit_priority = 2,
+    }
+    parts[#parts + 1] = {
+        text = pad(name, opts.name_width or 0),
+        highlight = opts.name_highlight or highlights.name,
+        shrink_priority = 3,
+        min_width = 1,
+    }
+    parts[#parts + 1] = { text = "  " }
+    parts[#parts + 1] = {
+        text = cwd,
+        highlight = highlights.cwd,
+        truncate = "middle",
+        ellipsis = symbols.ellipsis,
+        shrink_priority = 1,
+        min_width = 1,
+        expendable = true,
+        -- An explicitly requested path width is useful to pure callers and
+        -- should not disappear merely because the rest is very narrow.
+        omit_priority = opts.path_width == nil and 3 or nil,
     }
     local right_aligned_index
-    if agent_status then
-        local is_agent_status = agent_status:match("^agents ") ~= nil
-        if is_agent_status then
-            right_aligned_index = #parts + 1
-        end
+    local secondary_text = opts.session_metadata or agent_status
+    if secondary_text then
+        local is_agent_status = agent_status ~= nil
+        right_aligned_index = #parts + 1
         parts[#parts + 1] = {
-            text = "  " .. agent_status,
+            text = "  " .. secondary_text,
             highlight = opts.status_highlight or highlights.metadata,
-            omit_priority = is_agent_status and 4 or 5,
+            omit_priority = is_agent_status and 4 or 3,
         }
     end
 
@@ -331,7 +366,7 @@ local function highlighted_display(parts, fallback)
     end
 end
 
--- Keep session columns identical without implying expansion in the flat picker.
+-- Keep regular session columns aligned in the flat picker.
 function M.format_session_display(session, opts)
     return display_parts_text(session_display_parts(session, opts))
 end
@@ -446,6 +481,7 @@ function M.build_active_entries(
             mark = mark,
             mark_width = mark_width,
             name_width = session_name_width,
+            show_pinned = false,
             name_highlight = current and (display.highlights.current or display.highlights.name)
                 or display.highlights.active,
             status_highlight = stale and display.highlights.stale or nil,
@@ -907,6 +943,7 @@ local function build_new_finder(
     local display = display_options(
         vim.tbl_deep_extend("force", configured_display_options(), display_opts or {})
     )
+    local now = os.time()
     search_options = search_options or configured_search_options()
     agents_by_id = agents_by_id or {}
     for _, entry in ipairs(results) do
@@ -981,11 +1018,13 @@ local function build_new_finder(
                 mark = mark_by_id[session.id],
                 mark_width = mark_width,
                 name_width = name_width,
-                agent_status = session.id
-                        and agent_status_text(
-                            agents_by_id[session.id] or {},
-                            agents_by_id[session.id] ~= nil,
-                            false
+                session_metadata = session.id
+                        and display.mode ~= "compact"
+                        and display.show_metadata ~= false
+                        and M.format_session_metadata(
+                            session.metadata,
+                            now,
+                            display.symbols.separator
                         )
                     or nil,
                 display = display,
