@@ -29,7 +29,9 @@ User commands / Telescope / Lua API
           marks registry
 
 Read-only application queries such as `api.active.snapshot()` compose runtime
-state, marks, detected agents, and diagnostics before UI adapters format rows.
+state, marks, detected agents, and diagnostics. The picker-independent
+`lua/sess/ui/rows.lua` model converts those queries into stable semantic rows
+before adapters format them for Telescope or other pickers.
 ```
 
 ### Public entry points
@@ -96,7 +98,14 @@ Storage failures must be visible to callers. Corrupt records are skipped with di
 
 ### UI adapters
 
-Commands and Telescope provide input, target selection, confirmation, notifications, and presentation. They should call the shared API/lifecycle implementation so command and picker behavior remain consistent. The UI load-or-create helper validates a directory, then delegates to `api.session.load()` or `api.session.create()` without changing the low-level API contract. The active picker shows headers from `api.active.initial_snapshot()`, then hydrates through `api.active.snapshot_async()` and formats rows. It does not compose marks, agents, focus, or diagnostics. Status-only refreshes reuse loaded marks and cached terminal probes. Dashboard counts and status labels are pure formatting over the snapshot; stable agent IDs reconcile refresh selection. Loading/stale states are explicit, and a failed best-effort probe logs a diagnostic without closing the picker. Session row formatting is pure presentation: state, tree, mark, name, cwd, and metadata are separate logical columns measured in display cells. A truncated cwd is never used as an ordinal or an action value; full searchable fields remain in each finder ordinal. The search adapter builds one normalized field record per entry, parses only fixed filter prefixes, and scores name matches ahead of path-only matches; exact names and marks
+Commands and picker adapters handle input, targeting, confirmation,
+notifications, and rendering. They call the shared API/lifecycle
+implementation so command and picker behavior remain consistent.
+The row model at `lua/sess/ui/rows.lua` bridges read-only queries and picker
+adapters. It owns stable semantic keys, hierarchy, expansion, display segments,
+search fields, ordinals, and row actions. Telescope converts those rows into
+finder entries; other pickers can consume them without rebuilding parent
+relationships or lifecycle behavior. The UI load-or-create helper validates a directory, then delegates to `api.session.load()` or `api.session.create()` without changing the low-level API contract. The active picker shows headers from `api.active.initial_snapshot()`, then hydrates through `api.active.snapshot_async()` and formats rows. It does not compose marks, agents, focus, or diagnostics. Status-only refreshes reuse loaded marks and cached terminal probes. Dashboard counts and status labels are pure formatting over the snapshot; stable agent IDs reconcile refresh selection. Loading/stale states are explicit, and a failed best-effort probe logs a diagnostic without closing the picker. Session row formatting is pure presentation: state, tree, mark, name, cwd, and metadata are separate logical columns measured in display cells. A truncated cwd is never used as an ordinal or an action value; full searchable fields remain in each finder ordinal. The search adapter builds one normalized field record per entry, parses only fixed filter prefixes, and scores name matches ahead of path-only matches; exact names and marks
 rank highest. Active session ordinals include all agent fields, so filtering an agent retains its parent header. Optional recent, pinned, activity, and name ordering is applied before finder construction; default order and lifecycle selection are untouched. Command completion and Telescope share read-only directory enumeration.
 
 The optional Telescope preview pane formats a defensive selected-entry value and
