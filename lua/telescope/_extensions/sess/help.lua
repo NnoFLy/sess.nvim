@@ -86,6 +86,31 @@ local descriptors = {
             short = "focus",
             label = "Focus selected agent",
         },
+        [actions.rename_session] = {
+            id = "rename",
+            short = "rename",
+            label = "Rename",
+        },
+        [actions.unload_session] = {
+            id = "unload",
+            short = "unload",
+            label = "Unload safely",
+        },
+        [actions.delete_session] = {
+            id = "delete",
+            short = "delete",
+            label = "Delete with confirmation",
+        },
+        [actions.toggle_pin_session] = {
+            id = "pin",
+            short = "pin",
+            label = "Toggle pin",
+        },
+        [actions.unmark_session] = {
+            id = "unmark",
+            short = "unmark",
+            label = "Clear mark",
+        },
         [actions.copy_path] = {
             id = "copy_path",
             short = "copy path",

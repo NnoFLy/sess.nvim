@@ -324,15 +324,25 @@ assert(header_disabled_mappings.i["<C-j>"] == active_actions.refresh_active)
 assert(header_disabled_mappings.n["<C-j>"] == active_actions.refresh_active)
 
 local inherited_action = function() end
+local inherited_delete = function() end
 local inherited_mappings = active_mapping_options({
     active = { header_navigation = false, refresh_key = false },
-    mappings = { i = { ["<C-y>"] = inherited_action }, n = {} },
+    mappings = {
+        i = {
+            ["<C-y>"] = inherited_action,
+            ["<C-d>"] = inherited_delete,
+            ["<S-Tab>"] = inherited_delete,
+            ["<C-o>"] = inherited_action,
+        },
+        n = {},
+    },
 })
 assert(inherited_mappings.i["<C-y>"] == inherited_action)
+assert(inherited_mappings.i["<C-d>"] == inherited_delete)
 assert(inherited_mappings.i["<Tab>"] == active_actions.toggle_active)
 assert(inherited_mappings.i["<CR>"] == active_actions.active_enter)
 assert(inherited_mappings.i["<S-Tab>"] == active_actions.toggle_all_active)
-assert(inherited_mappings.i["<C-o>"] == active_actions.focus_agent)
+assert(inherited_mappings.i["<C-o>"] == inherited_action)
 
 local dashboard = finders.active_dashboard_summary({
     sessions = { { id = "one" }, { id = "two" } },

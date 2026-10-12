@@ -667,11 +667,11 @@ rows retain enough indentation for hierarchy. The preview uses `min_width`
 Regular and active session identity columns are shared, including Unicode-safe
 mark/name alignment. Default regular-picker insert/normal mappings include
 `<C-y>` to copy the selected complete session path. The active picker starts
-with `mappings`, overriding `<Tab>` and `<Enter>` for expansion and
-switch/focus. Its other active-only mappings, including `<S-Tab>`, refresh,
-focus-agent, and header navigation, are added only when their keys are
-unclaimed. Override or disable mappings with `mappings` (use `false`);
-configured mappings take precedence except for `<Tab>` and `<Enter>`. Copying
+with `mappings`, but reserves `<Tab>`, `<Enter>`, and `<S-Tab>` for expansion and
+switch/focus. Other active-only mappings, including refresh, focus-agent, and
+header navigation, are added only when their keys are unclaimed. Configure or
+disable mappings with `mappings` (`false` disables); configured mappings take
+precedence except for `<Tab>`, `<Enter>`, and `<S-Tab>`. Copying
 only writes the complete path to the `+` register and does not load, unload, or
 otherwise mutate a session. Telescope semantic highlight groups are used when
 the entry display module is available; plain text remains readable otherwise.

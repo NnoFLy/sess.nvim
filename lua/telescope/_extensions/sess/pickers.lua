@@ -42,13 +42,12 @@ local function add_active_action_mappings(mappings)
     mappings = vim.deepcopy(mappings or {})
     for _, mode in ipairs({ "i", "n" }) do
         mappings[mode] = mappings[mode] or {}
-        -- Active navigation deliberately owns these two keys in both modes.
+        -- Active navigation reserves these three keys; other inherited mappings
+        -- remain available to regular session actions.
         mappings[mode]["<Tab>"] = actions.toggle_active
         mappings[mode]["<CR>"] = actions.active_enter
-        -- Add active-only actions only when the inherited key is unclaimed.
-        if mappings[mode]["<S-Tab>"] == nil then
-            mappings[mode]["<S-Tab>"] = actions.toggle_all_active
-        end
+        mappings[mode]["<S-Tab>"] = actions.toggle_all_active
+        -- Add other active-only actions only when their keys are unclaimed.
         if mappings[mode]["<C-o>"] == nil then
             mappings[mode]["<C-o>"] = actions.focus_agent
         end
