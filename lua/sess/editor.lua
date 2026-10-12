@@ -481,9 +481,32 @@ M.load = legacy_load
 M._legacy_snapshot = legacy_snapshot
 M._legacy_load = legacy_load
 
+local function leave_terminal_mode()
+    if vim.api.nvim_get_mode().mode ~= "t" then
+        return true
+    end
+
+    local normal_mode_keys = vim.api.nvim_replace_termcodes("<C-\\><C-N>", true, false, true)
+    local feed_ok, feed_error = pcall(vim.api.nvim_feedkeys, normal_mode_keys, "nx", false)
+    if not feed_ok then
+        return false, "failed to leave terminal mode: " .. tostring(feed_error)
+    end
+
+    if vim.api.nvim_get_mode().mode == "t" then
+        return false, "failed to leave terminal mode"
+    end
+
+    return true
+end
+
 function M.source_snapshot(snapshot_path, content)
     if type(content) ~= "string" then
         return false, "secure session snapshot content is required"
+    end
+
+    local terminal_mode_left, terminal_error = leave_terminal_mode()
+    if not terminal_mode_left then
+        return false, terminal_error
     end
 
     -- Storage reads the snapshot through its descriptor-relative, no-follow
