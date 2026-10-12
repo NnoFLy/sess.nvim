@@ -627,18 +627,18 @@ function M.active(opts)
         opts.search or {}
     )
     local active_expand = config.values.active_expand
+    -- Keep expansion state and the initial finder on one snapshot for consistency.
+    local initial_snapshot = require("sess.api").active.initial_snapshot()
     local expanded = {}
-    local current = state.current()
-    for _, session in ipairs(state.active()) do
+    for _, session in ipairs(initial_snapshot.sessions) do
         local should_expand = active_expand == "all"
         if active_expand == "current" then
-            should_expand = current ~= nil and current.id == session.id
+            should_expand = initial_snapshot.current_id == session.id
         end
         expanded[session.id] = should_expand
     end
     -- Show session headers before hydrating agents and marks so large active
     -- session sets stay responsive.
-    local initial_snapshot = require("sess.api").active.initial_snapshot()
     local finder, rows = finders.generate_active_finder_from_snapshot(
         initial_snapshot,
         expanded,
