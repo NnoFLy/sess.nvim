@@ -246,7 +246,7 @@ independent_active_options.attach_mappings(1, function(mode, key, action)
 end)
 assert(mapped.i["<C-x>"] == active_actions.refresh_active)
 assert(mapped.n["<C-x>"] == active_actions.refresh_active)
-assert(mapped.i["<C-r>"] == nil)
+assert(mapped.i["<C-r>"] == active_actions.rename_session)
 assert(mapped.i["<C-j>"] == nil)
 assert(mapped.i["<C-k>"] == nil)
 local independent_status = independent_active_options.get_status_text()
@@ -285,13 +285,13 @@ assert(not pcall(pickers.active, {
 local overridden_refresh = function() end
 local overridden_mappings = active_mapping_options({
     active = { refresh_key = "<C-x>" },
-    active_mappings = { i = { ["<C-x>"] = false }, n = { ["<C-x>"] = overridden_refresh } },
+    mappings = { i = { ["<C-x>"] = false }, n = { ["<C-x>"] = overridden_refresh } },
 })
 assert(overridden_mappings.i["<C-x>"] == nil, "false must disable generated refresh")
 assert(overridden_mappings.n["<C-x>"] == overridden_refresh, "configured refresh key wins")
 local explicit_refresh_mappings = active_mapping_options({
     active = { refresh_key = "<C-x>" },
-    active_mappings = {
+    mappings = {
         i = { ["<C-r>"] = active_actions.refresh_active },
         n = { ["<C-r>"] = active_actions.refresh_active },
     },
@@ -303,7 +303,7 @@ assert(
 assert(explicit_refresh_mappings.i["<C-x>"] == active_actions.refresh_active)
 local explicit_refresh_disabled = active_mapping_options({
     active = { refresh_key = false },
-    active_mappings = {
+    mappings = {
         i = { ["<C-r>"] = active_actions.refresh_active },
         n = { ["<C-r>"] = active_actions.refresh_active },
     },
@@ -313,7 +313,7 @@ assert(
     "explicit refresh mapping must be preserved when refresh generation is disabled"
 )
 local disabled_mappings = active_mapping_options({ active = { refresh_key = false } })
-assert(disabled_mappings.i["<C-r>"] == nil)
+assert(disabled_mappings.i["<C-r>"] == active_actions.rename_session)
 assert(disabled_mappings.n["<C-r>"] == nil)
 assert(disabled_mappings.i["<C-j>"] == active_actions.next_active_header)
 assert(disabled_mappings.n["<C-k>"] == active_actions.previous_active_header)
@@ -322,6 +322,17 @@ local header_disabled_mappings = active_mapping_options({
 })
 assert(header_disabled_mappings.i["<C-j>"] == active_actions.refresh_active)
 assert(header_disabled_mappings.n["<C-j>"] == active_actions.refresh_active)
+
+local inherited_action = function() end
+local inherited_mappings = active_mapping_options({
+    active = { header_navigation = false, refresh_key = false },
+    mappings = { i = { ["<C-y>"] = inherited_action }, n = {} },
+})
+assert(inherited_mappings.i["<C-y>"] == inherited_action)
+assert(inherited_mappings.i["<Tab>"] == active_actions.toggle_active)
+assert(inherited_mappings.i["<CR>"] == active_actions.active_enter)
+assert(inherited_mappings.i["<S-Tab>"] == active_actions.toggle_all_active)
+assert(inherited_mappings.i["<C-o>"] == active_actions.focus_agent)
 
 local dashboard = finders.active_dashboard_summary({
     sessions = { { id = "one" }, { id = "two" } },
@@ -369,8 +380,7 @@ selected = { value = { kind = "session", session_id = first.id } }
 local actions = require("telescope._extensions.sess.actions")
 assert(config.values.mappings.i["<C-b>"] == actions.mark_session)
 assert(config.values.mappings.n["<C-b>"] == actions.mark_session)
-assert(config.values.active_mappings.i["<C-b>"] == actions.mark_session)
-assert(config.values.active_mappings.n["<C-b>"] == actions.mark_session)
+assert(config.values.active_mappings == nil)
 local original_snapshot = require("sess.api").active.snapshot
 local original_generate_active = finders.generate_active_finder_from_snapshot
 local observed_sort

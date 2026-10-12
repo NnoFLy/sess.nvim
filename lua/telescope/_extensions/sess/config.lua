@@ -130,26 +130,6 @@ config.values = {
             ["<CR>"] = actions.enter,
         },
     },
-    active_mappings = {
-        ["i"] = {
-            ["<Tab>"] = actions.toggle_active,
-            ["<S-Tab>"] = actions.toggle_all_active,
-            ["<CR>"] = actions.active_enter,
-            ["<C-r>"] = actions.refresh_active, -- false disables refresh
-            ["<C-o>"] = actions.focus_agent, -- false disables focus
-            ["<C-y>"] = actions.copy_path, -- false disables copy-path action
-            ["<C-b>"] = actions.mark_session,
-        },
-        ["n"] = {
-            ["<Tab>"] = actions.toggle_active,
-            ["<S-Tab>"] = actions.toggle_all_active,
-            ["<CR>"] = actions.active_enter,
-            ["<C-r>"] = actions.refresh_active, -- false disables refresh
-            ["<C-o>"] = actions.focus_agent, -- false disables focus
-            ["<C-y>"] = actions.copy_path, -- false disables copy-path action
-            ["<C-b>"] = actions.mark_session,
-        },
-    },
 }
 
 function config.validate_active(active)
