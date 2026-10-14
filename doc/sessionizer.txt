@@ -135,10 +135,13 @@ COMMANDS                                                     *sess-commands*
     the parent and focuses the selected agent's existing visible buffer. Status
     refresh is best-effort: a failed probe leaves the last rows usable and emits
     a diagnostic, while a selected agent that disappears falls back to its
-    parent session. Header arrows indicate expansion state, and summaries use
-    text as well as symbols for loading, stale, blocked, and unknown data.
-    By default `<C-r>` manually refreshes agent data when that key is not claimed
-    by another active mapping; configure `active.refresh_key` with another key
+    parent session. The last completed snapshot is cached in memory, so reopening
+    the picker shows known agents immediately. A lazy refresh reconciles live data
+    and marks cached rows stale until it completes. Header arrows indicate
+    expansion state, and summaries use text as well as symbols for loading, stale,
+    blocked, and unknown data. By default `<C-r>` manually refreshes agent data
+    when unclaimed by another active mapping; configure `active.refresh_key` with
+    another key
     or `false` to disable it. With `active.header_navigation` enabled (default),
     `<C-j>` and `<C-k>` move to the next and previous session headers. Configure
     `next_header_key` and `previous_header_key`, or set header navigation to

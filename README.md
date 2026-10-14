@@ -346,8 +346,10 @@ configure their keys with `next_header_key` and `previous_header_key`, or set
 header navigation to `false`. Configured `mappings` entries win except for
 `<Tab>`, `<Enter>`, and `<S-Tab>`. Header arrows indicate expansion state, and
 agent summaries include textual loading, stale, blocked, and unknown states.
-Refresh preserves prompt, selection, and expansion; a disappeared agent selects
-its parent header.
+The last completed active snapshot is cached in memory, so reopening the picker
+shows known agents immediately. A lazy refresh reconciles live status and marks
+cached rows stale until it completes. Refresh preserves prompt, selection, and
+expansion; a disappeared agent selects its parent header.
 `?` popup describes applicable actions for the selected row, marking row-specific
 actions unavailable when they do not apply. The private preview is read-only: it
 shows identity, state, and editor statistics when available, plus snapshot
@@ -359,8 +361,8 @@ preview fraction and `min_width` hides it when the result area is too narrow.
 Missing or corrupt data is rendered as a warning and does not load, source,
 write, or mutate a session. Hydration and refresh failures retain the last
 usable rows and expose diagnostics; successful operations may also report
-non-fatal diagnostics. Use `:Sess active` for a live view of active sessions
-and their agents.
+non-fatal diagnostics. The cache is in-memory only. Use `:Sess active` for a
+live view of active sessions and their agents.
 
 Rows and the help hint use screen-cell widths, so long paths and
 Unicode names are truncated without splitting wide characters and without
