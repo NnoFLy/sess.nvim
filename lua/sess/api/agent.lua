@@ -14,6 +14,7 @@ local DEFAULT_REPORT_TTL = 30
 local MAX_REPORT_TTL = 86400
 local MAX_REPORT_SOURCE_LENGTH = 128
 local MAX_REPORT_INFO_LENGTH = 240
+local MAX_TERMINAL_NAME_LENGTH = 4096
 local MAX_REPORT_SEQ = 9007199254740991
 local MAX_REPORT_SOURCES = 32
 local MAX_API_DIAGNOSTICS = 64
@@ -150,8 +151,26 @@ local terminal_buffer
 
 local function target_incarnation(agent)
     local bufnr = agent and agent.target and agent.target.bufnr
-    if not valid_buffer_target(bufnr) or not terminal_buffer(bufnr) then return nil end
-    return terminal_probe.job_id(bufnr)
+    if not valid_buffer_target(bufnr) then return nil end
+    local is_terminal = terminal_buffer(bufnr)
+    local terminal_name = is_terminal and terminal_probe.name(bufnr) or nil
+    if type(terminal_name) == "string" then
+        terminal_name = truncate_text(strip_report_controls(terminal_name), MAX_TERMINAL_NAME_LENGTH)
+    else
+        terminal_name = nil
+    end
+    return {
+        bufnr = bufnr,
+        job_id = is_terminal and terminal_probe.job_id(bufnr) or nil,
+        terminal_name = terminal_name,
+    }
+end
+
+local function same_incarnation(report, incarnation)
+    if type(report) ~= "table" or type(incarnation) ~= "table" then return false end
+    return report.bufnr == incarnation.bufnr
+        and report.job_id == incarnation.job_id
+        and report.terminal_name == incarnation.terminal_name
 end
 
 local function integration_details(session_id, agent_id, agent)
@@ -161,15 +180,14 @@ local function integration_details(session_id, agent_id, agent)
     local now = report_now()
     local selected
     local latest
-    local latest_fresh = false
     local diagnostics = {}
     local sources = {}
     for source, report in pairs(reports) do
         if type(report) == "table" and type(report.accepted_at) == "number"
-            and report.job_id == incarnation
+            and same_incarnation(report, incarnation)
         then
             sources[#sources + 1] = { source = source, report = report }
-        elseif type(report) == "table" and report.job_id ~= incarnation then
+        elseif type(report) == "table" and not same_incarnation(report, incarnation) then
             append_diagnostic(diagnostics, "integration report invalidated by target job replacement: " .. tostring(source))
         end
     end
@@ -187,9 +205,10 @@ local function integration_details(session_id, agent_id, agent)
             append_diagnostic(diagnostics, "integration source released: " .. source)
         elseif type(report.expires_at) == "number" and report.expires_at <= now then
             append_diagnostic(diagnostics, "integration report expired: " .. source)
-        else
-            if report == latest then latest_fresh = true end
-            if report.status ~= "unknown" and not selected then selected = report end
+        elseif report.status == "unknown" then
+            append_diagnostic(diagnostics, "integration report has unknown status: " .. source)
+        elseif not selected then
+            selected = report
         end
     end
     for _, rejection in ipairs(state.get_agent_report_rejections(session_id, agent_id)) do
@@ -200,22 +219,21 @@ local function integration_details(session_id, agent_id, agent)
             )
         end
     end
-    return selected and vim.deepcopy(selected) or nil, latest and vim.deepcopy(latest) or nil, diagnostics, latest_fresh
+    return selected and vim.deepcopy(selected) or nil, latest and vim.deepcopy(latest) or nil, diagnostics
 end
 
--- Keep the source table itself bounded even if a caller injects state through
--- a test double or an older runtime.
+-- Bound sources even when test doubles or older runtimes inject state.
 local function report_source_count(reports, incarnation)
     local count = 0
     for _, report in pairs(reports or {}) do
-        if type(report) == "table" and report.job_id == incarnation then count = count + 1 end
+        if same_incarnation(report, incarnation) then count = count + 1 end
     end
     return count
 end
 
 local function current_report(reports, source, incarnation)
     local report = reports and reports[source]
-    if type(report) == "table" and report.job_id == incarnation then return report end
+    if same_incarnation(report, incarnation) then return report end
     return nil
 end
 
@@ -562,6 +580,9 @@ function M.update(target, agent_id, patch)
     local ok, result = validate(patch, true, old)
     if not ok then return false, result, nil, diagnostics end
     result.id = old.id
+    if (old.target and old.target.bufnr) ~= (result.target and result.target.bufnr) then
+        state.remove_agent_reports(item.id, agent_id)
+    end
     state.set_agent(item.id, result)
     return true, nil, vim.deepcopy(result), diagnostics
 end
@@ -620,8 +641,9 @@ function M.report(target, agent_id, report)
     end
     local valid, validation_error = validate_report(report, false)
     if not valid then return false, validation_error, nil, diagnostics end
-    local reports = state.get_agent_reports(item.id, agent_id)
     local incarnation = target_incarnation(agent)
+    state.prune_agent_reports(item.id, agent_id, incarnation)
+    local reports = state.get_agent_reports(item.id, agent_id)
     local previous = current_report(reports, report.source, incarnation)
     if previous and report.seq <= previous.seq then
         state.record_agent_report_rejection(item.id, agent_id, {
@@ -648,7 +670,9 @@ function M.report(target, agent_id, report)
         info = sanitize_report_text(report.info),
         accepted_at = accepted_at,
         expires_at = accepted_at + (report.ttl or DEFAULT_REPORT_TTL) * 1000,
-        job_id = incarnation,
+        bufnr = incarnation and incarnation.bufnr or nil,
+        job_id = incarnation and incarnation.job_id or nil,
+        terminal_name = incarnation and incarnation.terminal_name or nil,
         released = false,
     }
     state.set_agent_report(item.id, agent_id, report.source, accepted)
@@ -674,8 +698,9 @@ function M.release(target, agent_id, release)
     end
     local valid, validation_error = validate_report(release, true)
     if not valid then return false, validation_error, nil, diagnostics end
-    local reports = state.get_agent_reports(item.id, agent_id)
     local incarnation = target_incarnation(agent)
+    state.prune_agent_reports(item.id, agent_id, incarnation)
+    local reports = state.get_agent_reports(item.id, agent_id)
     local previous = current_report(reports, release.source, incarnation)
     if previous and release.seq <= previous.seq then
         state.record_agent_report_rejection(item.id, agent_id, {
@@ -701,7 +726,9 @@ function M.release(target, agent_id, release)
         status = "unknown",
         accepted_at = accepted_at,
         expires_at = accepted_at,
-        job_id = incarnation,
+        bufnr = incarnation and incarnation.bufnr or nil,
+        job_id = incarnation and incarnation.job_id or nil,
+        terminal_name = incarnation and incarnation.terminal_name or nil,
         released = true,
     })
     local released = state.get_agent_reports(item.id, agent_id)[release.source]
@@ -860,7 +887,7 @@ function M.explain(target, agent_id)
     local registered = state.get_agents(item.id)[agent.id]
     local observed_target = registered or agent
     local registered_target_available = target_available(observed_target)
-    local selected_report, latest_report, integration_diagnostics, latest_report_fresh = integration_details(
+    local selected_report, latest_report, integration_diagnostics = integration_details(
         item.id,
         agent.id,
         observed_target
@@ -920,7 +947,11 @@ function M.explain(target, agent_id)
     local manifest_version = observation.manifest_version
     local manifest = manifests[manifest_id]
     if manifest_version == nil and manifest then manifest_version = manifest.version end
+    -- Keep the selected report, or the newest report as stale diagnostic data.
     local latest_integration = selected_report or latest_report
+    if not latest_integration then
+        diagnostics[#diagnostics + 1] = "no integration report"
+    end
     local explanation = {
         id = agent.id,
         name = agent.name,
@@ -945,7 +976,7 @@ function M.explain(target, agent_id)
             seq = latest_integration.seq,
             accepted_at = latest_integration.accepted_at,
             expires_at = latest_integration.expires_at,
-            fresh = not target_unavailable and (selected_report ~= nil or latest_report_fresh == true),
+            fresh = selected_report ~= nil,
             released = latest_integration.released == true,
             info = bounded_text(latest_integration.info, MAX_REPORT_INFO_LENGTH),
         } or nil,

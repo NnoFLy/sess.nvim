@@ -216,17 +216,22 @@ matched rule, screen/cache metadata, and diagnostics. Operation errors are retur
 `err`; probe and observation problems are non-fatal diagnostics returned in the fourth
 value and included in `explanation.diagnostics`. `update({ status = ... })` remains a
 legacy/manual override; use sequenced reports for integration ownership. Explicit
-integration statuses remain authoritative, while screen observations are derived at
-runtime and never persisted.
-For integrations, `report(target, agent_id, report)` accepts a bounded source, monotonic
-non-negative `seq`, one of `idle`, `working`, `blocked`, `done`, or `unknown`, optional
-bounded `info`, and an optional positive `ttl` (the default is 30 seconds; the maximum is
-24 hours). Reports are accepted only for live targets, ordered independently per source,
-and rejected stale reports do not mutate prior state. When several sources are fresh, the
-most recently accepted report wins (source name breaks an acceptance-time tie).
-`release()` uses the same ordering, clears that source, and allows screen detection to
-resume. Its returned report metadata is also available as bounded `explanation.integration`;
-expired and released reports remain diagnostic only. These runtime reports never enter session snapshots or storage.
+integration statuses remain authoritative, except that a high-confidence live screen
+blocker may override a non-blocking (`idle`, `working`, or `done`) sequenced lifecycle
+report; a live blocker never overrides an integration report already marked `blocked`.
+Screen observations are runtime-only. Changing an agent's buffer target clears runtime
+reports and sequence state; other updates preserve them. `unregister()` removes the
+agent and its runtime reports immediately.
+For integrations, `report(target, agent_id, report)` accepts a bounded source, a non-negative
+monotonic `seq`, one of `idle`, `working`, `blocked`, `done`, or `unknown`, optional
+bounded `info`, and optional positive `ttl` (default 30 seconds, strictly below 24 hours).
+Reports apply only to live targets and are ordered independently per source. Stale reports
+are rejected without mutating prior state. When several sources are fresh, the most
+recently accepted report wins; source name breaks an acceptance-time tie. `release()` uses
+the same ordering, marks that source released, and allows screen detection to resume. Its
+released record remains diagnostic so sequence ordering is preserved. The returned report
+metadata is also available as bounded `explanation.integration`; expired and released
+reports are diagnostic only. Runtime reports never enter session snapshots or storage.
 
 
 ## Hooks and events

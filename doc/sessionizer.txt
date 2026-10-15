@@ -176,17 +176,24 @@ explanation.diagnostics. Explanation results are defensive copies and do not
 expose raw terminal output. `api.agent.report(target, agent_id, report)` and
 `api.agent.release(target, agent_id, release)` are runtime-only integration APIs.
 Reports require a bounded non-empty source, a non-negative integer sequence, and
-idle/working/blocked/done/unknown status; optional info is bounded and ttl is a
-finite positive lifetime below 24 hours (default 30 seconds). Reports are accepted
-only for live targets and sequence ordering is independent per source. The most
-recently accepted fresh source wins, with source name breaking an acceptance-time
-tie. Duplicate or older reports/releases return an error without mutation. A
-release clears that source and lets screen detection resume. `explanation.integration`
-identifies the selected source (or latest stale source), sequence, acceptance/expiry,
-freshness, and release state; expired or released reports are diagnostic only. Reports never enter session snapshots or
-storage. focus only operates on the current session; a missing or hidden target is a
-successful operation with an unavailable-target diagnostic. Agent records disappear
-only after a successful unload or delete and are never restored from disk.
+idle/working/blocked/done/unknown status; optional info is bounded and ttl must be
+positive and less than 24 hours (default 30 seconds). Reports apply only to live
+targets and sequence ordering is independent per source. The most recently accepted
+fresh source wins, with source name breaking an acceptance-time tie. Duplicate or
+older reports/releases return an error without mutation. A fresh sequenced lifecycle
+report is authoritative except that a high-confidence live screen blocker may
+override a non-blocking (`idle`, `working`, or `done`) report; a blocker never
+overrides a report already marked `blocked`. A release marks that source released,
+lets screen detection resume, and retains its record for diagnostics and sequence
+ordering. `explanation.integration` identifies the selected fresh record, or the
+newest stale record when none is selected; it includes source, sequence,
+acceptance/expiry, freshness, and release state. Expired or released reports are
+diagnostic only. Reports never enter session snapshots or storage. Changing an
+agent's buffer target clears its runtime reports and sequence state; other updates
+preserve them. `unregister()` removes the agent and its runtime reports immediately.
+`focus` operates only on the current session; a missing or hidden target is a
+successful operation with an unavailable-target diagnostic. Agents are never restored
+from disk.
 
 The session Telescope picker normally shows available sessions. Search covers
 names, working directories, marks, pinned/last labels, current/active state,

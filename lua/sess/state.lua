@@ -140,16 +140,20 @@ function M.get_agent_reports(session_id, agent_id)
     return vim.deepcopy(reports)
 end
 
--- Reports belong to a terminal job incarnation. Drop reports from replaced
--- jobs before scanning or accepting new sources so runtime-only state remains
--- bounded across repeated terminal reuse.
-function M.prune_agent_reports(session_id, agent_id, job_id)
-    if job_id == nil then return end
+-- Reports belong to a target incarnation. Drop records for replaced buffers,
+-- jobs, or terminal commands before scanning or accepting sources to keep
+-- runtime-only state bounded during terminal reuse.
+function M.prune_agent_reports(session_id, agent_id, incarnation)
+    if type(incarnation) ~= "table" then return end
     local by_agent = state.agent_reports_by_session[session_id]
     local reports = by_agent and by_agent[agent_id]
     if not reports then return end
     for source, report in pairs(reports) do
-        if type(report) ~= "table" or report.job_id ~= job_id then reports[source] = nil end
+        local matches_incarnation = type(report) == "table"
+            and report.bufnr == incarnation.bufnr
+            and report.job_id == incarnation.job_id
+            and report.terminal_name == incarnation.terminal_name
+        if not matches_incarnation then reports[source] = nil end
     end
     if next(reports) ~= nil then return end
     by_agent[agent_id] = nil
