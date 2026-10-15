@@ -36,13 +36,6 @@ end
 
 local status_symbols = icons.status
 
-local status_display_order = { "working", "idle", "blocked", "done", "unknown" }
-
-local function pad(value, width)
-    value = value or ""
-    return value .. string.rep(" ", math.max(0, width - layout.display_width(value)))
-end
-
 local function normalized_status(status)
     return status_symbols[status] and status or "unknown"
 end
@@ -76,35 +69,6 @@ function M.format_session_metadata(metadata, now, separator)
         now,
         separator or icons.for_display(configured_display()).separator
     )
-end
-
-local function agent_status_text(agents, loaded, stale)
-    if not loaded then
-        return "agents loading"
-    end
-    if stale then
-        return "agents stale"
-    end
-
-    local counts = {}
-    for _, agent in ipairs(agents or {}) do
-        local status = normalized_status(agent.status)
-        counts[status] = (counts[status] or 0) + 1
-    end
-
-    if next(counts) == nil then
-        return "agents 0"
-    end
-
-    local parts = { "agents" }
-    for _, status in ipairs(status_display_order) do
-        local count = counts[status]
-        if count then
-            parts[#parts + 1] = tostring(count)
-            parts[#parts + 1] = status
-        end
-    end
-    return table.concat(parts, " ")
 end
 
 local function count_agents(snapshot)
@@ -200,118 +164,8 @@ local function hydrate_search_finder(callback, previous_snapshot, build_finder)
     })
 end
 
-local function path_for_display(path_value, style)
-    if style == "short" then
-        return vim.fn.fnamemodify(path_value, ":~")
-    elseif style == "relative" then
-        return vim.fn.fnamemodify(path_value, ":~:.")
-    end
-    return path_value
-end
-
-local function state_for_session(session, opts)
-    local symbols = opts.symbols or icons.for_display(opts.display)
-    if not session.id then
-        return symbols.state.new, "new"
-    elseif opts.current_id == session.id then
-        return symbols.state.current, "current"
-    elseif opts.active then
-        return symbols.state.active, "active"
-    end
-    return symbols.state.inactive, "inactive"
-end
-
 local function session_display_parts(session, opts)
-    opts = opts or {}
-    local display = display_options(opts.display or {})
-    local symbols = display.symbols
-    local highlights = display.highlights or {}
-    local width = display.available_width
-    local tree = "  "
-    if opts.expandable and opts.expanded then
-        tree = symbols.tree.expanded
-    elseif opts.expandable then
-        tree = symbols.tree.collapsed
-    end
-
-    opts.symbols = symbols
-    local marker, state = state_for_session(session, opts)
-    local marker_highlight = highlights[state]
-    if display.show_metadata ~= false and session.id and opts.previous_id == session.id then
-        marker = symbols.metadata.previous
-        marker_highlight = highlights.metadata or marker_highlight
-    end
-    local name = session.metadata.name or ""
-    local cwd = path_for_display(session.metadata.cwd or "", display.path_style)
-    local agent_status = display.show_agent_summary ~= false and opts.agent_status
-
-    if opts.path_width then
-        cwd = layout.truncate_middle(cwd, opts.path_width, symbols.ellipsis)
-    end
-    local show_pinned = display.show_metadata ~= false and opts.show_pinned ~= false
-    local pinned = show_pinned and session.metadata.pinned
-    local parts = {
-        { text = tree },
-    }
-    if show_pinned then
-        parts[#parts + 1] = {
-            text = pinned and (symbols.metadata.pinned .. " ") or "  ",
-            highlight = pinned and highlights.metadata or nil,
-        }
-    end
-    parts[#parts + 1] = { text = marker .. " ", highlight = marker_highlight }
-    parts[#parts + 1] = {
-        text = pad(opts.mark or "", opts.mark_width or 2) .. " ",
-        highlight = highlights.mark,
-        omit_priority = 2,
-    }
-    parts[#parts + 1] = {
-        text = pad(name, opts.name_width or 0),
-        highlight = opts.name_highlight or highlights.name,
-        shrink_priority = 3,
-        min_width = 1,
-    }
-    parts[#parts + 1] = { text = "  " }
-    parts[#parts + 1] = {
-        text = cwd,
-        highlight = highlights.cwd,
-        truncate = "middle",
-        ellipsis = symbols.ellipsis,
-        shrink_priority = 1,
-        min_width = 1,
-        expendable = true,
-        -- An explicitly requested path width is useful to pure callers and
-        -- should not disappear merely because the rest is very narrow.
-        omit_priority = opts.path_width == nil and 3 or nil,
-    }
-    local right_aligned_index
-    local secondary_text = opts.session_metadata or agent_status
-    if secondary_text then
-        local is_agent_status = agent_status ~= nil
-        right_aligned_index = #parts + 1
-        parts[#parts + 1] = {
-            text = "  " .. secondary_text,
-            highlight = opts.status_highlight or highlights.metadata,
-            omit_priority = is_agent_status and 4 or 3,
-        }
-    end
-
-    local fit_width = width
-    if opts.path_width then
-        fit_width = nil
-    end
-    local fitted = layout.fit_parts(parts, fit_width)
-    if fit_width and right_aligned_index and fitted[right_aligned_index].text ~= "" then
-        local fitted_width = 0
-        for _, part in ipairs(fitted) do
-            fitted_width = fitted_width + layout.display_width(part.text)
-        end
-        local gap = fit_width - fitted_width
-        if gap > 0 then
-            table.insert(fitted, right_aligned_index, { text = string.rep(" ", gap) })
-        end
-    end
-    return fitted
+    return rows.format_session_parts(session, opts)
 end
 
 local function display_parts_text(parts)
@@ -926,7 +780,7 @@ local function build_new_finder(
                 })
             return {
                 value = session,
-                display = display_parts_text(display_parts),
+                display = highlighted_display(display_parts, display_parts_text(display_parts)),
                 display_parts = display_parts,
                 search_fields = search_fields,
                 ordinal = search.ordinal(search_fields),

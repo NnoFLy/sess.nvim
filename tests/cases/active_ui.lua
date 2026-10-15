@@ -170,7 +170,7 @@ local active_rows = finders.build_active_entries(
     { fake = "pi" }
 )
 assert(active_rows[1].display:find("/tmp/project", 1, true))
-assert(active_rows[1].display:find("agents 2 working 1 idle", 1, true))
+assert(active_rows[1].display:find("agents: 2 working · 1 idle", 1, true))
 assert(not active_rows[1].display:find("★", 1, true))
 assert(active_rows[2].display:find("─", 1, true))
 assert(active_rows[2].display:find("working", 1, true))
@@ -234,7 +234,7 @@ assert(status_text == "? - help")
 for _, row in ipairs(active_picker_options.finder.results) do
     assert(row.kind ~= "agent", "active picker should hydrate agents asynchronously")
     if row.kind == "session" then
-        assert(row.display:find("agents loading", 1, true))
+        assert(row.display:find("agents: loading", 1, true))
     end
 end
 
@@ -380,7 +380,7 @@ local stale_rows = finders.build_active_entries(
     { stale = true },
     { stale = true }
 )
-assert(stale_rows[1].display:find("agents stale", 1, true))
+assert(stale_rows[1].display:find("agents: stale", 1, true))
 
 local refresh_count = 0
 local active_picker = {

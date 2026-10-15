@@ -138,11 +138,11 @@ function M.format_session_metadata(metadata, now, separator)
     )
 end
 
-local function agent_summary(agents, loaded, stale)
+local function agent_summary(agents, loaded, stale, separator)
     if not loaded then
-        return "agents loading"
+        return "agents: loading"
     elseif stale then
-        return "agents stale"
+        return "agents: stale"
     end
     local counts = {}
     for _, agent in ipairs(type(agents) == "table" and agents or {}) do
@@ -152,16 +152,23 @@ local function agent_summary(agents, loaded, stale)
         end
     end
     if not next(counts) then
-        return "agents 0"
+        return "agents: 0"
     end
-    local parts = { "agents" }
+    local parts = { "agents:" }
     for _, state in ipairs({ "working", "idle", "blocked", "done", "unknown" }) do
         if counts[state] then
             parts[#parts + 1] = tostring(counts[state])
             parts[#parts + 1] = state
         end
     end
-    return table.concat(parts, " ")
+    if not separator then
+        return table.concat(parts, " ")
+    end
+    local statuses = {}
+    for index = 2, #parts, 2 do
+        statuses[#statuses + 1] = parts[index] .. " " .. parts[index + 1]
+    end
+    return "agents: " .. table.concat(statuses, " " .. separator .. " ")
 end
 
 local function session_parts(session, options)
@@ -312,7 +319,7 @@ local function active_session_row(session, view, options, widths)
             or options.highlights.active,
         status_highlight = stale and options.highlights.stale or nil,
         agent_status = options.show_agent_summary == false and nil
-            or agent_summary(agents, loaded, stale),
+            or agent_summary(agents, loaded, stale, options.symbols.separator),
         show_agent_summary = options.show_agent_summary,
         show_metadata = options.show_metadata,
         available_width = options.available_width,
@@ -637,12 +644,16 @@ M.display_width = display.display_width
 M.fit_parts = display.fit_parts
 M.truncate_middle = display.truncate_middle
 M.truncate_end = display.truncate_end
-M.format_session_display = function(session, options)
+M.format_session_parts = function(session, options)
     options = options or {}
     local merged = vim.tbl_deep_extend("force", options.display or {}, options)
     merged.display = nil
     merged = display_options(merged)
-    return parts_text(session_parts(session, merged))
+    return session_parts(session, merged)
+end
+
+M.format_session_display = function(session, options)
+    return parts_text(M.format_session_parts(session, options))
 end
 
 return M

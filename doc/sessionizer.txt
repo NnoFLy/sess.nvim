@@ -124,7 +124,7 @@ COMMANDS                                                     *sess-commands*
     Configure Telescope's active_expand option as "all", "current", or "none"
     to change the initial expansion. <Tab> expands/collapses the selected
     group; <S-Tab> expands/collapses all groups; <Enter> switches and focuses.
-    Each active session header ends with counts such as "agents 1 working 2 idle";
+    Each active session header ends with counts such as "agents: 1 working · 2 idle";
     loading and stale probes are shown explicitly. Current headers, focused
     agents, blocked/unknown statuses, and stale data have distinct visual
     treatment. Empty groups show a non-actionable "no agents" row. <C-b> prompts
@@ -735,7 +735,7 @@ tree-style session/agent rows and a footer showing <Tab> expand/collapse, <S-Tab
 expand/collapse all. <Enter> switches and focuses. Its title and session headers
 show stable compact counts; current headers, focused agents, blocked/unknown
 statuses, and stale/loading data are visually distinct. Each session header ends
-with agent counts such as `agents 1 working 2 idle`. Empty expanded sessions
+with agent counts such as `agents: 1 working · 2 idle`. Empty expanded sessions
 show a non-actionable "no agents" row. Manual expansion and selection are
 preserved while the picker is open and across status refreshes. A selected agent
 that disappears falls back to its parent session. Failed best-effort probes keep
