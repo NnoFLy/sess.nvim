@@ -4,11 +4,34 @@ local state = require("sess.api.state")
 
 local M = {}
 
+local MAX_DIAGNOSTICS = 64
+local MAX_DIAGNOSTIC_LENGTH = 240
+local MAX_AGENTS = 256
+
+-- Cache the last completed probe for the next active picker. It is only an
+-- initial view; the picker reconciles it immediately.
+local cached_snapshot
+
+local function append_diagnostic(result, value)
+    if #result.diagnostics >= MAX_DIAGNOSTICS then return end
+    if type(value) ~= "string" then
+        value = "agent status diagnostic is malformed"
+    elseif #value > MAX_DIAGNOSTIC_LENGTH then
+        value = value:sub(1, MAX_DIAGNOSTIC_LENGTH)
+    end
+    result.diagnostics[#result.diagnostics + 1] = value
+end
+
 local function new_snapshot()
     local active = state.active()
     local current = state.current()
+    local active_by_id = {}
+    for _, session in ipairs(active) do
+        active_by_id[session.id] = true
+    end
     return {
         sessions = active,
+        active_by_id = active_by_id,
         agents_by_id = {},
         focused_by_id = {},
         marks_by_id = {},
@@ -21,10 +44,81 @@ local function new_snapshot()
     }
 end
 
+local function append_signature(parts, value)
+    value = tostring(value == nil and "" or value)
+    parts[#parts + 1] = tostring(#value) .. ":" .. value
+end
+
+-- A compact value signature lets the active picker skip rebuilding Telescope
+-- rows when probes return the same data. Keep it deterministic without hashing:
+-- status snapshots are small and the string is cheaper than deep equality on
+-- every refresh.
+local function snapshot_signature(result)
+    local parts = {
+        tostring(result.generation),
+        tostring(result.current_id or ""),
+        tostring(result.marks_loaded == true),
+    }
+    for _, session in ipairs(result.sessions or {}) do
+        append_signature(parts, session.id)
+        append_signature(parts, session.metadata and session.metadata.name)
+        append_signature(parts, session.metadata and session.metadata.cwd)
+        append_signature(parts, session.metadata and session.metadata.last_used_at)
+        append_signature(parts, session.metadata and session.metadata.pinned)
+        append_signature(parts, result.marks_by_id[session.id])
+        append_signature(parts, result.focused_by_id[session.id])
+        append_signature(parts, result.stale_by_id[session.id])
+        append_signature(parts, result.agents_loaded_by_id[session.id])
+        for _, agent in ipairs(result.agents_by_id[session.id] or {}) do
+            append_signature(parts, agent.id)
+            append_signature(parts, agent.name)
+            append_signature(parts, agent.info)
+            append_signature(parts, agent.status)
+            append_signature(parts, agent.probe_failed)
+            append_signature(parts, agent.target and agent.target.bufnr)
+            append_signature(parts, agent.target and agent.target.winid)
+            for _, diagnostic in ipairs(agent.diagnostics or {}) do
+                append_signature(parts, diagnostic)
+            end
+        end
+    end
+    for _, diagnostic in ipairs(result.diagnostics or {}) do
+        append_signature(parts, diagnostic)
+    end
+    return table.concat(parts, "|")
+end
+
+local function complete_snapshot(result)
+    result.signature = snapshot_signature(result)
+    return result
+end
+
 -- Build the inexpensive part used to open the picker immediately. Agent and
--- mark discovery is deliberately deferred to snapshot_async().
+-- mark discovery is deferred to snapshot_async(), unless the previous active
+-- picker has a completed probe to reuse.
 function M.initial_snapshot()
-    return new_snapshot()
+    local result = new_snapshot()
+    if cached_snapshot then
+        -- Live state supplies session membership and metadata. Reuse only the
+        -- expensive probe results; marks are shown immediately and reloaded lazily.
+        result.marks_by_id = vim.deepcopy(cached_snapshot.marks_by_id or {})
+        result.marks_loaded = false
+        local loaded_agents = cached_snapshot.agents_loaded_by_id or {}
+        for _, session in ipairs(result.sessions) do
+            local session_id = session.id
+            if loaded_agents[session_id] then
+                result.agents_by_id[session_id] = vim.deepcopy(
+                    cached_snapshot.agents_by_id[session_id] or {}
+                )
+                result.focused_by_id[session_id] = cached_snapshot.focused_by_id[session_id]
+                result.agents_loaded_by_id[session_id] = true
+                -- Cached rows are useful immediately but remain visibly stale
+                -- until the live probe commits.
+                result.stale_by_id[session_id] = true
+            end
+        end
+    end
+    return complete_snapshot(result)
 end
 
 local function add_marks(result)
@@ -33,8 +127,9 @@ local function add_marks(result)
     for _, diagnostic in ipairs(diagnostics or {}) do result.diagnostics[#result.diagnostics + 1] = diagnostic end
     for _, entry in ipairs(entries or {}) do
         if not entry.stale then
-            result.marks_by_id[entry.id] = result.marks_by_id[entry.id]
-                and (result.marks_by_id[entry.id] .. " @" .. entry.mark)
+            local mark = result.marks_by_id[entry.id]
+            result.marks_by_id[entry.id] = mark
+                and (mark .. " @" .. entry.mark)
                 or ("@" .. entry.mark)
         end
     end
@@ -48,20 +143,41 @@ local function add_agents(result, session, previous)
     )
     local stale = false
     if not called then
-        result.diagnostics[#result.diagnostics + 1] = string.format(
+        append_diagnostic(result, string.format(
             "agent status probe failed for %s: %s",
             session.id,
             tostring(listed)
-        )
+        ))
         stale = true
     elseif not listed then
-        result.diagnostics[#result.diagnostics + 1] = list_err
+        append_diagnostic(result, list_err)
         stale = true
     end
-    for _, diagnostic in ipairs(diagnostics or {}) do
-        result.diagnostics[#result.diagnostics + 1] = diagnostic
+    if found ~= nil and type(found) ~= "table" then
+        append_diagnostic(result, "agent status result contained malformed agents")
         stale = true
+        found = {}
+    elseif type(found) == "table" and #found > MAX_AGENTS then
+        append_diagnostic(result, "agent status result contained too many agents")
+        stale = true
+        found = {}
     end
+    local probe_failed = false
+    for _, agent in ipairs(found or {}) do
+        if type(agent) == "table" and agent.probe_failed == true then
+            probe_failed = true
+            break
+        end
+    end
+    if diagnostics ~= nil and type(diagnostics) ~= "table" then
+        append_diagnostic(result, "agent status diagnostics were malformed")
+        stale = true
+    else
+        for _, diagnostic in ipairs(diagnostics or {}) do
+            append_diagnostic(result, diagnostic)
+        end
+    end
+    stale = stale or probe_failed
     result.stale_by_id[session.id] = stale or nil
     if stale and previous then
         result.agents_by_id[session.id] = vim.deepcopy(
@@ -86,7 +202,7 @@ function M.snapshot(options)
     for _, session in ipairs(result.sessions) do
         add_agents(result, session)
     end
-    return result
+    return complete_snapshot(result)
 end
 
 -- Build one agent group per event-loop turn. Mark discovery can be skipped for
@@ -95,6 +211,10 @@ function M.snapshot_async(callback, options)
     options = options or {}
     local include_marks = options.marks ~= false
     local result = new_snapshot()
+    if not include_marks and options.previous_snapshot then
+        result.marks_by_id = options.previous_snapshot.marks_by_id or {}
+        result.marks_loaded = options.previous_snapshot.marks_loaded == true
+    end
     local cancelled = false
     local restart_cancel
 
@@ -115,6 +235,10 @@ function M.snapshot_async(callback, options)
             restart_cancel = M.snapshot_async(callback, options)
             return
         end
+        complete_snapshot(result)
+        -- Cache only completed snapshots; cancelled or partial results must not
+        -- seed the next picker's initial view.
+        cached_snapshot = vim.deepcopy(result)
         local ok, err = pcall(callback, result)
         if not ok then
             report_error(err)

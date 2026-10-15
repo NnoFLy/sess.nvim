@@ -28,8 +28,14 @@ local action_help = { action_help = config.values.action_help }
 
 assert(config.values.mappings.i["<C-y>"] == actions.copy_path)
 assert(config.values.mappings.n["<C-y>"] == actions.copy_path)
-assert(config.values.active_mappings.i["<C-r>"] == actions.refresh_active)
-assert(config.values.active_mappings.i["<C-o>"] == actions.focus_agent)
+assert(config.values.active_mappings == nil)
+local active_mappings = vim.deepcopy(config.values.mappings)
+for _, mode in ipairs({ "i", "n" }) do
+    active_mappings[mode]["<Tab>"] = actions.toggle_active
+    active_mappings[mode]["<S-Tab>"] = actions.toggle_all_active
+    active_mappings[mode]["<CR>"] = actions.active_enter
+    active_mappings[mode]["<C-o>"] = actions.focus_agent
+end
 local regular_entries = help.entries(
     "regular",
     "i",
@@ -40,21 +46,21 @@ local regular_entries = help.entries(
 local active_session_entries = help.entries(
     "active",
     "i",
-    config.values.active_mappings,
+    active_mappings,
     action_help,
     { kind = "session", session_id = "session" }
 )
 local inactive_agent_entries = help.entries(
     "active",
     "i",
-    config.values.active_mappings,
+    active_mappings,
     action_help,
     { kind = "agent", session_id = "session", agent_id = "agent", current = false }
 )
 local active_agent_entries = help.entries(
     "active",
     "i",
-    config.values.active_mappings,
+    active_mappings,
     action_help,
     { kind = "agent", session_id = "session", agent_id = "agent", current = true }
 )
@@ -67,7 +73,7 @@ local function has_id(entries, id)
     return false
 end
 assert(has_id(regular_entries, "copy_path"))
-assert(has_id(active_session_entries, "refresh"))
+assert(not has_id(active_session_entries, "refresh"))
 assert(not has_id(active_session_entries, "focus"))
 assert(not has_id(inactive_agent_entries, "focus"))
 assert(has_id(active_agent_entries, "focus"))
@@ -129,7 +135,7 @@ assert(
 )
 
 local active_lines = table.concat(
-    help.lines("active", config.values.active_mappings, action_help, {
+    help.lines("active", active_mappings, action_help, {
         kind = "placeholder",
     }),
     "\n"
@@ -235,12 +241,8 @@ assert(help.help_key({ action_help = false }) == nil)
 assert(help.footer("regular", "i", config.values.mappings, { action_help = false }) == nil)
 
 local replacement = function() end
-config.setup({
-    mappings = { i = { ["<C-y>"] = replacement } },
-    active_mappings = { i = { ["<C-r>"] = false } },
-})
+config.setup({ mappings = { i = { ["<C-y>"] = replacement } } })
 assert(config.values.mappings.i["<C-y>"] == replacement)
-assert(config.values.active_mappings.i["<C-r>"] == false)
 
 -- Sort cycling is generated for active pickers without replacing configured
 -- mappings or explicit disablement.
@@ -262,7 +264,7 @@ local active_cycle_footer = help.footer(
 assert(active_cycle_footer == "? - help")
 config.setup({
     search = { cycle_sort = true },
-    active_mappings = { i = { ["<C-s>"] = false } },
+    mappings = { i = { ["<C-s>"] = false } },
 })
 pickers.active()
 local disabled_active_options = picker_options[#picker_options]

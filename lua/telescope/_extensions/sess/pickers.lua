@@ -38,9 +38,25 @@ local function apply_mappings(map, mappings)
     end
 end
 
+local function add_active_action_mappings(mappings)
+    mappings = vim.deepcopy(mappings or {})
+    for _, mode in ipairs({ "i", "n" }) do
+        mappings[mode] = mappings[mode] or {}
+        -- Active navigation reserves these three keys; other inherited mappings
+        -- remain available to regular session actions.
+        mappings[mode]["<Tab>"] = actions.toggle_active
+        mappings[mode]["<CR>"] = actions.active_enter
+        mappings[mode]["<S-Tab>"] = actions.toggle_all_active
+        -- Add other active-only actions only when their keys are unclaimed.
+        if mappings[mode]["<C-o>"] == nil then
+            mappings[mode]["<C-o>"] = actions.focus_agent
+        end
+    end
+    return mappings
+end
+
 local function add_active_navigation_mappings(mappings, options)
     local active = vim.tbl_deep_extend("force", config.values.active or {}, options.active or {})
-    local explicit_mappings = options.active_mappings ~= nil
     if type(config.validate_active) == "function" then
         local valid_active, active_err = config.validate_active(active)
         if not valid_active then
@@ -69,33 +85,13 @@ local function add_active_navigation_mappings(mappings, options)
         end
     end
 
-    -- Refresh is independent from header navigation. A refresh key is
-    -- generated only for an unclaimed key, so a user's existing mapping
-    -- always wins, including one supplied by an active_mappings override.
+    -- Add refresh only when its key is unclaimed, so inherited mappings win.
     local refresh_key = active.refresh_key
     if refresh_key ~= false and type(refresh_key) == "string" and refresh_key ~= "" then
         for _, mode in ipairs({ "i", "n" }) do
             mappings[mode] = mappings[mode] or {}
-            if
-                not explicit_mappings
-                and refresh_key ~= "<C-r>"
-                and mappings[mode]["<C-r>"] == actions.refresh_active
-            then
-                mappings[mode]["<C-r>"] = nil
-            end
             if mappings[mode][refresh_key] == nil then
                 mappings[mode][refresh_key] = actions.refresh_active
-            end
-        end
-    elseif refresh_key == false then
-        -- The built-in table historically contained <C-r>. Remove only that
-        -- built-in action when explicitly disabled; never remove a user's
-        -- replacement action.
-        if not explicit_mappings then
-            for _, mode in ipairs({ "i", "n" }) do
-                if mappings[mode] and mappings[mode]["<C-r>"] == actions.refresh_active then
-                    mappings[mode]["<C-r>"] = nil
-                end
             end
         end
     end
@@ -649,7 +645,7 @@ function M.active(opts)
     picker_opts.prompt_title = finders.active_dashboard_title(initial_snapshot)
     picker_opts.finder = finder
     picker_opts.selection_strategy = "row"
-    local active_mappings = opts.active_mappings or config.values.active_mappings
+    local active_mappings = add_active_action_mappings(opts.mappings or config.values.mappings)
     active_mappings = add_active_navigation_mappings(active_mappings, opts)
     active_mappings = add_cycle_sort_mapping(active_mappings, search_options)
     local active_action_help = opts.action_help
@@ -793,15 +789,17 @@ function M.active(opts)
         return finders.generate_active_finder_async(
             expanded_by_id,
             picker._sess_active_expand,
-            function(finder, next_rows, snapshot)
+            function(finder, next_rows, snapshot, unchanged)
                 picker._sess_active_loading = false
-                preview.invalidate(picker)
+                if not unchanged then
+                    preview.invalidate(picker)
+                end
                 -- The transactional poller commits the title only after the
                 -- candidate refresh succeeds. Keep the fallback mutation for
                 -- lightweight test/integration adapters that do not use the
                 -- transactional active-refresh implementation.
-                done(finder, next_rows, snapshot)
-                if not picker._sess_active_refresh_transactional then
+                done(finder, next_rows, snapshot, unchanged)
+                if not unchanged and not picker._sess_active_refresh_transactional then
                     picker._sess_active_commit_title(snapshot)
                 end
             end,

@@ -8,6 +8,12 @@ local path_utils = require("sess.path")
 ---@field metadata string
 ---@field session string
 
+---@class Sess.CatalogRecord
+---@field metadata Sess.SessionMetadata
+---@field size integer
+---@field mtime_sec integer
+---@field mtime_nsec integer
+
 ---@class Sess.SessionPaths
 ---@field dir string
 ---@field metadata string
@@ -221,6 +227,28 @@ local TRASH_DIR = "trash"
 
 local METADATA_FILE = "metadata.json"
 local SESSION_FILE = "session.vim"
+local CATALOG_FILE = "catalog.json"
+local CATALOG_VERSION = 1
+
+-- The catalog is the read-mostly index for session metadata. Keep it in memory
+-- after validation, while retaining metadata.json as the compatibility source
+-- of truth for direct storage APIs and catalog rebuilds.
+local catalog_cache ---@type table<string, Sess.CatalogRecord>?
+local catalog_diagnostics ---@type string[]?
+local catalog_skipped = {}
+local marks_cache ---@type table<string, Sess.SessionId>?
+local marks_cache_stamp
+
+local function invalidate_catalog()
+    catalog_cache = nil
+    catalog_diagnostics = nil
+    catalog_skipped = {}
+end
+
+local function invalidate_marks()
+    marks_cache = nil
+    marks_cache_stamp = nil
+end
 
 -- Compatibility export; mark syntax itself is domain-owned by sess.mark.
 M.validate_mark = mark.validate
@@ -787,10 +815,91 @@ local function validate_metadata(data)
     return data --[[@as Sess.SessionMetadata]]
 end
 
+local function file_stamp(stat)
+    local mtime, ctime = stat.mtime or {}, stat.ctime or {}
+    return {
+        size = stat.size,
+        sec = mtime.sec,
+        nsec = mtime.nsec,
+        dev = stat.dev,
+        ino = stat.ino,
+        ctime_sec = ctime.sec,
+        ctime_nsec = ctime.nsec,
+    }
+end
+
+local function metadata_stamp(path)
+    local stat = vim.uv.fs_lstat(path)
+    if not stat or stat.type ~= "file" then
+        return nil
+    end
+    return file_stamp(stat)
+end
+
+local function stamp_matches(left, right)
+    return left and right and vim.deep_equal(left, right)
+end
+
+local function catalog_file_path()
+    assert_initialized()
+    return join(root_path, CATALOG_FILE)
+end
+
+local function validate_catalog_path(path)
+    local stat, err, code = vim.uv.fs_lstat(path)
+    if not stat then
+        if code == "ENOENT" then
+            return true, false
+        end
+        return false, "failed to access session catalog: " .. tostring(err or path)
+    end
+    if stat.type ~= "file" then
+        return false, "untrusted session catalog path (expected a regular file): " .. path
+    end
+    return true, true
+end
+
+local function catalog_record(metadata, stamp)
+    return {
+        metadata = metadata,
+        size = stamp and stamp.size,
+        mtime_sec = stamp and stamp.sec,
+        mtime_nsec = stamp and stamp.nsec,
+        dev = stamp and stamp.dev,
+        ino = stamp and stamp.ino,
+        ctime_sec = stamp and stamp.ctime_sec,
+        ctime_nsec = stamp and stamp.ctime_nsec,
+    }
+end
+
+local function catalog_record_stamp(record)
+    return {
+        size = record.size,
+        sec = record.mtime_sec,
+        nsec = record.mtime_nsec,
+        dev = record.dev,
+        ino = record.ino,
+        ctime_sec = record.ctime_sec,
+        ctime_nsec = record.ctime_nsec,
+    }
+end
+
+local write_json
+
+local function write_catalog(records)
+    local path = catalog_file_path()
+    local safe, safe_err = validate_catalog_path(path)
+    if not safe then
+        return false, safe_err
+    end
+    local data = { version = CATALOG_VERSION, sessions = records }
+    return write_json(path, data)
+end
+
 ---@param path string
 ---@param data table
 ---@return boolean, string?
-local function write_json(path, data)
+write_json = function(path, data)
     local ok, content = pcall(vim.json.encode, data)
 
     if not ok then
@@ -1084,6 +1193,8 @@ function M.init(path)
     end
     descriptor_mode = false
     root_path = vim.fs.normalize(vim.fn.fnamemodify(path, ":p"))
+    invalidate_catalog()
+    invalidate_marks()
 
     local ok, err = ensure_private_dir(root_path, "storage directory")
     if not ok then
@@ -1142,14 +1253,21 @@ local function validate_mark_registry_path(path)
     local stat, err, code = vim.uv.fs_lstat(path)
     if not stat then
         if code == "ENOENT" then
-            return true, false
+            return true, false, nil
         end
         return false, "failed to access mark registry: " .. tostring(err or path)
     end
     if stat.type ~= "file" then
         return false, "untrusted mark registry path (expected a regular file): " .. path
     end
-    return true, true
+    return true, true, file_stamp(stat)
+end
+
+local function same_mark_stamp(left, right)
+    if not left or not right then
+        return left == right
+    end
+    return stamp_matches(left, right)
 end
 
 function M.read_marks()
@@ -1159,18 +1277,32 @@ function M.read_marks()
         return nil, trust_err
     end
     local path = join(root_path, "marks.json")
-    local safe, present_or_err = validate_mark_registry_path(path)
+    local safe, present_or_err, stamp = validate_mark_registry_path(path)
     if not safe then
+        invalidate_marks()
         return nil, present_or_err
     end
+    if marks_cache and same_mark_stamp(marks_cache_stamp, stamp) then
+        return vim.deepcopy(marks_cache)
+    end
     if not present_or_err then
+        marks_cache = {}
+        marks_cache_stamp = nil
         return {}
     end
     local data, read_err = read_json(path)
     if not data then
+        invalidate_marks()
         return nil, read_err
     end
-    return validate_marks(data)
+    local valid, validation_err = validate_marks(data)
+    if not valid then
+        invalidate_marks()
+        return nil, validation_err
+    end
+    marks_cache = vim.deepcopy(valid)
+    marks_cache_stamp = stamp
+    return vim.deepcopy(valid)
 end
 
 function M.write_marks(marks)
@@ -1193,6 +1325,10 @@ function M.write_marks(marks)
     if next(marks) == nil then
         data.marks = vim.empty_dict()
     end
+    -- Atomic replacement may commit before reporting a descriptor cleanup
+    -- failure. Invalidate before writing so every outcome rereads the current
+    -- on-disk registry rather than returning a stale cached copy.
+    invalidate_marks()
     return write_json(path, data)
 end
 
@@ -1228,6 +1364,183 @@ function M.list()
     table.sort(result)
 
     return result
+end
+
+local function rebuild_catalog(initial_diagnostics)
+    local ids, list_err = M.list()
+    if list_err then
+        return {}, list_err, initial_diagnostics or {}
+    end
+
+    local records, diagnostics, skipped = {}, initial_diagnostics or {}, {}
+    for _, id in ipairs(ids) do
+        local valid, id_err = validate_id(id)
+        if not valid then
+            diagnostics[#diagnostics + 1] = "failed to load session " .. id .. ": " .. id_err
+            skipped[id] = false
+        else
+            local paths = session_paths(id)
+            local data, read_err = read_json(paths.metadata)
+            local metadata, validation_err
+            if data then
+                metadata, validation_err = validate_metadata(data)
+            else
+                validation_err = read_err
+            end
+            if metadata then
+                local stamp = metadata_stamp(paths.metadata)
+                if stamp then
+                    records[id] = catalog_record(metadata, stamp)
+                else
+                    diagnostics[#diagnostics + 1] = "failed to load session " .. id .. ": metadata file is unavailable"
+                end
+            else
+                diagnostics[#diagnostics + 1] = "failed to load session " .. id .. ": " .. tostring(validation_err)
+            end
+            if not records[id] then
+                skipped[id] = metadata_stamp(paths.metadata) or false
+            end
+        end
+    end
+
+    local catalog_ok, catalog_err = write_catalog(records)
+    if not catalog_ok then
+        diagnostics[#diagnostics + 1] = "failed to persist session catalog: " .. tostring(catalog_err)
+    end
+    catalog_cache = records
+    catalog_diagnostics = diagnostics
+    catalog_skipped = skipped
+    return records, nil, diagnostics
+end
+
+local function catalog_matches_store(records, ids, skipped)
+    local seen = {}
+    for _, id in ipairs(ids) do
+        local valid = validate_id(id)
+        seen[id] = true
+        if not valid then
+            if not skipped or skipped[id] ~= false then
+                return false
+            end
+        else
+            local record = records[id]
+            local stamp = metadata_stamp(session_paths(id).metadata)
+            if record then
+                if not stamp_matches(stamp, catalog_record_stamp(record)) then
+                    return false
+                end
+            elseif not skipped or skipped[id] == nil or not vim.deep_equal(stamp or false, skipped[id]) then
+                return false
+            end
+        end
+    end
+    for id in pairs(skipped or {}) do
+        if not seen[id] then
+            return false
+        end
+    end
+    for id in pairs(records) do
+        if not seen[id] then
+            return false
+        end
+    end
+    return true
+end
+
+local function load_catalog()
+    if catalog_cache then
+        local ids, list_err = M.list()
+        if not list_err and catalog_matches_store(catalog_cache, ids, catalog_skipped) then
+            return catalog_cache, nil, catalog_diagnostics or {}
+        end
+        if list_err then
+            return {}, list_err, {}
+        end
+        invalidate_catalog()
+    end
+
+    local path = catalog_file_path()
+    local safe, present_or_err = validate_catalog_path(path)
+    local initial_diagnostics = {}
+    if not safe then
+        initial_diagnostics[1] = "invalid session catalog: " .. tostring(present_or_err)
+    elseif present_or_err then
+        local data, read_err = read_json(path)
+        if data and data.version == CATALOG_VERSION and type(data.sessions) == "table" then
+            local valid_records = true
+            for id, record in pairs(data.sessions) do
+                local valid_id = validate_id(id)
+                if not valid_id
+                    or type(record) ~= "table"
+                    or type(record.metadata) ~= "table"
+                    or not validate_metadata(record.metadata)
+                    or type(record.size) ~= "number"
+                    or type(record.mtime_sec) ~= "number"
+                    or (record.mtime_nsec ~= nil and type(record.mtime_nsec) ~= "number")
+                    or (record.dev ~= nil and type(record.dev) ~= "number")
+                    or (record.ino ~= nil and type(record.ino) ~= "number")
+                    or (record.ctime_sec ~= nil and type(record.ctime_sec) ~= "number")
+                    or (record.ctime_nsec ~= nil and type(record.ctime_nsec) ~= "number")
+                then
+                    valid_records = false
+                    break
+                end
+            end
+            if valid_records then
+                local ids, list_err = M.list()
+                if not list_err and catalog_matches_store(data.sessions, ids) then
+                    catalog_cache = data.sessions
+                    catalog_diagnostics = {}
+                    return catalog_cache, nil, catalog_diagnostics
+                end
+                if list_err then
+                    return {}, list_err, {}
+                end
+            else
+                initial_diagnostics[1] = "invalid session catalog: invalid records"
+            end
+        else
+            initial_diagnostics[1] = "invalid session catalog: " .. tostring(read_err or "unsupported format")
+        end
+    end
+
+    return rebuild_catalog(initial_diagnostics)
+end
+
+---@return table<string, Sess.SessionMetadata>?, string?, string[]
+function M.list_metadata()
+    assert_initialized()
+    local records, err, diagnostics = load_catalog()
+    if err then
+        return {}, err, diagnostics
+    end
+    local result = {}
+    for id, record in pairs(records) do
+        result[id] = vim.deepcopy(record.metadata)
+    end
+    return result, nil, vim.deepcopy(diagnostics or {})
+end
+
+local function update_catalog_record(id, metadata)
+    local records, load_err, diagnostics = load_catalog()
+    if load_err then
+        invalidate_catalog()
+        return false, load_err
+    end
+    local stamp = metadata_stamp(session_paths(id).metadata)
+    if not stamp then
+        invalidate_catalog()
+        return false, "metadata file is unavailable: " .. id
+    end
+    records[id] = catalog_record(vim.deepcopy(metadata), stamp)
+    local written, write_err = write_catalog(records)
+    if not written then
+        invalidate_catalog()
+        return false, write_err
+    end
+    catalog_cache = records
+    catalog_diagnostics = diagnostics or {}
+    return true
 end
 
 ---@param id Sess.SessionId
@@ -1415,6 +1728,7 @@ function M.restore(key, expected)
         return false, rename_err
     end
 
+    invalidate_catalog()
     return true, nil, entry
 end
 
@@ -1649,6 +1963,7 @@ function M.create(id)
         return false, "failed to create session directory: " .. paths.dir
     end
 
+    invalidate_catalog()
     return true
 end
 
@@ -1685,6 +2000,7 @@ function M.delete(id, hard)
             return false, "failed to permanently delete session: " .. id
         end
 
+        invalidate_catalog()
         return true
     end
 
@@ -1706,6 +2022,7 @@ function M.delete(id, hard)
         return false, err
     end
 
+    invalidate_catalog()
     return true
 end
 
@@ -1747,6 +2064,7 @@ function M.rename(old_id, new_id)
         return false, rename_err
     end
 
+    invalidate_catalog()
     return true
 end
 
@@ -1802,7 +2120,11 @@ function M.write_metadata(id, metadata)
         return false, validation_err
     end
 
-    return write_json(session_paths(id).metadata, validated_metadata)
+    local written, write_err = write_json(session_paths(id).metadata, validated_metadata)
+    if not written then
+        return false, write_err
+    end
+    return update_catalog_record(id, validated_metadata)
 end
 
 ---@param id Sess.SessionId

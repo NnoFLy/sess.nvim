@@ -271,6 +271,20 @@ local function is_clean_empty_buffer(buf)
         and vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1] == ""
 end
 
+local function remove_restore_placeholder(buf, diagnostics)
+    if not is_clean_empty_buffer(buf) or #vim.fn.win_findbuf(buf) > 0 then
+        return
+    end
+
+    local removed, remove_err = pcall(vim.api.nvim_buf_delete, buf, {})
+    if not removed then
+        table.insert(
+            diagnostics,
+            "failed to remove temporary restore buffer: " .. tostring(remove_err)
+        )
+    end
+end
+
 function M.empty(cwd, options)
     M.hide()
     command("cd", cwd)
@@ -366,8 +380,10 @@ function M.restore(view, rollback)
     local diagnostics = {}
 
     for index, tab in ipairs(view.tabs) do
+        local restore_placeholder
         if index > 1 then
             vim.cmd("tabnew")
+            restore_placeholder = vim.api.nvim_get_current_buf()
         end
 
         -- New tabs inherit the previous window's local cwd. Clear inherited
@@ -444,6 +460,8 @@ function M.restore(view, rollback)
             end
         end
 
+        remove_restore_placeholder(restore_placeholder, diagnostics)
+
         if mapping[tab.current] then
             local focused, focus_err = pcall(vim.api.nvim_set_current_win, mapping[tab.current])
             if not focused then
@@ -481,9 +499,32 @@ M.load = legacy_load
 M._legacy_snapshot = legacy_snapshot
 M._legacy_load = legacy_load
 
+local function leave_terminal_mode()
+    if vim.api.nvim_get_mode().mode ~= "t" then
+        return true
+    end
+
+    local normal_mode_keys = vim.api.nvim_replace_termcodes("<C-\\><C-N>", true, false, true)
+    local feed_ok, feed_error = pcall(vim.api.nvim_feedkeys, normal_mode_keys, "nx", false)
+    if not feed_ok then
+        return false, "failed to leave terminal mode: " .. tostring(feed_error)
+    end
+
+    if vim.api.nvim_get_mode().mode == "t" then
+        return false, "failed to leave terminal mode"
+    end
+
+    return true
+end
+
 function M.source_snapshot(snapshot_path, content)
     if type(content) ~= "string" then
         return false, "secure session snapshot content is required"
+    end
+
+    local terminal_mode_left, terminal_error = leave_terminal_mode()
+    if not terminal_mode_left then
+        return false, terminal_error
     end
 
     -- Storage reads the snapshot through its descriptor-relative, no-follow

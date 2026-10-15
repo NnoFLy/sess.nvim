@@ -203,10 +203,11 @@ local active_finder = finders.generate_active_finder_from_snapshot(active_snapsh
 local active_entry = active_finder.entry_maker(active_finder.results[1])
 assert(active_entry.value.session_id == session.id)
 local original_preview = api.session.preview
+local original_active_inspect = storage.inspect_snapshot
 local active_preview_calls = 0
-api.session.preview = function()
+storage.inspect_snapshot = function()
     active_preview_calls = active_preview_calls + 1
-    return true, nil, { snapshot_available = true }
+    return "available"
 end
 local cached_picker = { _sess_active_snapshot = active_snapshot, _sess_active_loading = false }
 preview_definition.define_preview(preview_self, active_entry, { picker = cached_picker })
@@ -221,6 +222,7 @@ assert(not active_text:find("No session selected", 1, true))
 preview.invalidate(cached_picker)
 preview_definition.define_preview(preview_self, active_entry, { picker = cached_picker })
 assert(active_preview_calls == 2)
+storage.inspect_snapshot = original_active_inspect
 
 -- A failed editor-view probe stays in the preview as a diagnostic.
 local state = require("sess.state")

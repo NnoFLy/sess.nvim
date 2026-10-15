@@ -400,6 +400,16 @@ local function refresh(prompt_bufnr, finder, key)
     return M.transactional_refresh(picker, next_finder, key)
 end
 
+local function refresh_after_mutation(prompt_bufnr, picker, key)
+    if picker and picker._sess_help_kind == "active" then
+        -- Lifecycle mutations invalidate the active dashboard snapshot. Refresh
+        -- it as an active picker instead of using the regular session finder.
+        picker._sess_active_snapshot = nil
+        return M.refresh_active(prompt_bufnr)
+    end
+    return refresh(prompt_bufnr, nil, key)
+end
+
 local function report_result(picker, ok, err, diagnostics)
     if not ok then
         log.error(err)
@@ -423,6 +433,25 @@ local function selected_value()
     end
 
     return selected.value
+end
+
+-- Regular rows expose id/metadata directly; active rows wrap the parent session
+-- in session and use session_id. These helpers let lifecycle actions handle both
+-- shapes, so inherited mappings remain usable in the active picker.
+local function session_id(value)
+    if not value then
+        return nil
+    end
+    local session = value.session
+    return value.id or value.session_id or (session and session.id)
+end
+
+local function session_metadata(value)
+    if not value then
+        return nil
+    end
+    local session = value.session or value
+    return value.metadata or session.metadata
 end
 
 local function selected_path(value)
@@ -987,7 +1016,8 @@ end
 
 function M.delete_session(prompt_bufnr)
     local value = selected_value()
-    if not value or not value.id then
+    local id = session_id(value)
+    if not id then
         return
     end
     local picker, started = begin_action(prompt_bufnr)
@@ -995,10 +1025,11 @@ function M.delete_session(prompt_bufnr)
         return
     end
     local key = selection.key(value)
-    local name = value.metadata and value.metadata.name or value.id
-    local cwd = value.metadata and value.metadata.cwd or "unknown"
+    local metadata = session_metadata(value) or {}
+    local name = metadata.name or id
+    local cwd = metadata.cwd or "unknown"
     local current = api.state.current()
-    local deleting_current = current and current.id == value.id
+    local deleting_current = current and current.id == id
     local state = deleting_current and "current" or "inactive"
     local message = table.concat({
         'Delete session "' .. name .. '"?',
@@ -1018,7 +1049,7 @@ function M.delete_session(prompt_bufnr)
         actions.close(prompt_bufnr)
     end
 
-    local ok, err, _, diagnostics = api.session.delete(value.id)
+    local ok, err, _, diagnostics = api.session.delete(id)
     if not report_result(picker, ok, err, diagnostics) then
         finish_action(prompt_bufnr, picker, "Failed")
         return
@@ -1026,7 +1057,7 @@ function M.delete_session(prompt_bufnr)
 
     finish_action(prompt_bufnr, picker, "Done")
     if not deleting_current then
-        refresh(prompt_bufnr, nil, key)
+        refresh_after_mutation(prompt_bufnr, picker, key)
     end
 end
 
@@ -1034,7 +1065,8 @@ end
 ---@return nil
 function M.unload_session(prompt_bufnr)
     local value = selected_value()
-    if not value or not value.id then
+    local id = session_id(value)
+    if not id then
         return
     end
     local picker, started = begin_action(prompt_bufnr)
@@ -1043,14 +1075,14 @@ function M.unload_session(prompt_bufnr)
     end
     local key = selection.key(value)
     local current = api.state.current()
-    local unloading_current = current and current.id == value.id
+    local unloading_current = current and current.id == id
 
     -- Close before capturing the current session so picker windows aren't saved.
     if unloading_current then
         actions.close(prompt_bufnr)
     end
 
-    local ok, err, _, diagnostics = require("sess.ui.unload")(value.id)
+    local ok, err, _, diagnostics = require("sess.ui.unload")(id)
     if not ok then
         if err == "unload cancelled" then
             log.info("Unload cancelled")
@@ -1064,7 +1096,7 @@ function M.unload_session(prompt_bufnr)
     log.diagnostics(diagnostics)
     finish_action(prompt_bufnr, picker, "Done")
     if not unloading_current then
-        refresh(prompt_bufnr, nil, key)
+        refresh_after_mutation(prompt_bufnr, picker, key)
     end
 end
 
@@ -1121,7 +1153,8 @@ end
 
 function M.toggle_pin_session(prompt_bufnr)
     local value = selected_value()
-    if not value or not value.id then
+    local id = session_id(value)
+    if not id then
         return
     end
     local picker, started = begin_action(prompt_bufnr)
@@ -1129,27 +1162,28 @@ function M.toggle_pin_session(prompt_bufnr)
         return
     end
     local key = selection.key(value)
-    local ok, err, _, diagnostics = api.session.toggle_pin(value.id)
+    local ok, err, _, diagnostics = api.session.toggle_pin(id)
     if not report_result(picker, ok, err, diagnostics) then
         finish_action(prompt_bufnr, picker, "Failed")
         return
     end
 
     finish_action(prompt_bufnr, picker, "Done")
-    refresh(prompt_bufnr, nil, key)
+    refresh_after_mutation(prompt_bufnr, picker, key)
 end
 
 ---@param prompt_bufnr number
 ---@return nil
 function M.unmark_session(prompt_bufnr)
     local value = selected_value()
-    if not value or not value.id then
+    local id = session_id(value)
+    if not id then
         return
     end
     local _, _, entries = api.session.list_marks()
     local mark
     for _, entry in ipairs(entries or {}) do
-        if entry.id == value.id then
+        if entry.id == id then
             mark = entry.mark
             break
         end
@@ -1168,12 +1202,13 @@ function M.unmark_session(prompt_bufnr)
         return
     end
     finish_action(prompt_bufnr, picker, "Done")
-    refresh(prompt_bufnr, nil, key)
+    refresh_after_mutation(prompt_bufnr, picker, key)
 end
 
 function M.rename_session(prompt_bufnr)
     local value = selected_value()
-    if not value or not value.id then
+    local id = session_id(value)
+    if not id then
         return
     end
     local picker, started = begin_action(prompt_bufnr)
@@ -1182,9 +1217,10 @@ function M.rename_session(prompt_bufnr)
     end
     local key = selection.key(value)
 
+    local metadata = session_metadata(value) or {}
     vim.ui.input({
         prompt = "Enter Session Name: ",
-        default = value.metadata and value.metadata.name or "",
+        default = metadata.name or "",
     }, function(name)
         if picker._sess_picker_closed or current_picker(prompt_bufnr) ~= picker then
             return
@@ -1200,14 +1236,14 @@ function M.rename_session(prompt_bufnr)
             return
         end
 
-        local ok, err, _, diagnostics = api.session.rename(value.id, name)
+        local ok, err, _, diagnostics = api.session.rename(id, name)
         if not report_result(picker, ok, err, diagnostics) then
             finish_action(prompt_bufnr, picker, "Failed")
             return
         end
 
         finish_action(prompt_bufnr, picker, "Done")
-        refresh(prompt_bufnr, nil, key)
+        refresh_after_mutation(prompt_bufnr, picker, key)
     end)
 end
 

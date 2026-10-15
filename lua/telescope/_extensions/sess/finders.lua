@@ -20,6 +20,7 @@ local log = require("sess.log")
 local path = require("sess.ui.path")
 local path_utils = require("sess.path")
 local search = require("telescope._extensions.sess.search")
+local rows = require("sess.ui.rows")
 local layout = require("telescope._extensions.sess.layout")
 local icons = require("telescope._extensions.sess.icons")
 
@@ -35,44 +36,39 @@ end
 
 local status_symbols = icons.status
 
-local status_display_order = { "working", "idle", "blocked", "done", "unknown" }
-
-local function pad(value, width)
-    value = value or ""
-    return value .. string.rep(" ", math.max(0, width - layout.display_width(value)))
-end
-
 local function normalized_status(status)
     return status_symbols[status] and status or "unknown"
 end
 
-local function agent_status_text(agents, loaded, stale)
-    if not loaded then
-        return "agents loading"
-    end
-    if stale then
-        return "agents stale"
+local function relative_time(timestamp, now)
+    timestamp = tonumber(timestamp)
+    if not timestamp or timestamp <= 0 then
+        return nil
     end
 
-    local counts = {}
-    for _, agent in ipairs(agents or {}) do
-        local status = normalized_status(agent.status)
-        counts[status] = (counts[status] or 0) + 1
+    local seconds = math.max(0, (now or os.time()) - timestamp)
+    if seconds < 60 then
+        return "now"
+    elseif seconds < 3600 then
+        return string.format("%dm ago", math.floor(seconds / 60))
+    elseif seconds < 86400 then
+        return string.format("%dh ago", math.floor(seconds / 3600))
+    elseif seconds < 604800 then
+        return string.format("%dd ago", math.floor(seconds / 86400))
+    elseif seconds < 2592000 then
+        return string.format("%dw ago", math.floor(seconds / 604800))
+    elseif seconds < 31536000 then
+        return string.format("%dmo ago", math.floor(seconds / 2592000))
     end
+    return string.format("%dy ago", math.floor(seconds / 31536000))
+end
 
-    if next(counts) == nil then
-        return "agents 0"
-    end
-
-    local parts = { "agents" }
-    for _, status in ipairs(status_display_order) do
-        local count = counts[status]
-        if count then
-            parts[#parts + 1] = tostring(count)
-            parts[#parts + 1] = status
-        end
-    end
-    return table.concat(parts, " ")
+function M.format_session_metadata(metadata, now, separator)
+    return rows.format_session_metadata(
+        metadata,
+        now,
+        separator or icons.for_display(configured_display()).separator
+    )
 end
 
 local function count_agents(snapshot)
@@ -127,8 +123,8 @@ local function display_options(options)
     end
     options.mode = layout.display_mode(options, options.result_width)
     options.symbols = icons.for_display(options)
-    -- Compact rows retain state, marks, and other session metadata. Agent
-    -- summaries remain the density-specific content reserved for detailed rows.
+    -- Compact rows retain session metadata; active agent summaries are shown
+    -- only in detailed rows.
     if options.mode == "compact" then
         options.show_agent_summary = false
     end
@@ -168,116 +164,8 @@ local function hydrate_search_finder(callback, previous_snapshot, build_finder)
     })
 end
 
-local function path_for_display(path_value, style)
-    if style == "short" then
-        return vim.fn.fnamemodify(path_value, ":~")
-    elseif style == "relative" then
-        return vim.fn.fnamemodify(path_value, ":~:.")
-    end
-    return path_value
-end
-
-local function state_for_session(session, opts)
-    local symbols = opts.symbols or icons.for_display(opts.display)
-    if not session.id then
-        return symbols.state.new, "new"
-    elseif opts.current_id == session.id then
-        return symbols.state.current, "current"
-    elseif opts.active then
-        return symbols.state.active, "active"
-    end
-    return symbols.state.inactive, "inactive"
-end
-
 local function session_display_parts(session, opts)
-    opts = opts or {}
-    local display = display_options(opts.display or {})
-    local symbols = display.symbols
-    local highlights = display.highlights or {}
-    local width = display.available_width
-    local tree = "  "
-    if opts.expandable and opts.expanded then
-        tree = symbols.tree.expanded
-    elseif opts.expandable then
-        tree = symbols.tree.collapsed
-    end
-
-    opts.symbols = symbols
-    local marker, state = state_for_session(session, opts)
-    local marker_highlight = highlights[state]
-    if display.show_metadata ~= false and session.id and opts.previous_id == session.id then
-        marker = symbols.metadata.previous
-        marker_highlight = highlights.metadata or marker_highlight
-    end
-    local name = session.metadata.name or ""
-    local cwd = path_for_display(session.metadata.cwd or "", display.path_style)
-    local agent_status = display.show_agent_summary ~= false and opts.agent_status
-
-    if opts.path_width then
-        cwd = layout.truncate_middle(cwd, opts.path_width, symbols.ellipsis)
-    end
-    local pinned = display.show_metadata ~= false and session.metadata.pinned
-    local parts = {
-        { text = tree },
-        {
-            text = pinned and (symbols.metadata.pinned .. " ") or "  ",
-            highlight = pinned and highlights.metadata or nil,
-        },
-        { text = marker .. " ", highlight = marker_highlight },
-        {
-            text = pad(opts.mark or "", opts.mark_width or 2) .. " ",
-            highlight = highlights.mark,
-            omit_priority = 2,
-        },
-        {
-            text = pad(name, opts.name_width or 0),
-            highlight = opts.name_highlight or highlights.name,
-            shrink_priority = 3,
-            min_width = 1,
-        },
-        { text = "  " },
-        {
-            text = cwd,
-            highlight = highlights.cwd,
-            truncate = "middle",
-            ellipsis = symbols.ellipsis,
-            shrink_priority = 1,
-            min_width = 1,
-            expendable = true,
-            -- An explicitly requested path width is useful to pure callers and
-            -- should not disappear merely because the rest is very narrow.
-            omit_priority = opts.path_width == nil and 3 or nil,
-        },
-    }
-    local right_aligned_index
-    if agent_status then
-        local is_agent_status = agent_status:match("^agents ") ~= nil
-        if is_agent_status then
-            right_aligned_index = #parts + 1
-        end
-        parts[#parts + 1] = {
-            text = "  " .. agent_status,
-            highlight = opts.status_highlight or highlights.metadata,
-            omit_priority = is_agent_status and 4 or 5,
-        }
-    end
-
-    local fit_width = width
-    if opts.path_width then
-        fit_width = nil
-    end
-    local fitted = layout.fit_parts(parts, fit_width)
-    if fit_width and right_aligned_index and fitted[right_aligned_index].text ~= "" then
-        local fitted_width = 0
-        for _, part in ipairs(fitted) do
-            fitted_width = fitted_width + layout.display_width(part.text)
-        end
-        local gap = fit_width - fitted_width
-        if gap > 0 then
-            table.insert(fitted, right_aligned_index, { text = string.rep(" ", gap) })
-        end
-    end
-    return fitted
+    return rows.format_session_parts(session, opts)
 end
 
 local function display_parts_text(parts)
@@ -331,9 +219,9 @@ local function highlighted_display(parts, fallback)
     end
 end
 
--- Keep session columns identical without implying expansion in the flat picker.
+-- Keep regular session columns aligned in the flat picker.
 function M.format_session_display(session, opts)
-    return display_parts_text(session_display_parts(session, opts))
+    return rows.format_session_display(session, opts)
 end
 
 local function mark_columns()
@@ -389,174 +277,24 @@ function M.build_active_entries(
     stale_by_id,
     search_options
 )
-    expanded_by_id = expanded_by_id or {}
-    marks_by_id = marks_by_id or {}
+    search_options = search_options or configured_search_options()
     local display = display_options(
         vim.tbl_deep_extend("force", configured_display_options(), display_opts or {})
     )
-    search_options = search_options or configured_search_options()
-    local previous = previous_id and { id = previous_id } or nil
-    sessions = search.sort_sessions(sessions, search_options.sort, function(session)
-        local session_agents = agents_by_id[session.id] or {}
-        return {
-            mark = marks_by_id[session.id],
-            current = current_id == session.id,
-            active = true,
-            previous = previous and previous.id == session.id,
-            agents = session_agents,
-        }
-    end)
-    local entries = {}
-    local session_name_width, name_width, status_width, mark_width = 0, 0, 0, 2
-    for _, mark in pairs(marks_by_id) do
-        mark_width = math.max(mark_width, vim.fn.strdisplaywidth(mark))
-    end
-    for _, session in ipairs(sessions or {}) do
-        session_name_width = math.max(
-            session_name_width,
-            vim.fn.strdisplaywidth(session.metadata.name)
-        )
-        for _, agent in ipairs(agents_by_id[session.id] or {}) do
-            name_width = math.max(name_width, vim.fn.strdisplaywidth(agent.name))
-            status_width = math.max(status_width, vim.fn.strdisplaywidth(agent.status or "unknown"))
-        end
-    end
-
-    for _, session in ipairs(sessions or {}) do
-        local expanded = expanded_by_id[session.id] == true
-        local agents = agents_by_id[session.id] or {}
-        local mark = marks_by_id[session.id] or ""
-        local current = current_id == session.id
-        local stale = stale_by_id and stale_by_id[session.id] == true
-        local loaded = agents_loaded_by_id == nil or agents_loaded_by_id[session.id] == true
-        local search_fields = search.fields_for_session(session, {
-            mark = mark,
-            current = current,
-            active = true,
-            previous = previous and previous.id == session.id,
-            agents = agents,
-        })
-        local group_ordinal = search.ordinal(search_fields)
-        local session_parts = session_display_parts(session, {
-            expandable = true,
-            expanded = expanded,
-            active = true,
+    return rows.build_active(
+        {
+            sessions = sessions,
+            agents_by_id = agents_by_id or {},
+            expanded = expanded_by_id or {},
             current_id = current_id,
+            focused_by_id = focused_by_id or {},
+            marks_by_id = marks_by_id or {},
             previous_id = previous_id,
-            mark = mark,
-            mark_width = mark_width,
-            name_width = session_name_width,
-            name_highlight = current and (display.highlights.current or display.highlights.name)
-                or display.highlights.active,
-            status_highlight = stale and display.highlights.stale or nil,
-            agent_status = agent_status_text(agents, loaded, stale),
-            display = display,
-        })
-        entries[#entries + 1] = {
-            kind = "session",
-            session_id = session.id,
-            current = current,
-            session = vim.deepcopy(session),
-            expanded = expanded,
-            display = display_parts_text(session_parts),
-            display_parts = session_parts,
-            search_fields = search_fields,
-            ordinal = group_ordinal,
-            active_group_fields = search_fields,
-            active_group_ordinal = group_ordinal,
-        }
-        if expanded then
-            if #agents == 0 then
-                local placeholder_parts = layout.fit_parts({
-                    {
-                        text = display.available_width and display.available_width < 40 and display.symbols.tree.empty
-                            or "  " .. display.symbols.tree.empty,
-                    },
-                    { text = "no agents", shrink_priority = 1, min_width = 1 },
-                }, display.available_width)
-                entries[#entries + 1] = {
-                    kind = "placeholder",
-                    session_id = session.id,
-                    session = vim.deepcopy(session),
-                    display = display_parts_text(placeholder_parts),
-                    display_parts = placeholder_parts,
-                    ordinal = table.concat(
-                        { session.metadata.name, session.metadata.cwd, "no agents" },
-                        " "
-                    ),
-                    active_group_fields = search_fields,
-                    active_group_ordinal = group_ordinal,
-                }
-            else
-                for index, agent in ipairs(agents) do
-                    local status = normalized_status(agent.status)
-                    local branch = index == #agents and display.symbols.tree.last_branch
-                        or display.symbols.tree.branch
-                    local focused = focused_by_id and focused_by_id[session.id] == agent.id
-                    local focus_marker = focused and display.symbols.focus or " "
-                    local status_symbol = display.symbols.status[status]
-                    local info = agent.info and agent.info ~= "" and "  " .. agent.info or ""
-                    local agent_highlight = display.highlights and display.highlights.agent
-                    local indent = display.available_width and display.available_width < 40 and "" or "  "
-                    local agent_parts = layout.fit_parts({
-                        {
-                            text = indent
-                                .. branch
-                                .. " "
-                                .. focus_marker
-                                .. " "
-                                .. status_symbol
-                                .. " ",
-                            highlight = focused and (display.highlights.focused or agent_highlight)
-                                or agent_highlight,
-                        },
-                        {
-                            text = pad(agent.name, name_width),
-                            highlight = agent_highlight,
-                            shrink_priority = 3,
-                            min_width = 1,
-                        },
-                        { text = "  " },
-                        {
-                            text = pad(status, status_width),
-                            highlight = display.highlights[status] or agent_highlight,
-                        },
-                        {
-                            text = info,
-                            highlight = agent_highlight,
-                            truncate = "end",
-                            ellipsis = display.symbols.ellipsis,
-                            shrink_priority = 1,
-                            min_width = 0,
-                            expendable = true,
-                            omit_priority = 4,
-                        },
-                    }, display.available_width)
-                    local agent_search_fields = search.fields_for_session(session, {
-                        mark = mark,
-                        current = current,
-                        active = true,
-                        previous = previous and previous.id == session.id,
-                        agents = { agent },
-                    })
-                    entries[#entries + 1] = {
-                        kind = "agent",
-                        session_id = session.id,
-                        current = current,
-                        agent_id = agent.id,
-                        agent = vim.deepcopy(agent),
-                        display = display_parts_text(agent_parts),
-                        display_parts = agent_parts,
-                        search_fields = agent_search_fields,
-                        ordinal = search.ordinal(agent_search_fields),
-                        active_group_fields = search_fields,
-                        active_group_ordinal = group_ordinal,
-                    }
-                end
-            end
-        end
-    end
-    return entries
+            agents_loaded_by_id = agents_loaded_by_id,
+            stale_by_id = stale_by_id,
+        },
+        vim.tbl_deep_extend("force", display, { sort = search_options.sort })
+    )
 end
 
 local function active_finder_from_snapshot(
@@ -641,6 +379,17 @@ function M.generate_active_finder_async(
     active_expand = active_expand or "current"
     local load_marks = not (previous_snapshot and previous_snapshot.marks_loaded)
     return api.active.snapshot_async(function(snapshot)
+        if previous_snapshot
+            and previous_snapshot.signature
+            and snapshot.signature == previous_snapshot.signature
+        then
+            local called, callback_err = pcall(callback, nil, nil, snapshot, true)
+            if not called and on_error then
+                on_error(callback_err)
+            end
+            return
+        end
+
         local ok, finder, rows, built_snapshot = pcall(
             active_finder_from_snapshot,
             snapshot,
@@ -656,7 +405,7 @@ function M.generate_active_finder_async(
             end
             return
         end
-        local called, callback_err = pcall(callback, finder, rows, built_snapshot)
+        local called, callback_err = pcall(callback, finder, rows, built_snapshot, false)
         if not called and on_error then
             on_error(callback_err)
         end
@@ -680,39 +429,25 @@ function M.generate_deleted_finder(display_opts, search_options)
     local display = display_options(
         vim.tbl_deep_extend("force", configured_display_options(), display_opts or {})
     )
+    local row_by_key = {}
+    local semantic_rows = rows.build(
+        { mode = "restore", deleted = entries },
+        vim.tbl_deep_extend("force", display, { sort = search_options.sort })
+    )
+    for _, row in ipairs(semantic_rows) do
+        row_by_key[row.key] = row
+    end
     return finders.new_table({
         results = entries,
         entry_maker = function(entry)
-            local deleted_at = os.date("%Y-%m-%d %H:%M", entry.deleted_at)
-            local search_fields = search.fields_for_session(entry)
-            local parts = layout.fit_parts({
-                {
-                    text = entry.metadata.name,
-                    shrink_priority = 3,
-                    min_width = 1,
-                },
-                { text = "  " },
-                {
-                    text = entry.metadata.cwd,
-                    truncate = "middle",
-                    ellipsis = display.symbols.ellipsis,
-                    shrink_priority = 1,
-                    min_width = 1,
-                    expendable = true,
-                },
-                { text = "  " .. deleted_at, omit_priority = 5 },
-            }, display.available_width)
-            local values = {}
-            for _, part in ipairs(parts) do
-                values[#values + 1] = part.text
-            end
-            local rendered = table.concat(values)
+            local row = row_by_key[rows.deleted_key(entry.id or entry.key)]
+            local search_fields = row and row.search_fields or search.fields_for_session(entry)
             return {
                 value = entry,
-                display = rendered,
-                display_parts = parts,
+                display = row and row.display or "",
+                display_parts = row and row.display_parts or {},
                 search_fields = search_fields,
-                ordinal = search.ordinal(search_fields) .. " " .. entry.id .. " " .. entry.key .. " " .. deleted_at,
+                ordinal = row and row.ordinal or search.ordinal(search_fields),
             }
         end,
     })
@@ -834,15 +569,27 @@ local function build_directory_finder(prompt, display_opts, agents_by_id, cached
         }
     end
     results = search.sort_results(results, search_options.sort)
+    local row_by_key = {}
+    local semantic_rows = rows.build(
+        { mode = "directory", directories = results },
+        vim.tbl_deep_extend("force", display, { sort = search_options.sort })
+    )
+    for _, row in ipairs(semantic_rows) do
+        row_by_key[row.key] = row
+    end
 
     return finders.new_table({
         results = results,
         entry_maker = function(entry)
+            local row = row_by_key[rows.directory_key(entry.path)]
             return {
                 value = entry,
-                display = highlighted_display(entry.display_parts, entry.display),
-                ordinal = entry.ordinal,
-                search_fields = entry.search_fields,
+                display = highlighted_display(
+                    row and row.display_parts or entry.display_parts,
+                    row and row.display or entry.display
+                ),
+                ordinal = row and row.ordinal or entry.ordinal,
+                search_fields = row and row.search_fields or entry.search_fields,
             }
         end,
     })
@@ -907,6 +654,7 @@ local function build_new_finder(
     local display = display_options(
         vim.tbl_deep_extend("force", configured_display_options(), display_opts or {})
     )
+    local now = os.time()
     search_options = search_options or configured_search_options()
     agents_by_id = agents_by_id or {}
     for _, entry in ipairs(results) do
@@ -932,6 +680,32 @@ local function build_new_finder(
     end
 
     results = search.sort_results(results, search_options.sort)
+
+    -- Build semantic session rows once. The adapter below only turns those
+    -- rows into Telescope entries; it does not reconstruct their hierarchy or
+    -- display data.
+    local row_by_id = {}
+    local semantic_sessions = {}
+    for _, entry in ipairs(results) do
+        if entry.metadata ~= nil then
+            semantic_sessions[#semantic_sessions + 1] = entry
+        end
+    end
+    local semantic_rows = rows.build(
+        {
+            sessions = semantic_sessions,
+            marks_by_id = mark_by_id,
+            active_by_id = active_by_id,
+            agents_by_id = agents_by_id,
+            current_id = current and current.id,
+            previous_id = previous and previous.id,
+            exclude_current = true,
+        },
+        vim.tbl_deep_extend("force", display, { sort = search_options.sort, now = now })
+    )
+    for _, row in ipairs(semantic_rows) do
+        row_by_id[row.session_id] = row
+    end
 
     return finders.new_table({
         results = results,
@@ -974,34 +748,39 @@ local function build_new_finder(
                 return nil
             end
 
-            local display_parts = session_display_parts(session, {
-                active = active_by_id[session.id] == true,
-                current_id = current and current.id,
-                previous_id = previous and previous.id,
-                mark = mark_by_id[session.id],
-                mark_width = mark_width,
-                name_width = name_width,
-                agent_status = session.id
-                        and agent_status_text(
-                            agents_by_id[session.id] or {},
-                            agents_by_id[session.id] ~= nil,
-                            false
-                        )
-                    or nil,
-                display = display,
-            })
+            local row = is_session and row_by_id[session.id] or nil
+            local display_parts = row and row.display_parts
+                or session_display_parts(session, {
+                    active = active_by_id[session.id] == true,
+                    current_id = current and current.id,
+                    previous_id = previous and previous.id,
+                    mark = mark_by_id[session.id],
+                    mark_width = mark_width,
+                    name_width = name_width,
+                    session_metadata = session.id
+                            and display.mode ~= "compact"
+                            and display.show_metadata ~= false
+                            and M.format_session_metadata(
+                                session.metadata,
+                                now,
+                                display.symbols.separator
+                            )
+                        or nil,
+                    display = display,
+                })
 
             ---@type Sess.TelescopeFinderReturn
-            local search_fields = search.fields_for_session(session, {
-                mark = mark_by_id[session.id],
-                current = current and session.id == current.id,
-                active = active_by_id[session.id] == true,
-                previous = previous and session.id == previous.id,
-                agents = agents_by_id[session.id],
-            })
+            local search_fields = row and row.search_fields
+                or search.fields_for_session(session, {
+                    mark = mark_by_id[session.id],
+                    current = current and session.id == current.id,
+                    active = active_by_id[session.id] == true,
+                    previous = previous and session.id == previous.id,
+                    agents = agents_by_id[session.id],
+                })
             return {
                 value = session,
-                display = display_parts_text(display_parts),
+                display = highlighted_display(display_parts, display_parts_text(display_parts)),
                 display_parts = display_parts,
                 search_fields = search_fields,
                 ordinal = search.ordinal(search_fields),

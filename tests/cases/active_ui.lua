@@ -124,8 +124,13 @@ local all_headers = session_headers(all_finder.results)
 assert(all_headers[first.id].expanded)
 assert(all_headers[second.id].expanded)
 assert(all_headers[first.id].display:find("@s", 1, true))
-assert(all_headers[first.id].display:find("▾", 1, true))
+assert(all_headers[first.id].display:find("▾ ◆ ", 1, true) == 1)
+assert(not all_headers[first.id].display:find("★", 1, true))
 assert(not all_headers[first.id].display:find("expanded", 1, true))
+assert(
+    finders.format_session_metadata({ last_used_at = 7200, created_at = 0 }, 10800)
+        == "last used 1h ago · age unknown"
+)
 assert(all_finder.results[2].kind == "placeholder")
 
 local current_finder = finders.generate_active_finder({}, "current")
@@ -150,7 +155,7 @@ local active_rows = finders.build_active_entries(
     {
         {
             id = "fake",
-            metadata = { name = "project", cwd = "/tmp/project" },
+            metadata = { name = "project", cwd = "/tmp/project", pinned = true },
         },
     },
     {
@@ -165,7 +170,8 @@ local active_rows = finders.build_active_entries(
     { fake = "pi" }
 )
 assert(active_rows[1].display:find("/tmp/project", 1, true))
-assert(active_rows[1].display:find("agents 2 working 1 idle", 1, true))
+assert(active_rows[1].display:find("agents: 2 working · 1 idle", 1, true))
+assert(not active_rows[1].display:find("★", 1, true))
 assert(active_rows[2].display:find("─", 1, true))
 assert(active_rows[2].display:find("working", 1, true))
 assert(active_rows[2].display:find("implementing auth", 1, true))
@@ -184,7 +190,9 @@ for _, raw in ipairs(session_finder.results) do
 end
 assert(session_entry)
 assert(session_entry.display:find("@s", 1, true))
-assert(session_entry.display:find("agents loading", 1, true))
+assert(session_entry.display:find("last used", 1, true))
+assert(session_entry.display:find("age", 1, true))
+assert(not session_entry.display:find("agents", 1, true))
 local previous_icon = session_entry.display:find("◆", 1, true)
 local session_name = session_entry.display:find("@s", 1, true)
 assert(previous_icon and previous_icon < session_name)
@@ -226,7 +234,7 @@ assert(status_text == "? - help")
 for _, row in ipairs(active_picker_options.finder.results) do
     assert(row.kind ~= "agent", "active picker should hydrate agents asynchronously")
     if row.kind == "session" then
-        assert(row.display:find("agents loading", 1, true))
+        assert(row.display:find("agents: loading", 1, true))
     end
 end
 
@@ -246,7 +254,7 @@ independent_active_options.attach_mappings(1, function(mode, key, action)
 end)
 assert(mapped.i["<C-x>"] == active_actions.refresh_active)
 assert(mapped.n["<C-x>"] == active_actions.refresh_active)
-assert(mapped.i["<C-r>"] == nil)
+assert(mapped.i["<C-r>"] == active_actions.rename_session)
 assert(mapped.i["<C-j>"] == nil)
 assert(mapped.i["<C-k>"] == nil)
 local independent_status = independent_active_options.get_status_text()
@@ -285,13 +293,13 @@ assert(not pcall(pickers.active, {
 local overridden_refresh = function() end
 local overridden_mappings = active_mapping_options({
     active = { refresh_key = "<C-x>" },
-    active_mappings = { i = { ["<C-x>"] = false }, n = { ["<C-x>"] = overridden_refresh } },
+    mappings = { i = { ["<C-x>"] = false }, n = { ["<C-x>"] = overridden_refresh } },
 })
 assert(overridden_mappings.i["<C-x>"] == nil, "false must disable generated refresh")
 assert(overridden_mappings.n["<C-x>"] == overridden_refresh, "configured refresh key wins")
 local explicit_refresh_mappings = active_mapping_options({
     active = { refresh_key = "<C-x>" },
-    active_mappings = {
+    mappings = {
         i = { ["<C-r>"] = active_actions.refresh_active },
         n = { ["<C-r>"] = active_actions.refresh_active },
     },
@@ -303,7 +311,7 @@ assert(
 assert(explicit_refresh_mappings.i["<C-x>"] == active_actions.refresh_active)
 local explicit_refresh_disabled = active_mapping_options({
     active = { refresh_key = false },
-    active_mappings = {
+    mappings = {
         i = { ["<C-r>"] = active_actions.refresh_active },
         n = { ["<C-r>"] = active_actions.refresh_active },
     },
@@ -313,7 +321,7 @@ assert(
     "explicit refresh mapping must be preserved when refresh generation is disabled"
 )
 local disabled_mappings = active_mapping_options({ active = { refresh_key = false } })
-assert(disabled_mappings.i["<C-r>"] == nil)
+assert(disabled_mappings.i["<C-r>"] == active_actions.rename_session)
 assert(disabled_mappings.n["<C-r>"] == nil)
 assert(disabled_mappings.i["<C-j>"] == active_actions.next_active_header)
 assert(disabled_mappings.n["<C-k>"] == active_actions.previous_active_header)
@@ -322,6 +330,27 @@ local header_disabled_mappings = active_mapping_options({
 })
 assert(header_disabled_mappings.i["<C-j>"] == active_actions.refresh_active)
 assert(header_disabled_mappings.n["<C-j>"] == active_actions.refresh_active)
+
+local inherited_action = function() end
+local inherited_delete = function() end
+local inherited_mappings = active_mapping_options({
+    active = { header_navigation = false, refresh_key = false },
+    mappings = {
+        i = {
+            ["<C-y>"] = inherited_action,
+            ["<C-d>"] = inherited_delete,
+            ["<S-Tab>"] = inherited_delete,
+            ["<C-o>"] = inherited_action,
+        },
+        n = {},
+    },
+})
+assert(inherited_mappings.i["<C-y>"] == inherited_action)
+assert(inherited_mappings.i["<C-d>"] == inherited_delete)
+assert(inherited_mappings.i["<Tab>"] == active_actions.toggle_active)
+assert(inherited_mappings.i["<CR>"] == active_actions.active_enter)
+assert(inherited_mappings.i["<S-Tab>"] == active_actions.toggle_all_active)
+assert(inherited_mappings.i["<C-o>"] == inherited_action)
 
 local dashboard = finders.active_dashboard_summary({
     sessions = { { id = "one" }, { id = "two" } },
@@ -351,7 +380,7 @@ local stale_rows = finders.build_active_entries(
     { stale = true },
     { stale = true }
 )
-assert(stale_rows[1].display:find("agents stale", 1, true))
+assert(stale_rows[1].display:find("agents: stale", 1, true))
 
 local refresh_count = 0
 local active_picker = {
@@ -369,8 +398,7 @@ selected = { value = { kind = "session", session_id = first.id } }
 local actions = require("telescope._extensions.sess.actions")
 assert(config.values.mappings.i["<C-b>"] == actions.mark_session)
 assert(config.values.mappings.n["<C-b>"] == actions.mark_session)
-assert(config.values.active_mappings.i["<C-b>"] == actions.mark_session)
-assert(config.values.active_mappings.n["<C-b>"] == actions.mark_session)
+assert(config.values.active_mappings == nil)
 local original_snapshot = require("sess.api").active.snapshot
 local original_generate_active = finders.generate_active_finder_from_snapshot
 local observed_sort

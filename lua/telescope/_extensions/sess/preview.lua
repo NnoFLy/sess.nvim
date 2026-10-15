@@ -268,6 +268,29 @@ local function add_snapshot_status(context, value)
     if not value or not value.id or is_deleted(value) then
         return
     end
+
+    -- Active rows already come from a validated runtime snapshot. Avoid
+    -- resolving the ID through the persistent catalog for every preview.
+    if context.active then
+        local called, status, snapshot_err = pcall(function()
+            local storage = require("sess.storage")
+            local valid, valid_err = storage.validate_id(value.id)
+            if not valid then
+                return "unavailable", valid_err
+            end
+            return storage.inspect_snapshot(value.id)
+        end)
+        if called then
+            context.snapshot_status = status or "unavailable"
+            context.snapshot_available = status == "available"
+            context.snapshot_error = snapshot_err
+        else
+            context.snapshot_error = tostring(status)
+            add_warning(context, status)
+        end
+        return
+    end
+
     local called, listed, err, result, diagnostics = pcall(function()
         local api = require("sess.api")
         return api.session.preview(value.id)
@@ -348,13 +371,8 @@ local function selected_context(picker, value, options, raw_value)
         result.focused_agent_id = focused_by_id[value.id]
         result.current = snapshot.current_id == value.id
         result.active = result.current
-        local snapshot_sessions = type(snapshot.sessions) == "table" and snapshot.sessions or {}
-        for _, session in ipairs(snapshot_sessions) do
-            if type(session) == "table" and session.id == value.id then
-                result.active = true
-                break
-            end
-        end
+        local active_by_id = type(snapshot.active_by_id) == "table" and snapshot.active_by_id or {}
+        result.active = result.current or active_by_id[value.id] == true
         result.active_loading = picker._sess_active_loading == true
         local stale_by_id = type(snapshot.stale_by_id) == "table" and snapshot.stale_by_id or {}
         result.active_stale = stale_by_id[value.id] == true and not result.active_loading

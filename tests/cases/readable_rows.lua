@@ -96,11 +96,11 @@ local rows = finders.build_active_entries(
     { available_width = 200 }
 )
 assert(rows[1].display:find("@a", 1, true))
-local agent_status_start = assert(rows[1].display:find("  agents 1 working", 1, true))
+local agent_status_start = assert(rows[1].display:find("  agents: 1 working", 1, true))
 assert(vim.fn.strdisplaywidth(rows[1].display) == 200)
 assert(
     vim.fn.strdisplaywidth(rows[1].display:sub(agent_status_start))
-        == vim.fn.strdisplaywidth("  agents 1 working")
+        == vim.fn.strdisplaywidth("  agents: 1 working")
 )
 assert(rows[2].display:find("  └─", 1, true))
 assert(rows[2].display:find("代理", 1, true))

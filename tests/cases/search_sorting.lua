@@ -336,7 +336,26 @@ local cancel = finders.generate_new_finder_async({}, function(finder)
 end)
 assert(cancel)
 local regular_finder = hydrated_finder
+local previous_entry_display = package.loaded["telescope.pickers.entry_display"]
+package.loaded["telescope.pickers.entry_display"] = {
+    create = function()
+        return function(values)
+            return values
+        end
+    end,
+}
 local regular_entry = regular_finder.entry_maker(regular_finder.results[1])
+assert(type(regular_entry.display) == "function")
+local rendered_parts = regular_entry.display()
+local name_highlight
+for _, part in ipairs(rendered_parts) do
+    if part[1]:find("frontend", 1, true) then
+        name_highlight = part[2]
+        break
+    end
+end
+assert(name_highlight == "TelescopeResultsNormal")
+package.loaded["telescope.pickers.entry_display"] = previous_entry_display
 assert(regular_entry.search_fields.agent:find("pi", 1, true))
 assert(regular_entry.search_fields.status:find("working", 1, true))
 assert(regular_entry.ordinal:find("pi", 1, true))

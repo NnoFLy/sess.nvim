@@ -275,7 +275,7 @@ function M.start(picker, generate, initial_rows, poll_interval)
 
     local refresh
 
-    local function finish(generation, finder, next_rows, snapshot)
+    local function finish(generation, finder, next_rows, snapshot, unchanged)
         if stopped or not refreshing then
             return
         end
@@ -298,6 +298,22 @@ function M.start(picker, generate, initial_rows, poll_interval)
             and snapshot_at_refresh
             and picker._sess_active_snapshot ~= snapshot_at_refresh
         then
+            rollback_state = nil
+            picker._sess_active_refresh_warning = nil
+            if pending_resize and not stopped then
+                pending_resize = false
+                refresh()
+            end
+            return
+        end
+
+        if unchanged then
+            -- The probe completed successfully but produced the same visible
+            -- state. Commit the fresh snapshot for preview consumers without
+            -- rebuilding Telescope's manager or invalidating its preview.
+            if snapshot then
+                picker._sess_active_snapshot = snapshot
+            end
             rollback_state = nil
             picker._sess_active_refresh_warning = nil
             if pending_resize and not stopped then
@@ -367,8 +383,8 @@ function M.start(picker, generate, initial_rows, poll_interval)
         local generation = picker._sess_active_refresh_generation
         snapshot_at_refresh = picker._sess_active_snapshot
         rollback_state = capture_state(picker)
-        local function complete(finder, next_rows, snapshot)
-            local completed, err = pcall(finish, generation, finder, next_rows, snapshot)
+        local function complete(finder, next_rows, snapshot, unchanged)
+            local completed, err = pcall(finish, generation, finder, next_rows, snapshot, unchanged)
             if not completed then
                 fail(err)
             end

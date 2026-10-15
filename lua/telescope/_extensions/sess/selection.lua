@@ -10,8 +10,9 @@ function M.key(value)
         return nil
     end
     local id = value.id or value.session_id
-    if id then
+    if value.key ~= nil or id then
         return {
+            key = value.key,
             id = id,
             kind = value.kind,
             agent_id = value.agent_id,
@@ -24,9 +25,13 @@ function M.key(value)
 end
 
 local function same_key(left, right)
-    return left
-        and right
-        and left.id == right.id
+    if not left or not right then
+        return false
+    end
+    if left.key ~= nil or right.key ~= nil then
+        return left.key == right.key
+    end
+    return left.id == right.id
         and left.kind == right.kind
         and left.agent_id == right.agent_id
         and left.directory == right.directory
