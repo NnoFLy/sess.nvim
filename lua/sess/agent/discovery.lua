@@ -40,6 +40,7 @@ local MAX_OBSERVATION_DIAGNOSTICS = 64
 local MAX_OBSERVATION_EVIDENCE = 32
 local MAX_OBSERVATION_EVIDENCE_LENGTH = 240
 local MAX_OBSERVATION_FIELD_LENGTH = 240
+local MAX_IDENTITY_LENGTH = 4096
 
 local function diagnostic(value)
     value = tostring(value or "unknown probe failure")
@@ -160,6 +161,8 @@ local function validate_observation(value)
             return false, "status observation contains an invalid field: " .. tostring(key)
         end
     end
+    local valid_sources = { screen = true, fallback = true, unknown = true }
+    local valid_authorities = { lifecycle = true, derived = true, retained = true, manual = true, none = true }
     for _, field in ipairs({ "source", "authority", "rule_id", "rule_region", "manifest_id" }) do
         if value[field] ~= nil then
             if type(value[field]) ~= "string" then
@@ -167,6 +170,12 @@ local function validate_observation(value)
             end
             if #value[field] == 0 or #value[field] > MAX_OBSERVATION_FIELD_LENGTH then
                 return false, "status observation " .. field .. " is invalid or too long"
+            end
+            if field == "source" and not valid_sources[value[field]] then
+                return false, "status observation source is unsupported"
+            end
+            if field == "authority" and not valid_authorities[value[field]] then
+                return false, "status observation authority is unsupported"
             end
         end
     end
@@ -281,7 +290,11 @@ local function fresh_integration(value, now)
     local result = copy_observation(value) or {}
     result.state = state_value
     result.source = "integration"
-    result.authority = value.manual == true and "manual" or "lifecycle"
+    -- Explicit legacy statuses remain supported, but only reports carrying
+    -- source/sequence metadata are lifecycle-owned integration observations.
+    local sequenced = type(value.source) == "string" and type(value.seq) == "number"
+    result.authority = "lifecycle"
+    if value.manual == true or not sequenced then result.authority = "manual" end
     result.stale = false
     result.diagnostics = result.diagnostics or {}
     return result, true
@@ -296,7 +309,7 @@ function M.new(probes)
     local status_cache = {}
     local previous_observation = {}
 
-    local function discover(bufnr, use_cache)
+    local function discover(bufnr, use_cache, target_validated)
         local identity_diagnostics = {}
         local identity_probe_failed = false
         local job_ok, job_id = call(terminal, "job_id", bufnr)
@@ -311,6 +324,41 @@ function M.new(probes)
             terminal_name = nil
             identity_probe_failed = true
             add_diagnostic(identity_diagnostics, "terminal name probe failed")
+        end
+
+        if job_ok and job_id ~= nil
+            and (type(job_id) ~= "number" or job_id % 1 ~= 0 or job_id < 1)
+        then
+            job_ok = false
+            identity_probe_failed = true
+            add_diagnostic(identity_diagnostics, "terminal job probe returned an invalid job id")
+            job_id = nil
+        end
+        if name_ok and terminal_name ~= nil
+            and (type(terminal_name) ~= "string" or #terminal_name == 0 or #terminal_name > MAX_IDENTITY_LENGTH)
+        then
+            name_ok = false
+            identity_probe_failed = true
+            add_diagnostic(identity_diagnostics, "terminal name probe returned an invalid command identity")
+            terminal_name = nil
+        end
+
+        -- Target validity must be checked before identity/status cache reuse.
+        -- Otherwise an exited job can expose a cached observation until the
+        -- identity TTL expires.
+        if not target_validated and type(terminal.job_alive) == "function" then
+            local alive_ok, alive = pcall(terminal.job_alive, bufnr)
+            if not alive_ok or alive ~= true then
+                identity_cache[bufnr] = nil
+                status_cache[bufnr] = nil
+                previous_observation[bufnr] = nil
+                return nil, {
+                    job_id = job_id,
+                    terminal_name = terminal_name,
+                    unavailable = true,
+                    diagnostics = { "terminal job is no longer running" },
+                }, false
+            end
         end
 
         local cached = identity_cache[bufnr]
@@ -330,20 +378,6 @@ function M.new(probes)
             or (name_ok and cached.terminal_name ~= terminal_name)) then
             status_cache[bufnr] = nil
             previous_observation[bufnr] = nil
-        end
-
-        if type(terminal.job_alive) == "function" then
-            local alive_ok, alive = pcall(terminal.job_alive, bufnr)
-            if not alive_ok or alive ~= true then
-                identity_cache[bufnr] = nil
-                status_cache[bufnr] = nil
-                previous_observation[bufnr] = nil
-                return nil, {
-                    job_id = job_id,
-                    terminal_name = terminal_name,
-                    diagnostics = { "terminal job is no longer running" },
-                }, false
-            end
         end
 
         local agent
@@ -367,6 +401,11 @@ function M.new(probes)
                 identity_probe_failed = true
                 add_diagnostic(identity_diagnostics, "terminal command identity probe failed: " .. diagnostic(command_agent))
             end
+        end
+        if agent ~= nil and (type(agent) ~= "string" or agent == "" or #agent > MAX_OBSERVATION_FIELD_LENGTH) then
+            add_diagnostic(identity_diagnostics, "agent identity probe returned an invalid name")
+            agent = nil
+            identity_probe_failed = true
         end
 
         -- A transient identity failure must not make a known live terminal
@@ -494,6 +533,9 @@ function M.new(probes)
         local observation_failed = #probe_diagnostics > 0 or (result and result.probe_failed == true) or false
         local diagnostics = {}
         for _, message in ipairs(probe_diagnostics or {}) do diagnostics[#diagnostics + 1] = message end
+        if result and result.source == "unknown" and #(result.diagnostics or {}) > 0 then
+            observation_failed = true
+        end
         if result then
             for _, message in ipairs(result.diagnostics or {}) do diagnostics[#diagnostics + 1] = message end
         end
@@ -572,7 +614,14 @@ function M.new(probes)
         local unknown = result or { state = "unknown", source = "unknown" }
         unknown.state = type(unknown.state) == "string" and unknown.state or "unknown"
         unknown.source = unknown.source or "unknown"
-        unknown.authority = "none"
+        -- A conservative manifest fallback is still a derived observation,
+        -- even when its explicitly configured default state is `unknown`.
+        -- Only an observation with no source has no authority.
+        if unknown.source == "unknown" then
+            unknown.authority = "none"
+        elseif not unknown.authority then
+            unknown.authority = "derived"
+        end
         unknown.probe_failed = observation_failed
         unknown.diagnostics = diagnostics
         if #unknown.diagnostics == 0 then unknown.diagnostics[1] = "status observation unavailable" end
@@ -669,7 +718,11 @@ function M.new(probes)
         if not valid_terminal(bufnr) then
             return nil, { "terminal target is unavailable or its job is no longer running" }
         end
-        local agent, identity, identity_cached = discover(bufnr, true)
+        local agent, identity, identity_cached = discover(
+            bufnr,
+            true,
+            options.target_validated == true
+        )
         if not agent then
             local diagnostics = vim.deepcopy(identity and identity.diagnostics or {})
             if #diagnostics == 0 then diagnostics[1] = "agent identity unavailable" end
@@ -682,6 +735,24 @@ function M.new(probes)
             identity.identity = identity.identity or { source = "registered", command = name }
             identity.probe_failed = true
             identity.diagnostics = diagnostics
+        end
+
+        if identity and identity.unavailable then
+            local unavailable = {
+                state = "unknown",
+                source = "unknown",
+                authority = "none",
+                probe_failed = false,
+                diagnostics = vim.deepcopy(identity.diagnostics or {}),
+            }
+            return {
+                agent = name,
+                observation = unavailable,
+                identity = { source = "unknown", command = name },
+                screen = { changedtick = nil, line_count = 0, complete = false },
+                cache = { identity = false, status = false },
+                diagnostics = vim.deepcopy(unavailable.diagnostics),
+            }
         end
 
         local observation, screen_summary, status_cached = classify(bufnr, name, identity, true, options)
@@ -709,7 +780,11 @@ function M.new(probes)
             local result = {}
             for _, bufnr in ipairs(session_buffers(session_id)) do
                 if valid_terminal(bufnr) then
-                    local agent, identity = discover(bufnr, options.cache == true)
+                    local agent, identity = discover(
+                        bufnr,
+                        options.cache == true,
+                        options.target_validated == true
+                    )
                     if agent then result[#result + 1] = row(bufnr, agent, identity, options) end
                 else
                     identity_cache[bufnr] = nil
@@ -722,7 +797,8 @@ function M.new(probes)
         status = function(_, bufnr, name, options)
             if not valid_terminal(bufnr) then return nil end
             options = options or {}
-            local _, identity = discover(bufnr, options.cache == true)
+            local _, identity = discover(bufnr, options.cache == true, false)
+            if identity and identity.unavailable then return "unknown" end
             local observation = classify(bufnr, name, identity, options.cache == true, options)
             return observation.state
         end,

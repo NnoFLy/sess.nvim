@@ -12,6 +12,7 @@ local MAX_PATTERN_LENGTH = 256
 local MAX_MATCHER_ITEMS = 64
 local MAX_RULES = 128
 local MAX_STATUS_LENGTH = 240
+local MAX_DIAGNOSTICS = 64
 
 local regions = {
     current_prompt = true,
@@ -77,6 +78,12 @@ local function clean(value)
 end
 
 local function diagnostic(diagnostics, message)
+    if #diagnostics >= MAX_DIAGNOSTICS then
+        if diagnostics[MAX_DIAGNOSTICS] ~= "diagnostics truncated" then
+            diagnostics[MAX_DIAGNOSTICS] = "diagnostics truncated"
+        end
+        return
+    end
     diagnostics[#diagnostics + 1] = truncate(message, MAX_EVIDENCE_LENGTH)
 end
 
@@ -377,8 +384,19 @@ end
 
 local function valid_rules(manifest, diagnostics)
     local result = {}
+    local indices = {}
+    for index in pairs(manifest.rules) do
+        if type(index) ~= "number" or index % 1 ~= 0 or index < 1 then
+            diagnostic(diagnostics, "manifest rule index is invalid; rule skipped")
+        else
+            indices[#indices + 1] = index
+        end
+    end
+    table.sort(indices)
+
     local rule_count = 0
-    for index, rule in ipairs(manifest.rules) do
+    for _, index in ipairs(indices) do
+        local rule = manifest.rules[index]
         rule_count = rule_count + 1
         if rule_count > MAX_RULES then
             diagnostic(diagnostics, "manifest has too many rules; remaining rules skipped")
@@ -416,8 +434,12 @@ local function valid_rules(manifest, diagnostics)
                 valid, err = false, "id must be a bounded non-empty string"
             elseif type(rule.state) ~= "string" or rule.state == "" or #rule.state > MAX_STATUS_LENGTH then
                 valid, err = false, "state must be a bounded non-empty string"
-            elseif type(rule.priority) ~= "number" then
-                valid, err = false, "priority must be a number"
+            elseif type(rule.priority) ~= "number"
+                or rule.priority ~= rule.priority
+                or rule.priority == math.huge
+                or rule.priority == -math.huge
+            then
+                valid, err = false, "priority must be a finite number"
             elseif type(rule.region) ~= "string" or not regions[rule.region] then
                 valid, err = false, "region is unsupported"
             elseif rule.skip_state_update ~= nil and type(rule.skip_state_update) ~= "boolean" then
@@ -548,6 +570,7 @@ function M.observe(input)
         end
     end
 
+    diagnostic(diagnostics, "no screen rule matched; manifest default selected")
     local result = result_base(manifest.default, "fallback", manifest_id, manifest, diagnostics)
     return result
 end

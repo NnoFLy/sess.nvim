@@ -140,6 +140,22 @@ function M.get_agent_reports(session_id, agent_id)
     return vim.deepcopy(reports)
 end
 
+-- Reports belong to a terminal job incarnation. Drop reports from replaced
+-- jobs before scanning or accepting new sources so runtime-only state remains
+-- bounded across repeated terminal reuse.
+function M.prune_agent_reports(session_id, agent_id, job_id)
+    if job_id == nil then return end
+    local by_agent = state.agent_reports_by_session[session_id]
+    local reports = by_agent and by_agent[agent_id]
+    if not reports then return end
+    for source, report in pairs(reports) do
+        if type(report) ~= "table" or report.job_id ~= job_id then reports[source] = nil end
+    end
+    if next(reports) ~= nil then return end
+    by_agent[agent_id] = nil
+    if next(by_agent) == nil then state.agent_reports_by_session[session_id] = nil end
+end
+
 function M.set_agent_report(session_id, agent_id, source, report)
     state.agent_reports_by_session[session_id] = state.agent_reports_by_session[session_id] or {}
     local reports = state.agent_reports_by_session[session_id]

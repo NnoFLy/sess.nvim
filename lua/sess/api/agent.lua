@@ -73,13 +73,55 @@ local function valid_report_seq(value)
     return true
 end
 
+local function utf8_width(byte)
+    if byte and byte >= 194 and byte <= 223 then return 2 end
+    if byte and byte >= 224 and byte <= 239 then return 3 end
+    if byte and byte >= 240 and byte <= 244 then return 4 end
+end
+
+local function utf8_continuation(value, index)
+    local byte = value:byte(index)
+    if not byte or byte < 128 or byte > 191 then return false end
+    local lead = index - 1
+    while lead > 0 do
+        local previous = value:byte(lead)
+        if previous < 128 or previous > 191 then break end
+        lead = lead - 1
+    end
+    local width = utf8_width(value:byte(lead))
+    return width ~= nil and index - lead > 0 and index - lead < width
+end
+
+local function strip_report_controls(value)
+    local result = {}
+    for index = 1, #value do
+        local byte = value:byte(index)
+        local c1 = byte >= 128 and byte <= 159 and not utf8_continuation(value, index)
+        if byte >= 32 and byte ~= 127 and not c1 then result[#result + 1] = string.char(byte) end
+    end
+    return table.concat(result)
+end
+
+local function truncate_text(value, limit)
+    if #value <= limit then return value end
+    local last = limit
+    while last > 0 and value:byte(last) >= 128 and value:byte(last) <= 191 do last = last - 1 end
+    local lead = last
+    while lead > 1 and value:byte(lead - 1) >= 128 and value:byte(lead - 1) <= 191 do
+        lead = lead - 1
+    end
+    local width = utf8_width(value:byte(lead))
+    if width and last - lead + 1 < width then return value:sub(1, lead - 1) end
+    return value:sub(1, last)
+end
+
 local function sanitize_report_text(value)
     if value == nil then return nil end
     value = value:gsub("\r", "")
     value = value:gsub("\27%][^\7]*\7", "")
     value = value:gsub("\27%][^\27]*\27\\", "")
     value = value:gsub("\27%[[0-?]*[ -/]*[@-~]", "")
-    return value:sub(1, MAX_REPORT_INFO_LENGTH)
+    return truncate_text(strip_report_controls(value), MAX_REPORT_INFO_LENGTH)
 end
 
 local report_clock = now_ms
@@ -95,8 +137,11 @@ function M._set_report_clock(clock)
 end
 
 local function append_diagnostic(result, value)
-    if #result >= MAX_API_DIAGNOSTICS then return end
-    local message = tostring(value or "unknown diagnostic"):sub(1, MAX_REPORT_INFO_LENGTH)
+    if #result >= MAX_API_DIAGNOSTICS then
+        result[MAX_API_DIAGNOSTICS] = "diagnostics truncated"
+        return
+    end
+    local message = truncate_text(strip_report_controls(tostring(value or "unknown diagnostic")), MAX_REPORT_INFO_LENGTH)
     if message ~= "" then result[#result + 1] = message end
 end
 
@@ -110,8 +155,9 @@ local function target_incarnation(agent)
 end
 
 local function integration_details(session_id, agent_id, agent)
-    local reports = state.get_agent_reports(session_id, agent_id)
     local incarnation = target_incarnation(agent)
+    state.prune_agent_reports(session_id, agent_id, incarnation)
+    local reports = state.get_agent_reports(session_id, agent_id)
     local now = report_now()
     local selected
     local latest
@@ -159,10 +205,10 @@ end
 
 -- Keep the source table itself bounded even if a caller injects state through
 -- a test double or an older runtime.
-local function report_source_count(reports)
+local function report_source_count(reports, incarnation)
     local count = 0
     for _, report in pairs(reports or {}) do
-        if type(report) == "table" then count = count + 1 end
+        if type(report) == "table" and report.job_id == incarnation then count = count + 1 end
     end
     return count
 end
@@ -340,7 +386,12 @@ local function all_agents(session_id, use_cache)
         end
     end
 
-    local probe_options = { cache = use_cache == true }
+    local probe_options = {
+        cache = use_cache == true,
+        -- Active snapshots already validate terminal liveness above and use
+        -- the API's short liveness cache. Avoid probing each terminal twice.
+        target_validated = use_cache == true,
+    }
     local discovery_diagnostic
     local discovered_ok, discovered_agents = pcall(detector.list, session_id, probe_options)
     if not discovered_ok then
@@ -373,7 +424,8 @@ local function all_agents(session_id, use_cache)
         -- snapshots may use the short cache only for plain screen discovery;
         -- explicit/manual or sequenced authorities are checked immediately.
         local liveness_cache = use_cache == true and not manual_status and not has_reports
-        local terminal_job_unavailable = terminal_target and not terminal_job_alive(bufnr, liveness_cache)
+        local terminal_alive = terminal_target and terminal_job_alive(bufnr, liveness_cache)
+        local terminal_job_unavailable = terminal_target and not terminal_alive
         local selected_report, _, integration_diagnostics = integration_details(session_id, agent.id, agent)
         local diagnostics = vim.deepcopy(integration_diagnostics)
         if discovery_diagnostic then append_diagnostic(diagnostics, discovery_diagnostic) end
@@ -405,7 +457,7 @@ local function all_agents(session_id, use_cache)
             -- Screen probing is terminal-only. New reports are passed to the
             -- detector so a high-confidence current blocker can override a
             -- non-blocking lifecycle state.
-            if valid_terminal_target(agent.target and agent.target.bufnr, liveness_cache) then
+            if terminal_target and terminal_alive then
                 local status, probe_messages, probe_failed, observation = fallback_status(
                     agent.target.bufnr,
                     agent.name,
@@ -454,7 +506,7 @@ local function snapshot_for_id(session_id, use_cache)
     local diagnostics = {}
     for _, agent in ipairs(result) do
         for _, message in ipairs(agent.diagnostics or {}) do
-            diagnostics[#diagnostics + 1] = message
+            append_diagnostic(diagnostics, message)
         end
     end
     return vim.deepcopy(result), focused, diagnostics
@@ -524,7 +576,9 @@ local function validate_report(report, release)
     local ok, err = valid_report_text(report.source, "source", MAX_REPORT_SOURCE_LENGTH)
     if not ok then return false, err end
     if #vim.trim(report.source) ~= #report.source then return false, "source must not have surrounding whitespace" end
-    if report.source:find("[%z\1-\31\127]") then return false, "source contains control characters" end
+    if strip_report_controls(report.source) ~= report.source then
+        return false, "source contains control characters"
+    end
     ok, err = valid_report_seq(report.seq)
     if not ok then return false, err end
     if not release then
@@ -581,7 +635,7 @@ function M.report(target, agent_id, report)
             nil,
             vim.list_extend(diagnostics or {}, { "integration report rejected as stale" })
     end
-    if not previous and report_source_count(reports) >= MAX_REPORT_SOURCES
+    if not previous and report_source_count(reports, incarnation) >= MAX_REPORT_SOURCES
         and reports[report.source] == nil
     then
         return false, "integration report source limit exceeded", nil, diagnostics
@@ -635,7 +689,7 @@ function M.release(target, agent_id, release)
             nil,
             vim.list_extend(diagnostics or {}, { "integration release rejected as stale" })
     end
-    if not previous and report_source_count(reports) >= MAX_REPORT_SOURCES
+    if not previous and report_source_count(reports, incarnation) >= MAX_REPORT_SOURCES
         and reports[release.source] == nil
     then
         return false, "integration report source limit exceeded", nil, diagnostics
@@ -681,7 +735,7 @@ function M.list(target)
     for _, agent in ipairs(result) do
         if type(agent.diagnostics) == "table" then
             for _, message in ipairs(agent.diagnostics) do
-                diagnostics[#diagnostics + 1] = message
+                append_diagnostic(diagnostics, message)
             end
         end
     end
@@ -731,8 +785,7 @@ local function bounded_text(value, limit)
     value = value:gsub("\27%][^\7]*\7", "")
     value = value:gsub("\27%][^\27]*\27\\", "")
     value = value:gsub("\27%[[0-?]*[ -/]*[@-~]", "")
-    if #value > limit then value = value:sub(1, limit) end
-    return value
+    return truncate_text(strip_report_controls(value), limit)
 end
 
 local function bounded_list(values, limit, max_items)

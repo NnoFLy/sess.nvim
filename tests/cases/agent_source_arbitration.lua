@@ -39,9 +39,9 @@ local discovered = detector.new(probes)
 local rows = discovered:list(session.id)
 assert(#rows == 1 and rows[1].status == "idle" and rows[1].source == "screen", vim.inspect(rows))
 
-rows = discovered:list(session.id, { integration = { status = "working" } })
+rows = discovered:list(session.id, { integration = { source = "worker", seq = 1, status = "working" } })
 assert(rows[1].status == "working" and rows[1].source == "integration", vim.inspect(rows))
-rows = discovered:list(session.id, { integration = { status = "done" } })
+rows = discovered:list(session.id, { integration = { source = "worker", seq = 2, status = "done" } })
 assert(rows[1].status == "done" and rows[1].source == "integration", vim.inspect(rows))
 
 -- A current, high-confidence blocker is safer than a non-blocking lifecycle
@@ -49,9 +49,9 @@ assert(rows[1].status == "done" and rows[1].source == "integration", vim.inspect
 screen.current = { "Action Required: Allow command? [y/n]" }
 screen.bottom = screen.current
 screen.tick = 2
-rows = discovered:list(session.id, { integration = { status = "done" } })
+rows = discovered:list(session.id, { integration = { source = "worker", seq = 3, status = "done" } })
 assert(rows[1].status == "blocked" and rows[1].source == "screen", vim.inspect(rows))
-rows = discovered:list(session.id, { integration = { status = "blocked" } })
+rows = discovered:list(session.id, { integration = { source = "worker", seq = 4, status = "blocked" } })
 assert(rows[1].status == "blocked" and rows[1].source == "integration", vim.inspect(rows))
 
 -- An expired/released integration is not an authority. A complete unmatched
@@ -64,13 +64,16 @@ rows = discovered:list(session.id, { integration = {
     expires_at = 0,
 } })
 assert(rows[1].status == "unknown" and rows[1].source == "fallback", vim.inspect(rows))
+assert(rows[1].authority == "derived", vim.inspect(rows))
 rows = discovered:list(session.id, { integration = {
     status = "working",
     released = true,
 } })
 assert(rows[1].status == "unknown" and rows[1].source == "fallback", vim.inspect(rows))
 
-local explanation = assert(discovered.explain(terminal, "codex", { integration = { status = "working" } }))
+local explanation = assert(discovered.explain(terminal, "codex", {
+    integration = { source = "worker", seq = 5, status = "working" },
+}))
 assert(explanation.observation.source == "integration")
 assert(explanation.observation.state == "working")
 assert(explanation.observation.authority == "lifecycle")
