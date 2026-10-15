@@ -193,6 +193,16 @@ api.agent.update(nil, "agent-1", {
     info = "finished",
 })
 
+-- Sequenced, expiring integration state (runtime-only).
+api.agent.report(nil, "agent-1", {
+    source = "worker",
+    seq = 1,
+    status = "working",
+    info = "editing tests",
+    ttl = 30,
+})
+api.agent.release(nil, "agent-1", { source = "worker", seq = 2 })
+
 api.agent.focus(nil, "agent-1")
 
 -- Read-only status evidence for diagnostics and integrations.
@@ -204,8 +214,19 @@ read-only query returning the effective status, its source (`integration`, `scre
 `fallback`, `stale`, or `unknown`), bounded evidence, identity and manifest details, the
 matched rule, screen/cache metadata, and diagnostics. Operation errors are returned as
 `err`; probe and observation problems are non-fatal diagnostics returned in the fourth
-value and included in `explanation.diagnostics`. Explicit integration statuses remain
-authoritative, while screen observations are derived at runtime and never persisted.
+value and included in `explanation.diagnostics`. `update({ status = ... })` remains a
+legacy/manual override; use sequenced reports for integration ownership. Explicit
+integration statuses remain authoritative, while screen observations are derived at
+runtime and never persisted.
+For integrations, `report(target, agent_id, report)` accepts a bounded source, monotonic
+non-negative `seq`, one of `idle`, `working`, `blocked`, `done`, or `unknown`, optional
+bounded `info`, and an optional positive `ttl` (the default is 30 seconds; the maximum is
+24 hours). Reports are accepted only for live targets, ordered independently per source,
+and rejected stale reports do not mutate prior state. When several sources are fresh, the
+most recently accepted report wins (source name breaks an acceptance-time tie).
+`release()` uses the same ordering, clears that source, and allows screen detection to
+resume. Its returned report metadata is also available as bounded `explanation.integration`;
+expired and released reports remain diagnostic only. These runtime reports never enter session snapshots or storage.
 
 
 ## Hooks and events

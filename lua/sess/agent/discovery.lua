@@ -101,6 +101,9 @@ local function validate_snapshot(value)
     if value.changedtick ~= nil and (value.changedtick % 1 ~= 0 or value.changedtick < 0) then
         return false, "terminal snapshot changedtick must be a non-negative integer"
     end
+    if value.complete ~= true then
+        return false, "terminal snapshot must explicitly be complete"
+    end
     local total_bytes = 0
     for field, expected in pairs(snapshot_fields) do
         if expected == "table" and value[field] ~= nil then
@@ -135,7 +138,10 @@ end
 local observation_fields = {
     state = true,
     source = true,
+    authority = true,
     rule_id = true,
+    rule_priority = true,
+    rule_region = true,
     manifest_id = true,
     manifest_version = true,
     evidence = true,
@@ -154,7 +160,7 @@ local function validate_observation(value)
             return false, "status observation contains an invalid field: " .. tostring(key)
         end
     end
-    for _, field in ipairs({ "source", "rule_id", "manifest_id" }) do
+    for _, field in ipairs({ "source", "authority", "rule_id", "rule_region", "manifest_id" }) do
         if value[field] ~= nil then
             if type(value[field]) ~= "string" then
                 return false, "status observation " .. field .. " must be a string"
@@ -167,10 +173,10 @@ local function validate_observation(value)
     if #value.state == 0 or #value.state > MAX_OBSERVATION_FIELD_LENGTH then
         return false, "status observation state is invalid or too long"
     end
-    if value.manifest_version ~= nil
-        and (type(value.manifest_version) ~= "number" or value.manifest_version % 1 ~= 0)
-    then
-        return false, "status observation manifest_version must be an integer"
+    for _, field in ipairs({ "manifest_version", "rule_priority" }) do
+        if value[field] ~= nil and (type(value[field]) ~= "number" or value[field] % 1 ~= 0) then
+            return false, "status observation " .. field .. " must be an integer"
+        end
     end
     for _, specification in ipairs({
         { "diagnostics", MAX_OBSERVATION_DIAGNOSTICS, MAX_DIAGNOSTIC_LENGTH },
@@ -243,6 +249,11 @@ local function fresh_integration(value, now)
     if type(state_value) ~= "string" or state_value == "" or #state_value > MAX_OBSERVATION_FIELD_LENGTH then
         return nil, false
     end
+    -- `unknown` is useful as an identity/status diagnostic but cannot claim
+    -- lifecycle authority over a usable screen observation.
+    if state_value == "unknown" and value.manual ~= true then
+        return copy_observation(value), false
+    end
 
     if value.diagnostics ~= nil then
         if type(value.diagnostics) ~= "table" then return nil, false end
@@ -263,12 +274,14 @@ local function fresh_integration(value, now)
         if count ~= #value.diagnostics then return nil, false end
     end
 
+    if value.released == true then return value, false end
     local deadline = value.expires_at or value.fresh_until or value.deadline
     if deadline ~= nil and type(deadline) ~= "number" then return nil, false end
     if deadline and deadline <= now then return value, false end
     local result = copy_observation(value) or {}
     result.state = state_value
     result.source = "integration"
+    result.authority = value.manual == true and "manual" or "lifecycle"
     result.stale = false
     result.diagnostics = result.diagnostics or {}
     return result, true
@@ -313,7 +326,8 @@ function M.new(probes)
 
         -- A new job is a new identity, even when the terminal buffer was
         -- reused. Never carry screen observations across that boundary.
-        if cached and (cached.job_id ~= job_id or cached.terminal_name ~= terminal_name) then
+        if cached and ((job_ok and cached.job_id ~= job_id)
+            or (name_ok and cached.terminal_name ~= terminal_name)) then
             status_cache[bufnr] = nil
             previous_observation[bufnr] = nil
         end
@@ -484,6 +498,23 @@ function M.new(probes)
             for _, message in ipairs(result.diagnostics or {}) do diagnostics[#diagnostics + 1] = message end
         end
         if integration_fresh then
+            -- A current high-confidence approval prompt is safer than a
+            -- non-blocking integration state. The integration still wins for
+            -- blocked, and ordinary screen text never overrides it.
+            if integration.authority == "lifecycle"
+                and integration.state ~= "blocked"
+                and result
+                and result.state == "blocked"
+                and result.rule_priority
+                and result.rule_priority >= 100
+                and result.rule_region == "current_prompt"
+            then
+                result.authority = "derived"
+                result.diagnostics = diagnostics
+                result.diagnostics[#result.diagnostics + 1] =
+                    "high-confidence screen blocker overrides integration status"
+                return result
+            end
             integration.diagnostics = diagnostics
             return integration
         end
@@ -497,17 +528,22 @@ function M.new(probes)
             if previous and is_valid_observation(previous) then
                 local retained = copy_observation(previous)
                 retained.source = "stale"
+                retained.authority = "retained"
                 retained.stale = true
+                retained.probe_failed = true
                 retained.diagnostics = diagnostics
                 retained.diagnostics[#retained.diagnostics + 1] = "screen observation skipped state update"
                 return retained
             end
-            result.diagnostics = diagnostics
-            result.diagnostics[#result.diagnostics + 1] = "screen observation skipped state update; no prior status"
-            return result
+            return {
+                state = "unknown", source = "unknown", authority = "none",
+                stale = true, probe_failed = true,
+                diagnostics = { "screen observation skipped state update; no prior status" },
+            }
         end
 
         if result and is_valid_observation(result) then
+            result.authority = result.authority or "derived"
             result.diagnostics = diagnostics
             if integration then
                 result.diagnostics[#result.diagnostics + 1] = "integration status is stale; screen observation used"
@@ -525,7 +561,9 @@ function M.new(probes)
         if previous and is_valid_observation(previous) and observation_failed then
             local retained = copy_observation(previous)
             retained.source = "stale"
+            retained.authority = "retained"
             retained.stale = true
+            retained.probe_failed = true
             retained.diagnostics = diagnostics
             retained.diagnostics[#retained.diagnostics + 1] = "retained previous status after probe failure"
             return retained
@@ -534,6 +572,7 @@ function M.new(probes)
         local unknown = result or { state = "unknown", source = "unknown" }
         unknown.state = type(unknown.state) == "string" and unknown.state or "unknown"
         unknown.source = unknown.source or "unknown"
+        unknown.authority = "none"
         unknown.probe_failed = observation_failed
         unknown.diagnostics = diagnostics
         if #unknown.diagnostics == 0 then unknown.diagnostics[1] = "status observation unavailable" end
@@ -544,6 +583,9 @@ function M.new(probes)
         if type(terminal.changedtick) ~= "function" then return nil, {} end
         local ok, value = call(terminal, "changedtick", bufnr)
         if not ok then return nil, { "terminal changedtick probe failed: " .. diagnostic(value) } end
+        if type(value) ~= "number" or value ~= value or value % 1 ~= 0 or value < 0 then
+            return nil, { "terminal changedtick probe returned an invalid revision" }
+        end
         return value, {}
     end
 
@@ -559,7 +601,7 @@ function M.new(probes)
             and cached.job_id == job_id
             and cached.changedtick == tick
         then
-            return cached.value
+            return cached.value, cached.screen, true
         end
 
         local screen, snapshot_diagnostics = snapshot(bufnr)
@@ -574,9 +616,18 @@ function M.new(probes)
         -- must never become the last-good screen observation, since doing so
         -- would make a later failed screen probe report integration state as
         -- stale screen data.
-        if is_screen_observation(value) and value.source ~= "stale" then
+        if is_screen_observation(value) and not value.stale and not value.skip_state_update then
             previous_observation[bufnr] = copy_observation(value)
+        elseif screen_result and not screen_result.skip_state_update and not value.probe_failed
+            and value.source ~= "integration" then
+            previous_observation[bufnr] = nil
         end
+        local screen_summary = {
+            changedtick = type(screen) == "table" and screen.changedtick or tick,
+            line_count = type(screen) == "table" and type(screen.recent_lines) == "table" and #screen.recent_lines or 0,
+            complete = type(screen) == "table" and screen.complete == true and #snapshot_diagnostics == 0,
+            error = type(screen) == "table" and screen.error or nil,
+        }
         local effective_tick = screen and screen.changedtick or tick
         if tick ~= nil and not value.stale and not value.probe_failed and value.source ~= "integration"
             and not (options and options.integration)
@@ -586,11 +637,12 @@ function M.new(probes)
                 job_id = job_id,
                 changedtick = effective_tick,
                 value = value,
+                screen = screen_summary,
             }
         else
             status_cache[bufnr] = nil
         end
-        return value
+        return value, screen_summary, false
     end
 
     local function row(bufnr, agent, identity, options)
@@ -599,6 +651,9 @@ function M.new(probes)
             id = "terminal:" .. bufnr,
             name = agent,
             status = observation.state,
+            source = observation.source,
+            authority = observation.authority,
+            stale = observation.stale == true,
             target = { bufnr = bufnr },
         }
         local diagnostics = {}
@@ -618,36 +673,21 @@ function M.new(probes)
         if not agent then
             local diagnostics = vim.deepcopy(identity and identity.diagnostics or {})
             if #diagnostics == 0 then diagnostics[1] = "agent identity unavailable" end
-            return nil, diagnostics
+            -- Registered agents already provide a trusted bounded manifest
+            -- name. A transient process-identity failure must not prevent
+            -- screen classification for that live target.
+            if type(name) ~= "string" or name == "" then return nil, diagnostics end
+            agent = name
+            identity = identity or { job_id = nil, terminal_name = nil }
+            identity.identity = identity.identity or { source = "registered", command = name }
+            identity.probe_failed = true
+            identity.diagnostics = diagnostics
         end
 
-        local tick = changedtick(bufnr)
-        local status_entry = status_cache[bufnr]
-        local status_cached = options.integration == nil
-            and status_entry ~= nil
-            and status_entry.name == name
-            and status_entry.job_id == identity.job_id
-            and tick == status_entry.changedtick
-        local observation = classify(bufnr, name, identity, true, options)
-        local screen_value, snapshot_diagnostics = snapshot(bufnr)
+        local observation, screen_summary, status_cached = classify(bufnr, name, identity, true, options)
         local diagnostics = {}
         for _, message in ipairs(identity.diagnostics or {}) do diagnostics[#diagnostics + 1] = message end
         for _, message in ipairs(observation.diagnostics or {}) do diagnostics[#diagnostics + 1] = message end
-        for _, message in ipairs(snapshot_diagnostics or {}) do diagnostics[#diagnostics + 1] = message end
-
-        local screen_summary
-        if type(screen_value) == "table" then
-            local recent_lines = screen_value.recent_lines
-            local line_count = type(recent_lines) == "table" and #recent_lines or 0
-            screen_summary = {
-                changedtick = screen_value.changedtick,
-                line_count = line_count,
-                complete = screen_value.complete == true,
-                error = screen_value.complete == false and screen_value.error or nil,
-            }
-        else
-            screen_summary = { changedtick = tick, line_count = 0, complete = false }
-        end
         return {
             agent = agent,
             observation = vim.deepcopy(observation),

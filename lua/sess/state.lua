@@ -4,6 +4,12 @@ local M = {}
 local state = {
     active_sessions = {},
     agents_by_session = {},
+    -- Sequenced integration reports are deliberately kept apart from agent
+    -- records and views. They are process-local runtime state and therefore
+    -- cannot accidentally enter a persisted session snapshot.
+    agent_reports_by_session = {},
+    -- Rejected report metadata is bounded runtime-only context for explain().
+    agent_report_rejections = {},
     focused_agents = {},
     active_generation = 0,
 }
@@ -109,6 +115,16 @@ function M.remove_agent(session_id, agent_id)
     end
     local agent = vim.deepcopy(agents[agent_id])
     agents[agent_id] = nil
+    local reports = state.agent_reports_by_session[session_id]
+    if reports then
+        reports[agent_id] = nil
+        if next(reports) == nil then state.agent_reports_by_session[session_id] = nil end
+    end
+    local rejections = state.agent_report_rejections[session_id]
+    if rejections then
+        rejections[agent_id] = nil
+        if next(rejections) == nil then state.agent_report_rejections[session_id] = nil end
+    end
     if state.focused_agents[session_id] == agent_id then
         state.focused_agents[session_id] = nil
     end
@@ -116,6 +132,48 @@ function M.remove_agent(session_id, agent_id)
         state.agents_by_session[session_id] = nil
     end
     return agent
+end
+
+function M.get_agent_reports(session_id, agent_id)
+    local reports = state.agent_reports_by_session[session_id]
+    reports = reports and reports[agent_id] or {}
+    return vim.deepcopy(reports)
+end
+
+function M.set_agent_report(session_id, agent_id, source, report)
+    state.agent_reports_by_session[session_id] = state.agent_reports_by_session[session_id] or {}
+    local reports = state.agent_reports_by_session[session_id]
+    reports[agent_id] = reports[agent_id] or {}
+    reports[agent_id][source] = vim.deepcopy(report)
+end
+
+function M.record_agent_report_rejection(session_id, agent_id, rejection)
+    state.agent_report_rejections[session_id] = state.agent_report_rejections[session_id] or {}
+    local rejections = state.agent_report_rejections[session_id]
+    rejections[agent_id] = rejections[agent_id] or {}
+    local entries = rejections[agent_id]
+    entries[#entries + 1] = vim.deepcopy(rejection)
+    -- Explain only needs recent bounded context; rejected input never gets to
+    -- grow this process-local record indefinitely.
+    if #entries > 8 then table.remove(entries, 1) end
+end
+
+function M.get_agent_report_rejections(session_id, agent_id)
+    local rejections = state.agent_report_rejections[session_id]
+    return vim.deepcopy(rejections and rejections[agent_id] or {})
+end
+
+function M.remove_agent_reports(session_id, agent_id)
+    local reports = state.agent_reports_by_session[session_id]
+    if reports then
+        reports[agent_id] = nil
+        if next(reports) == nil then state.agent_reports_by_session[session_id] = nil end
+    end
+    local rejections = state.agent_report_rejections[session_id]
+    if rejections then
+        rejections[agent_id] = nil
+        if next(rejections) == nil then state.agent_report_rejections[session_id] = nil end
+    end
 end
 
 function M.get_focused_agent_id(session_id)
@@ -128,6 +186,8 @@ end
 
 function M.remove_agents(session_id)
     state.agents_by_session[session_id] = nil
+    state.agent_reports_by_session[session_id] = nil
+    state.agent_report_rejections[session_id] = nil
     state.focused_agents[session_id] = nil
 end
 

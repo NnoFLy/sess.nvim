@@ -9,12 +9,24 @@ local MAX_TITLE_LENGTH = 200
 
 local normalized
 
+local function utf8_width(byte)
+    if byte and byte >= 194 and byte <= 223 then return 2 end
+    if byte and byte >= 224 and byte <= 239 then return 3 end
+    if byte and byte >= 240 and byte <= 244 then return 4 end
+    return nil
+end
+
 local function truncate(value, limit)
     if #value <= limit then return value end
     local result = value:sub(1, limit)
     -- Do not leave a partial UTF-8 sequence in the diagnostic or evidence.
-    while #result > 0 and result:byte(-1) >= 128 and result:byte(-1) <= 191 do
-        result = result:sub(1, -2)
+    local last = #result
+    while last > 0 and result:byte(last) >= 128 and result:byte(last) <= 191 do
+        last = last - 1
+    end
+    local width = utf8_width(result:byte(last))
+    if width and #result - last + 1 < width then
+        result = result:sub(1, last - 1)
     end
     return result
 end

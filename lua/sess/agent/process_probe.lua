@@ -312,6 +312,7 @@ function M.tree_agent(pid)
         if agent then return agent end
         local children, children_diagnostic = M.children(current)
         add_diagnostic(children_diagnostic)
+        table.sort(children)
         for _, child in ipairs(children) do
             agent = visit(child, depth + 1)
             if agent then return agent end

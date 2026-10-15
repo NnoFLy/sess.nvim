@@ -22,13 +22,40 @@ local regions = {
     osc_title = true,
 }
 
+local function utf8_width(byte)
+    if byte and byte >= 194 and byte <= 223 then return 2 end
+    if byte and byte >= 224 and byte <= 239 then return 3 end
+    if byte and byte >= 240 and byte <= 244 then return 4 end
+    return nil
+end
+
 local function truncate(value, limit)
     if #value <= limit then return value end
     local result = value:sub(1, limit)
-    while #result > 0 and result:byte(-1) >= 128 and result:byte(-1) <= 191 do
-        result = result:sub(1, -2)
+    local last = #result
+    while last > 0 and result:byte(last) >= 128 and result:byte(last) <= 191 do
+        last = last - 1
+    end
+    local width = utf8_width(result:byte(last))
+    if width and #result - last + 1 < width then
+        result = result:sub(1, last - 1)
     end
     return result
+end
+
+local function utf8_continuation(value, index)
+    local byte = value:byte(index)
+    if not byte or byte < 128 or byte > 191 then return false end
+    local lead = index - 1
+    while lead > 0 do
+        local previous = value:byte(lead)
+        if previous < 128 or previous > 191 then break end
+        lead = lead - 1
+    end
+    local width = utf8_width(value:byte(lead))
+    if not width then return false end
+    local offset = index - lead
+    return offset > 0 and offset < width
 end
 
 local function clean(value)
@@ -39,11 +66,7 @@ local function clean(value)
     local result = {}
     for index = 1, #value do
         local byte = value:byte(index)
-        local continuation = false
-        if byte >= 128 and byte <= 191 and index > 1 then
-            local lead = value:byte(index - 1)
-            continuation = lead >= 194 and lead <= 244
-        end
+        local continuation = utf8_continuation(value, index)
         if byte >= 32 and not (byte >= 127 and byte <= 159) or byte >= 160 or continuation then
             result[#result + 1] = string.char(byte)
         elseif byte == 9 then
@@ -428,7 +451,10 @@ local function result_base(state, source, manifest_id, manifest, diagnostics)
     return {
         state = state,
         source = source,
+        authority = (source == "screen" or source == "fallback") and "derived" or "none",
         rule_id = nil,
+        rule_priority = nil,
+        rule_region = nil,
         manifest_id = manifest_id,
         manifest_version = manifest and manifest.version or nil,
         evidence = {},
@@ -501,8 +527,8 @@ function M.observe(input)
         diagnostic(diagnostics, "screen snapshot complete must be a boolean")
         return result_base("unknown", "unknown", manifest_id, manifest, diagnostics)
     end
-    if screen.complete == false then
-        diagnostic(diagnostics, "screen snapshot is incomplete" .. (screen.error and ": " .. clean(screen.error) or ""))
+    if screen.complete ~= true then
+        diagnostic(diagnostics, "screen snapshot must explicitly be complete")
         return result_base("unknown", "unknown", manifest_id, manifest, diagnostics)
     end
 
@@ -513,6 +539,8 @@ function M.observe(input)
         if matched then
             local result = result_base(rule.state, "screen", manifest_id, manifest, diagnostics)
             result.rule_id = rule.id
+            result.rule_priority = rule.priority
+            result.rule_region = rule.region
             result.evidence = {}
             if rule.evidence ~= false then evidence_add(result.evidence, evidence) end
             result.skip_state_update = rule.skip_state_update == true

@@ -26,7 +26,6 @@ local compatibility_rules = {
         region = "bottom_non_empty",
         any = {
             { contains = "working..." },
-            { contains = "working" },
             { contains = " to interrupt" },
             { contains = "── working ──" },
             { regex = "[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] *working" },
@@ -116,7 +115,7 @@ local claude_rules = {
         any = {
             { contains = "esc to interrupt" },
             { contains = " to interrupt" },
-            { contains = "thinking" },
+            { contains = "thinking..." },
             { contains = "working..." },
         },
     },
@@ -158,8 +157,8 @@ local opencode_rules = {
         any = {
             { contains = "working..." },
             { contains = "to interrupt" },
-            { contains = "thinking" },
-            { contains = "running" },
+            { contains = "thinking..." },
+            { contains = "running..." },
         },
     },
     {
@@ -200,7 +199,6 @@ local pi_rules = {
         region = "bottom_non_empty",
         any = {
             { contains = "working..." },
-            { contains = "working" },
             { contains = " to interrupt" },
             { contains = "── working ──" },
             { regex = "[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] *working" }

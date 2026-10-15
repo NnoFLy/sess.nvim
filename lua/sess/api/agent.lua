@@ -9,7 +9,15 @@ local terminal_probe = require("sess.agent.terminal_probe")
 local M = {}
 local allowed = { id = true, name = true, info = true, status = true, bufnr = true, winid = true }
 local terminal_liveness_cache = {}
-local TERMINAL_LIVENESS_CACHE_TTL = 500
+local TERMINAL_LIVENESS_CACHE_TTL = 1000
+local DEFAULT_REPORT_TTL = 30
+local MAX_REPORT_TTL = 86400
+local MAX_REPORT_SOURCE_LENGTH = 128
+local MAX_REPORT_INFO_LENGTH = 240
+local MAX_REPORT_SEQ = 9007199254740991
+local MAX_REPORT_SOURCES = 32
+local MAX_API_DIAGNOSTICS = 64
+local report_statuses = { idle = true, working = true, blocked = true, done = true, unknown = true }
 
 local function now_ms()
     local uv = vim.uv or vim.loop
@@ -48,6 +56,123 @@ local function string_field(value, name, required)
     end
     return true
 end
+
+local function valid_report_text(value, name, limit)
+    if type(value) ~= "string" or value == "" or #value > limit then
+        return false, name .. " must be bounded non-empty text"
+    end
+    return true
+end
+
+local function valid_report_seq(value)
+    if type(value) ~= "number" or value ~= value or value == math.huge or value == -math.huge
+        or value < 0 or value % 1 ~= 0 or value > MAX_REPORT_SEQ
+    then
+        return false, "seq must be a non-negative integer within the supported range"
+    end
+    return true
+end
+
+local function sanitize_report_text(value)
+    if value == nil then return nil end
+    value = value:gsub("\r", "")
+    value = value:gsub("\27%][^\7]*\7", "")
+    value = value:gsub("\27%][^\27]*\27\\", "")
+    value = value:gsub("\27%[[0-?]*[ -/]*[@-~]", "")
+    return value:sub(1, MAX_REPORT_INFO_LENGTH)
+end
+
+local report_clock = now_ms
+
+local function report_now()
+    return report_clock()
+end
+
+-- A private clock seam keeps expiry tests deterministic without sleeping. It
+-- is intentionally not part of the documented integration API.
+function M._set_report_clock(clock)
+    report_clock = type(clock) == "function" and clock or now_ms
+end
+
+local function append_diagnostic(result, value)
+    if #result >= MAX_API_DIAGNOSTICS then return end
+    local message = tostring(value or "unknown diagnostic"):sub(1, MAX_REPORT_INFO_LENGTH)
+    if message ~= "" then result[#result + 1] = message end
+end
+
+local valid_buffer_target
+local terminal_buffer
+
+local function target_incarnation(agent)
+    local bufnr = agent and agent.target and agent.target.bufnr
+    if not valid_buffer_target(bufnr) or not terminal_buffer(bufnr) then return nil end
+    return terminal_probe.job_id(bufnr)
+end
+
+local function integration_details(session_id, agent_id, agent)
+    local reports = state.get_agent_reports(session_id, agent_id)
+    local incarnation = target_incarnation(agent)
+    local now = report_now()
+    local selected
+    local latest
+    local latest_fresh = false
+    local diagnostics = {}
+    local sources = {}
+    for source, report in pairs(reports) do
+        if type(report) == "table" and type(report.accepted_at) == "number"
+            and report.job_id == incarnation
+        then
+            sources[#sources + 1] = { source = source, report = report }
+        elseif type(report) == "table" and report.job_id ~= incarnation then
+            append_diagnostic(diagnostics, "integration report invalidated by target job replacement: " .. tostring(source))
+        end
+    end
+    table.sort(sources, function(left, right)
+        if left.report.accepted_at == right.report.accepted_at then
+            return left.source < right.source
+        end
+        return left.report.accepted_at > right.report.accepted_at
+    end)
+    for _, entry in ipairs(sources) do
+        local report = entry.report
+        if not latest then latest = report end
+        local source = entry.source
+        if report.released then
+            append_diagnostic(diagnostics, "integration source released: " .. source)
+        elseif type(report.expires_at) == "number" and report.expires_at <= now then
+            append_diagnostic(diagnostics, "integration report expired: " .. source)
+        else
+            if report == latest then latest_fresh = true end
+            if report.status ~= "unknown" and not selected then selected = report end
+        end
+    end
+    for _, rejection in ipairs(state.get_agent_report_rejections(session_id, agent_id)) do
+        if type(rejection) == "table" and type(rejection.source) == "string" then
+            append_diagnostic(
+                diagnostics,
+                "stale integration " .. (rejection.kind or "report") .. " rejected: " .. rejection.source
+            )
+        end
+    end
+    return selected and vim.deepcopy(selected) or nil, latest and vim.deepcopy(latest) or nil, diagnostics, latest_fresh
+end
+
+-- Keep the source table itself bounded even if a caller injects state through
+-- a test double or an older runtime.
+local function report_source_count(reports)
+    local count = 0
+    for _, report in pairs(reports or {}) do
+        if type(report) == "table" then count = count + 1 end
+    end
+    return count
+end
+
+local function current_report(reports, source, incarnation)
+    local report = reports and reports[source]
+    if type(report) == "table" and report.job_id == incarnation then return report end
+    return nil
+end
+
 
 local function valid_buffer(bufnr)
     if type(bufnr) ~= "number" or bufnr % 1 ~= 0 then
@@ -133,12 +258,12 @@ local function validate(spec, partial, old)
     return true, result
 end
 
-local function valid_buffer_target(bufnr)
+valid_buffer_target = function(bufnr)
     local ok, valid = pcall(vim.api.nvim_buf_is_valid, bufnr)
     return ok and valid
 end
 
-local function terminal_buffer(bufnr)
+terminal_buffer = function(bufnr)
     if not valid_buffer_target(bufnr) then return false end
     local type_ok, buftype = pcall(function() return vim.bo[bufnr].buftype end)
     return type_ok and buftype == "terminal"
@@ -175,14 +300,15 @@ local function fallback_status(bufnr, name, probe_options)
     if type(detector.explain) == "function" then
         local ok, explanation, returned_diagnostics = pcall(detector.explain, bufnr, name, probe_options)
         if not ok then
-            return "unknown", { "agent discovery probe failed: " .. tostring(explanation) }, true
+            return "unknown", { "agent discovery probe failed: " .. tostring(explanation) }, true, nil
         end
 
         local diagnostics = {}
         local function append(values)
             if type(values) ~= "table" then return end
             for _, message in ipairs(values) do
-                diagnostics[#diagnostics + 1] = tostring(message)
+                append_diagnostic(diagnostics, message)
+                if #diagnostics >= MAX_API_DIAGNOSTICS then break end
             end
         end
         append(type(explanation) == "table" and explanation.diagnostics or nil)
@@ -190,31 +316,44 @@ local function fallback_status(bufnr, name, probe_options)
 
         local observation = type(explanation) == "table" and explanation.observation or nil
         if type(observation) == "table" and type(observation.state) == "string" then
-            return observation.state, diagnostics, observation.probe_failed == true
+            return observation.state, diagnostics, observation.probe_failed == true, observation
         end
         diagnostics[#diagnostics + 1] = "agent discovery returned no status"
-        return "unknown", diagnostics, true
+        return "unknown", diagnostics, true, nil
     end
 
     -- Keep compatibility with older detector implementations that only expose
     -- the string status API. Current discovery always takes the structured path.
     local ok, status = pcall(detector.status, bufnr, name, probe_options)
-    if ok and type(status) == "string" then return status, {}, false end
-    return "unknown", { "agent status probe unavailable" }, true
+    if ok and type(status) == "string" then return status, {}, false, nil end
+    return "unknown", { "agent status probe unavailable" }, true, nil
 end
 
 local function all_agents(session_id, use_cache)
     local by_id = state.get_agents(session_id)
+    local registered_agents = {}
     local by_buffer = {}
-    for _, agent in pairs(by_id) do
+    for id, agent in pairs(by_id) do
+        registered_agents[id] = agent
         if agent.target and agent.target.bufnr then
             by_buffer[agent.target.bufnr] = true
         end
     end
 
     local probe_options = { cache = use_cache == true }
-    for _, agent in ipairs(detector.list(session_id, probe_options)) do
-        if not by_id[agent.id] and not by_buffer[agent.target.bufnr] then
+    local discovery_diagnostic
+    local discovered_ok, discovered_agents = pcall(detector.list, session_id, probe_options)
+    if not discovered_ok then
+        discovery_diagnostic = "agent discovery failed: " .. tostring(discovered_agents)
+        discovered_agents = {}
+    elseif type(discovered_agents) ~= "table" then
+        discovery_diagnostic = "agent discovery returned malformed agents"
+        discovered_agents = {}
+    end
+    for _, agent in ipairs(discovered_agents) do
+        if type(agent) == "table" and agent.id and agent.target and agent.target.bufnr
+            and not by_id[agent.id] and not by_buffer[agent.target.bufnr]
+        then
             by_id[agent.id] = agent
             by_buffer[agent.target.bufnr] = true
         end
@@ -227,34 +366,70 @@ local function all_agents(session_id, use_cache)
         local target_valid = bufnr and valid_buffer_target(bufnr)
         local terminal_target = target_valid and terminal_buffer(bufnr)
         local target_unavailable = not target_valid
-        local terminal_job_unavailable = terminal_target and not terminal_job_alive(bufnr, use_cache)
+        local registered_agent = registered_agents[agent.id]
+        local manual_status = registered_agent and registered_agent.status or nil
+        local has_reports = next(state.get_agent_reports(session_id, agent.id)) ~= nil
+        -- Synchronous list/explain calls force a liveness probe. Active picker
+        -- snapshots may use the short cache only for plain screen discovery;
+        -- explicit/manual or sequenced authorities are checked immediately.
+        local liveness_cache = use_cache == true and not manual_status and not has_reports
+        local terminal_job_unavailable = terminal_target and not terminal_job_alive(bufnr, liveness_cache)
+        local selected_report, _, integration_diagnostics = integration_details(session_id, agent.id, agent)
+        local diagnostics = vim.deepcopy(integration_diagnostics)
+        if discovery_diagnostic then append_diagnostic(diagnostics, discovery_diagnostic) end
+        probe_options.integration = nil
+        if selected_report then
+            agent.status = selected_report.status
+            agent.info = selected_report.info
+            probe_options.integration = selected_report
+        end
+
         if target_unavailable or terminal_job_unavailable then
             -- A registered status cannot remain authoritative after its target
             -- disappears or its terminal job exits. Keep the record for explicit
             -- cleanup, but expose a safe unknown result instead of old state.
             agent.status = "unknown"
+            agent.source = "unknown"
+            agent.authority = "none"
             local message = "registered agent target is unavailable; integration status is stale"
             if terminal_job_unavailable then
                 message = "registered agent terminal job is no longer running; integration status is stale"
             end
-            agent.diagnostics = { message }
-        elseif not agent.status and agent.target and agent.target.bufnr then
-            -- Screen probing is terminal-only. Non-terminal registered targets
-            -- without an explicit status remain safely unknown.
-            if valid_terminal_target(agent.target.bufnr, use_cache) then
-                local status, diagnostics, probe_failed = fallback_status(
+            diagnostics[#diagnostics + 1] = message
+        elseif selected_report and not terminal_target then
+            -- Runtime reports are useful for explicitly registered non-terminal
+            -- targets too; there is no screen probe to arbitrate in that case.
+            agent.source = "integration"
+            agent.authority = "lifecycle"
+        elseif selected_report or not manual_status then
+            -- Screen probing is terminal-only. New reports are passed to the
+            -- detector so a high-confidence current blocker can override a
+            -- non-blocking lifecycle state.
+            if valid_terminal_target(agent.target and agent.target.bufnr, liveness_cache) then
+                local status, probe_messages, probe_failed, observation = fallback_status(
                     agent.target.bufnr,
                     agent.name,
                     probe_options
                 )
                 agent.status = status
+                agent.source = observation and observation.source or (selected_report and "integration" or "unknown")
+                agent.authority = observation and observation.authority
+                    or (selected_report and "lifecycle" or "none")
+                agent.stale = observation and observation.stale == true or false
+                if observation and observation.evidence then agent.evidence = vim.deepcopy(observation.evidence) end
                 if probe_failed then agent.probe_failed = true end
-                if #diagnostics > 0 then agent.diagnostics = diagnostics end
+                for _, message in ipairs(probe_messages or {}) do append_diagnostic(diagnostics, message) end
             else
                 agent.status = "unknown"
-                agent.diagnostics = { "screen status probe requires a terminal target" }
+                agent.source = "unknown"
+                agent.authority = "none"
+                diagnostics[#diagnostics + 1] = "screen status probe requires a terminal target"
             end
+        elseif manual_status then
+            agent.source = "integration"
+            agent.authority = "manual"
         end
+        if #diagnostics > 0 then agent.diagnostics = vim.deepcopy(diagnostics) end
         result[#result + 1] = agent
     end
     table.sort(result, function(a, b)
@@ -337,6 +512,155 @@ function M.update(target, agent_id, patch)
     result.id = old.id
     state.set_agent(item.id, result)
     return true, nil, vim.deepcopy(result), diagnostics
+end
+
+local function validate_report(report, release)
+    if type(report) ~= "table" then return false, "agent report must be a table" end
+    local allowed = release and { source = true, seq = true }
+        or { source = true, seq = true, status = true, info = true, ttl = true }
+    for key in pairs(report) do
+        if not allowed[key] then return false, "unknown agent report field: " .. tostring(key) end
+    end
+    local ok, err = valid_report_text(report.source, "source", MAX_REPORT_SOURCE_LENGTH)
+    if not ok then return false, err end
+    if #vim.trim(report.source) ~= #report.source then return false, "source must not have surrounding whitespace" end
+    if report.source:find("[%z\1-\31\127]") then return false, "source contains control characters" end
+    ok, err = valid_report_seq(report.seq)
+    if not ok then return false, err end
+    if not release then
+        if not report_statuses[report.status] then
+            return false, "status must be idle, working, blocked, done, or unknown"
+        end
+        if report.info ~= nil then
+            ok, err = valid_report_text(report.info, "info", MAX_REPORT_INFO_LENGTH)
+            if not ok then return false, err end
+        end
+        if report.ttl ~= nil then
+            if type(report.ttl) ~= "number" or report.ttl ~= report.ttl
+                or report.ttl == math.huge or report.ttl == -math.huge
+                or report.ttl <= 0 or report.ttl >= MAX_REPORT_TTL
+            then
+                return false, "ttl must be a finite positive number below the maximum"
+            end
+        end
+    end
+    return true
+end
+
+local function target_available(agent)
+    local bufnr = agent and agent.target and agent.target.bufnr
+    if not valid_buffer_target(bufnr) then return false end
+    return not terminal_buffer(bufnr) or terminal_job_alive(bufnr, false)
+end
+
+function M.report(target, agent_id, report)
+    if scope.is_busy() then return false, "session transition already in progress" end
+    local item, err, _, diagnostics = resolve(target)
+    if not item then return false, err, nil, diagnostics end
+    local agent = state.get_agents(item.id)[agent_id]
+    if not agent then return false, "agent not found: " .. tostring(agent_id), nil, diagnostics end
+    if not target_available(agent) then
+        return false, "agent target is unavailable", nil, vim.list_extend(diagnostics or {}, {
+            "integration report rejected because its target is unavailable",
+        })
+    end
+    local valid, validation_error = validate_report(report, false)
+    if not valid then return false, validation_error, nil, diagnostics end
+    local reports = state.get_agent_reports(item.id, agent_id)
+    local incarnation = target_incarnation(agent)
+    local previous = current_report(reports, report.source, incarnation)
+    if previous and report.seq <= previous.seq then
+        state.record_agent_report_rejection(item.id, agent_id, {
+            source = report.source,
+            seq = report.seq,
+            accepted_seq = previous.seq,
+            kind = "report",
+        })
+        return false,
+            "stale integration report sequence for source " .. report.source,
+            nil,
+            vim.list_extend(diagnostics or {}, { "integration report rejected as stale" })
+    end
+    if not previous and report_source_count(reports) >= MAX_REPORT_SOURCES
+        and reports[report.source] == nil
+    then
+        return false, "integration report source limit exceeded", nil, diagnostics
+    end
+    local accepted_at = report_now()
+    local accepted = {
+        source = report.source,
+        seq = report.seq,
+        status = report.status,
+        info = sanitize_report_text(report.info),
+        accepted_at = accepted_at,
+        expires_at = accepted_at + (report.ttl or DEFAULT_REPORT_TTL) * 1000,
+        job_id = incarnation,
+        released = false,
+    }
+    state.set_agent_report(item.id, agent_id, report.source, accepted)
+    local returned = vim.deepcopy(agent)
+    returned.status = accepted.status
+    returned.info = accepted.info
+    returned.source = "integration"
+    returned.authority = "lifecycle"
+    returned.integration = vim.deepcopy(accepted)
+    return true, nil, returned, diagnostics
+end
+
+function M.release(target, agent_id, release)
+    if scope.is_busy() then return false, "session transition already in progress" end
+    local item, err, _, diagnostics = resolve(target)
+    if not item then return false, err, nil, diagnostics end
+    local agent = state.get_agents(item.id)[agent_id]
+    if not agent then return false, "agent not found: " .. tostring(agent_id), nil, diagnostics end
+    if not target_available(agent) then
+        return false, "agent target is unavailable", nil, vim.list_extend(diagnostics or {}, {
+            "integration release target is unavailable",
+        })
+    end
+    local valid, validation_error = validate_report(release, true)
+    if not valid then return false, validation_error, nil, diagnostics end
+    local reports = state.get_agent_reports(item.id, agent_id)
+    local incarnation = target_incarnation(agent)
+    local previous = current_report(reports, release.source, incarnation)
+    if previous and release.seq <= previous.seq then
+        state.record_agent_report_rejection(item.id, agent_id, {
+            source = release.source,
+            seq = release.seq,
+            accepted_seq = previous.seq,
+            kind = "release",
+        })
+        return false,
+            "stale integration release sequence for source " .. release.source,
+            nil,
+            vim.list_extend(diagnostics or {}, { "integration release rejected as stale" })
+    end
+    if not previous and report_source_count(reports) >= MAX_REPORT_SOURCES
+        and reports[release.source] == nil
+    then
+        return false, "integration report source limit exceeded", nil, diagnostics
+    end
+    local accepted_at = report_now()
+    state.set_agent_report(item.id, agent_id, release.source, {
+        source = release.source,
+        seq = release.seq,
+        status = "unknown",
+        accepted_at = accepted_at,
+        expires_at = accepted_at,
+        job_id = incarnation,
+        released = true,
+    })
+    local released = state.get_agent_reports(item.id, agent_id)[release.source]
+    local current = all_agents(item.id, false)
+    for _, candidate in ipairs(current) do
+        if candidate.id == agent_id then
+            candidate.integration = vim.deepcopy(released)
+            return true, nil, vim.deepcopy(candidate), diagnostics
+        end
+    end
+    local returned = vim.deepcopy(agent)
+    returned.integration = vim.deepcopy(released)
+    return true, nil, returned, diagnostics
 end
 
 function M.unregister(target, agent_id)
@@ -481,18 +805,31 @@ function M.explain(target, agent_id)
     end
 
     local registered = state.get_agents(item.id)[agent.id]
-    local registered_bufnr = registered and registered.target and registered.target.bufnr
-    local registered_target_available = registered
-        and registered.target
-        and valid_buffer_target(registered_bufnr)
-        and (not terminal_buffer(registered_bufnr) or terminal_job_alive(registered_bufnr, true))
-    local explicit_status = registered_target_available and registered.status or nil
+    local observed_target = registered or agent
+    local registered_target_available = target_available(observed_target)
+    local selected_report, latest_report, integration_diagnostics, latest_report_fresh = integration_details(
+        item.id,
+        agent.id,
+        observed_target
+    )
+    -- A deleted buffer or exited job is an unavailable target, regardless of
+    -- what a runtime report said before that transition.
+    local target_unavailable = not registered_target_available
+    if target_unavailable then selected_report = nil end
+    local explicit_status = registered_target_available and registered and registered.status or nil
+    local integration_status = selected_report or explicit_status
+    local integration_option = selected_report or (explicit_status and {
+        state = explicit_status,
+        status = explicit_status,
+        manual = true,
+    } or nil)
     local probe_result, probe_diagnostics
-    if valid_terminal_target(agent.target and agent.target.bufnr, true)
+    if not target_unavailable
+        and valid_terminal_target(agent.target and agent.target.bufnr, false)
         and type(detector.explain) == "function"
     then
-        local probe_ok, result, diagnostics = pcall(detector.explain, agent.target.bufnr, agent.name, explicit_status and {
-            integration = { state = explicit_status },
+        local probe_ok, result, diagnostics = pcall(detector.explain, agent.target.bufnr, agent.name, integration_option and {
+            integration = integration_option,
         } or {})
         if probe_ok then
             probe_result, probe_diagnostics = result, diagnostics
@@ -501,13 +838,15 @@ function M.explain(target, agent_id)
         end
     end
     if type(probe_diagnostics) ~= "table" then probe_diagnostics = {} end
-    if type(probe_result) ~= "table" and #probe_diagnostics == 0 and not explicit_status then
+    if type(probe_result) ~= "table" and #probe_diagnostics == 0 and not integration_status then
         probe_diagnostics[1] = "agent observation unavailable"
     end
 
-    local observation = type(probe_result) == "table" and type(probe_result.observation) == "table" and probe_result.observation or {
-        state = explicit_status or "unknown",
-        source = explicit_status and "integration" or "unknown",
+    local probe = type(probe_result) == "table" and probe_result or {}
+    local observation = type(probe.observation) == "table" and probe.observation or {
+        state = (not target_unavailable and selected_report and selected_report.status) or explicit_status or "unknown",
+        source = (not target_unavailable and integration_status) and "integration" or "unknown",
+        authority = (not target_unavailable and integration_status) and "lifecycle" or "none",
         manifest_id = agent.name,
         manifest_version = manifests[agent.name] and manifests[agent.name].version or nil,
         evidence = {},
@@ -516,6 +855,7 @@ function M.explain(target, agent_id)
     local diagnostics = {}
     for _, message in ipairs(resolution_diagnostics or {}) do diagnostics[#diagnostics + 1] = bounded_text(message, 240) end
     for _, message in ipairs(probe_diagnostics or {}) do diagnostics[#diagnostics + 1] = bounded_text(message, 240) end
+    for _, message in ipairs(integration_diagnostics or {}) do diagnostics[#diagnostics + 1] = bounded_text(message, 240) end
     if type(observation.diagnostics) == "table" then
         for _, message in ipairs(observation.diagnostics) do
             local bounded = bounded_text(message, 240)
@@ -527,14 +867,16 @@ function M.explain(target, agent_id)
     local manifest_version = observation.manifest_version
     local manifest = manifests[manifest_id]
     if manifest_version == nil and manifest then manifest_version = manifest.version end
+    local latest_integration = selected_report or latest_report
     local explanation = {
         id = agent.id,
         name = agent.name,
-        status = observation.state or explicit_status or "unknown",
-        source = observation.source or (explicit_status and "integration" or "unknown"),
+        status = target_unavailable and "unknown" or (observation.state or explicit_status or "unknown"),
+        source = target_unavailable and "unknown" or (observation.source or (integration_status and "integration" or "unknown")),
+        authority = target_unavailable and "none" or (observation.authority or (integration_status and "lifecycle" or "none")),
         target = vim.deepcopy(agent.target),
         identity = identity_details(
-            type(probe_result) == "table" and probe_result.identity or {
+            probe.identity or {
                 source = explicit_status and "registered" or "unknown",
                 command = agent.name,
             },
@@ -543,8 +885,17 @@ function M.explain(target, agent_id)
         manifest = { id = manifest_id, version = manifest_version },
         matched_rule = rule_details(observation),
         evidence = bounded_list(observation.evidence, 240, 3),
-        screen = screen_details(type(probe_result) == "table" and probe_result.screen or nil),
-        cache = cache_details(type(probe_result) == "table" and probe_result.cache or nil),
+        screen = screen_details(probe.screen),
+        cache = cache_details(probe.cache),
+        integration = latest_integration and {
+            source = bounded_text(latest_integration.source, MAX_REPORT_SOURCE_LENGTH),
+            seq = latest_integration.seq,
+            accepted_at = latest_integration.accepted_at,
+            expires_at = latest_integration.expires_at,
+            fresh = not target_unavailable and (selected_report ~= nil or latest_report_fresh == true),
+            released = latest_integration.released == true,
+            info = bounded_text(latest_integration.info, MAX_REPORT_INFO_LENGTH),
+        } or nil,
         diagnostics = diagnostics,
     }
     return true, nil, vim.deepcopy(explanation), diagnostics
