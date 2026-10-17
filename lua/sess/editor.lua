@@ -2,6 +2,78 @@ local M = {}
 
 local parking
 
+-- Transient UI owners temporarily remove their windows while the editor
+-- changes layouts or writes Vim session files. The adapter knows only this
+-- generic boundary; each owner keeps its own logical state.
+local transient_owners = {}
+local transient_suspend_depth = 0
+
+function M.register_transient_owner(owner)
+    if type(owner) ~= "table" then
+        return false, "transient owner must be a table"
+    end
+    if type(owner.suspend) ~= "function" or type(owner.resume) ~= "function" then
+        return false, "transient owner must provide suspend and resume callbacks"
+    end
+    transient_owners[#transient_owners + 1] = owner
+    return true
+end
+
+function M.is_transient_ui_suspended()
+    return transient_suspend_depth > 0
+end
+
+local function transient_call(fn)
+    local outer = transient_suspend_depth == 0
+    local suspended = {}
+
+    -- Establish the guard before callbacks run. A callback may invoke another
+    -- editor operation, which must share this suspension rather than suspend
+    -- every owner recursively.
+    transient_suspend_depth = transient_suspend_depth + 1
+    if outer then
+        for _, owner in ipairs(transient_owners) do
+            local called, ok, err = pcall(owner.suspend)
+            if not called or ok == false then
+                -- Keep the guard active while already-suspended owners roll
+                -- back; their callbacks may also perform editor operations.
+                for index = #suspended, 1, -1 do
+                    pcall(suspended[index].resume)
+                end
+                transient_suspend_depth = transient_suspend_depth - 1
+                return false, (called and err) or ok or "transient UI suspend failed"
+            end
+            suspended[#suspended + 1] = owner
+        end
+    end
+
+    local results = { xpcall(fn, debug.traceback) }
+    local called = table.remove(results, 1)
+
+    local resume_error
+    if outer then
+        -- Keep the guard active through resume callbacks as well.
+        for index = #suspended, 1, -1 do
+            local resumed, ok, err = pcall(suspended[index].resume)
+            if not resumed or ok == false then
+                resume_error = resume_error
+                    or (resumed and err)
+                    or ok
+                    or "transient UI resume failed"
+            end
+        end
+    end
+    transient_suspend_depth = transient_suspend_depth - 1
+
+    if not called then
+        return false, results[1]
+    end
+    if resume_error then
+        return false, "transient UI resume failed: " .. tostring(resume_error)
+    end
+    return unpack(results)
+end
+
 -- Deprecated test/integration seams retained without giving the adapter
 -- persistence knowledge. Lifecycle code uses the path-based methods below.
 local legacy_snapshot = function() end
@@ -53,6 +125,85 @@ local function is_ui2_buffer(buf)
     return false
 end
 
+-- Transient UI is an editor-owned surface, not session content. Owners mark
+-- their buffers (or windows) with this generic marker; the editor adapter does
+-- not need to know which UI owns them.
+function M.is_transient_buffer(buf)
+    local valid, is_valid = pcall(vim.api.nvim_buf_is_valid, buf)
+    return valid and is_valid and vim.b[buf].sess_transient_ui == true
+end
+
+function M.is_transient_window(win)
+    local valid, is_valid = pcall(vim.api.nvim_win_is_valid, win)
+    if not valid or not is_valid then
+        return false
+    end
+
+    if vim.w[win].sess_transient_ui == true then
+        return true
+    end
+
+    local buffer_ok, buf = pcall(vim.api.nvim_win_get_buf, win)
+    return buffer_ok and M.is_transient_buffer(buf) or false
+end
+
+local function is_transient_only_buffer(buf)
+    local called, windows = pcall(vim.fn.win_findbuf, buf)
+    if not called or type(windows) ~= "table" or #windows == 0 then
+        return false
+    end
+
+    for _, win in ipairs(windows) do
+        if not M.is_transient_window(win) then
+            return false
+        end
+    end
+    return true
+end
+
+local function is_session_excluded_buffer(buf)
+    return is_ui2_buffer(buf)
+        or vim.b[buf].sess_mark_window
+        or M.is_transient_buffer(buf)
+        or is_transient_only_buffer(buf)
+end
+
+local function is_session_excluded_window(win, buf)
+    return is_ui2_window(win)
+        or vim.w[win].sess_mark_window
+        or (buf and vim.b[buf].sess_mark_window)
+        or M.is_transient_window(win)
+end
+
+local function prune_layout(node)
+    if type(node) ~= "table" then
+        return nil
+    end
+
+    if node[1] == "leaf" then
+        if M.is_transient_window(node[2]) then
+            return nil
+        end
+        return { "leaf", node[2] }
+    end
+
+    local children = {}
+    for _, child in ipairs(node[2] or {}) do
+        local kept = prune_layout(child)
+        if kept then
+            children[#children + 1] = kept
+        end
+    end
+
+    if #children == 0 then
+        return nil
+    elseif #children == 1 then
+        return children[1]
+    end
+
+    return { node[1], children }
+end
+
 -- Capture live buffer identities, not their contents. Unnamed/terminal buffers
 -- can only be resumed in this process; persisted Vimscript cannot preserve jobs.
 function M.capture()
@@ -66,7 +217,7 @@ function M.capture()
     }
 
     for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-        if not is_ui2_buffer(buf) and not vim.b[buf].sess_mark_window then
+        if not is_session_excluded_buffer(buf) then
             view.listing[buf] = vim.bo[buf].buflisted
             if vim.bo[buf].buflisted then
                 view.buffers[buf] = true
@@ -76,7 +227,7 @@ function M.capture()
 
     for index, tab in ipairs(vim.api.nvim_list_tabpages()) do
         local entry = {
-            layout = vim.fn.winlayout(index),
+            layout = prune_layout(vim.fn.winlayout(index)),
             windows = {},
             floats = {},
             current = vim.api.nvim_tabpage_get_win(tab),
@@ -87,7 +238,7 @@ function M.capture()
         for _, win in ipairs(vim.api.nvim_tabpage_list_wins(tab)) do
             local config = vim.api.nvim_win_get_config(win)
             local buf = vim.api.nvim_win_get_buf(win)
-            if not is_ui2_window(win) and not vim.b[buf].sess_mark_window then
+            if not is_session_excluded_window(win, buf) then
                 view.buffers[buf] = true
 
                 local saved = vim.api.nvim_win_call(win, function()
@@ -108,10 +259,7 @@ function M.capture()
             elseif entry.current == win then
                 for _, candidate in ipairs(vim.api.nvim_tabpage_list_wins(tab)) do
                     local candidate_buf = vim.api.nvim_win_get_buf(candidate)
-                    if
-                        not is_ui2_window(candidate)
-                        and not vim.b[candidate_buf].sess_mark_window
-                    then
+                    if not is_session_excluded_window(candidate, candidate_buf) then
                         entry.current = candidate
                         break
                     end
@@ -120,7 +268,9 @@ function M.capture()
         end
 
         entry.id = tab
-        table.insert(view.tabs, entry)
+        if entry.layout then
+            table.insert(view.tabs, entry)
+        end
     end
 
     return view
@@ -136,7 +286,7 @@ function M.protected(fn)
 
     local ok, result = xpcall(function()
         for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-            if not is_ui2_buffer(buf) and not vim.b[buf].sess_mark_window then
+            if not is_session_excluded_buffer(buf) then
                 hidden[buf] = vim.bo[buf].bufhidden
                 vim.bo[buf].bufhidden = "hide"
             end
@@ -144,7 +294,7 @@ function M.protected(fn)
 
         vim.o.hidden, vim.o.autowrite, vim.o.autowriteall = true, false, false
 
-        return { fn() }
+        return { transient_call(fn) }
     end, debug.traceback)
 
     local action_ok = ok and result[1] ~= false
@@ -199,7 +349,10 @@ function M.hide()
     -- Close views, not buffers. No bang: errors must not force-discard data.
     for _, win in ipairs(vim.api.nvim_list_wins()) do
         local valid, config = pcall(vim.api.nvim_win_get_config, win)
-        if valid and (config.relative ~= "" or config.external) and not is_ui2_window(win) then
+        if valid
+            and (config.relative ~= "" or config.external)
+            and not is_session_excluded_window(win, vim.api.nvim_win_get_buf(win))
+        then
             local closed, err = close_window(win)
             if not closed then
                 error(err)
@@ -224,7 +377,11 @@ function M.hide()
     local keep
     for _, win in ipairs(vim.api.nvim_tabpage_list_wins(current_tab)) do
         local config = vim.api.nvim_win_get_config(win)
-        if config.relative == "" and not config.external and not is_ui2_window(win) then
+        if
+            config.relative == ""
+            and not config.external
+            and not is_session_excluded_window(win, vim.api.nvim_win_get_buf(win))
+        then
             keep = win
             break
         end
@@ -233,7 +390,10 @@ function M.hide()
     if keep then
         vim.api.nvim_set_current_win(keep)
         for _, win in ipairs(vim.api.nvim_tabpage_list_wins(current_tab)) do
-            if win ~= keep and not is_ui2_window(win) then
+            if
+                win ~= keep
+                and not is_session_excluded_window(win, vim.api.nvim_win_get_buf(win))
+            then
                 local closed, err = close_window(win)
                 if not closed then
                     error(err)
@@ -252,7 +412,7 @@ function M.hide()
     end
 
     for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-        if not is_ui2_buffer(buf) and not vim.b[buf].sess_mark_window then
+        if not is_session_excluded_buffer(buf) then
             vim.bo[buf].buflisted = false
         end
     end
@@ -272,7 +432,7 @@ local function is_clean_empty_buffer(buf)
 end
 
 local function remove_restore_placeholder(buf, diagnostics)
-    if not is_clean_empty_buffer(buf) or #vim.fn.win_findbuf(buf) > 0 then
+    if M.is_transient_buffer(buf) or not is_clean_empty_buffer(buf) or #vim.fn.win_findbuf(buf) > 0 then
         return
     end
 
@@ -285,7 +445,7 @@ local function remove_restore_placeholder(buf, diagnostics)
     end
 end
 
-function M.empty(cwd, options)
+local function empty_impl(cwd, options)
     M.hide()
     command("cd", cwd)
 
@@ -307,6 +467,14 @@ function M.empty(cwd, options)
         error(tostring(change_err))
     end
     vim.v.this_session = ""
+end
+
+function M.empty(cwd, options)
+    local emptied, err = transient_call(function()
+        return empty_impl(cwd, options)
+    end)
+    if emptied == false and err then error(err) end
+    return emptied
 end
 
 local function layout(node, windows, win, mapping)
@@ -372,14 +540,20 @@ local function layout(node, windows, win, mapping)
     return true
 end
 
-function M.restore(view, rollback)
+local function restore_impl(view, rollback)
     M.hide()
     command("cd", view.cwd)
 
     local selected
     local diagnostics = {}
+    local tabs = {}
+    for _, tab in ipairs(view.tabs) do
+        if tab.layout then
+            tabs[#tabs + 1] = tab
+        end
+    end
 
-    for index, tab in ipairs(view.tabs) do
+    for index, tab in ipairs(tabs) do
         local restore_placeholder
         if index > 1 then
             vim.cmd("tabnew")
@@ -492,6 +666,14 @@ function M.restore(view, rollback)
     return diagnostics
 end
 
+function M.restore(view, rollback)
+    local restored, err = transient_call(function()
+        return restore_impl(view, rollback)
+    end)
+    if restored == false and err then error(err) end
+    return restored
+end
+
 -- Source a persisted snapshot selected by the lifecycle/storage layers.
 -- The editor adapter intentionally does not resolve or validate session IDs.
 M.snapshot = legacy_snapshot
@@ -552,7 +734,9 @@ end
 -- by replacing the temporary pathname.
 function M.write_snapshot(snapshot_path, legacy_item, fd)
     if M.snapshot ~= legacy_snapshot then
-        return M.snapshot(legacy_item)
+        return transient_call(function()
+            return M.snapshot(legacy_item)
+        end)
     end
 
     local destination = snapshot_path
@@ -563,16 +747,18 @@ function M.write_snapshot(snapshot_path, legacy_item, fd)
         end
     end
 
-    local ok, err = pcall(vim.cmd, {
-        cmd = "mksession",
-        bang = true,
-        args = { destination },
-        magic = { file = false, bar = false },
-    })
-    if not ok then
-        return false, tostring(err)
-    end
-    return true
+    return transient_call(function()
+        local ok, err = pcall(vim.cmd, {
+            cmd = "mksession",
+            bang = true,
+            args = { destination },
+            magic = { file = false, bar = false },
+        })
+        if not ok then
+            return false, tostring(err)
+        end
+        return true
+    end)
 end
 
 -- Focus an existing visible buffer without creating windows or loading files.

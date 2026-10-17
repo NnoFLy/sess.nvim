@@ -47,6 +47,18 @@ setup() returns (ok, err) and logs failures. Call once. Unknown options fail. >
                 rename = "R",
             },
         },
+        sidebar = {
+            enabled = true,
+            start_open = false,
+            position = "left", -- left | right
+            width = 32,
+            min_width = 24,
+            max_width = 48,
+            active_expand = "none", -- all | current | none
+            toggle_key = false,
+            refresh_interval = 1000,
+            mouse = true,
+        },
     })
 <
 smart_auto_load loads/creates a session for cwd when Neovim starts without
@@ -149,6 +161,32 @@ COMMANDS                                                     *sess-commands*
     selection, expansion, and the last usable snapshot; failed probes expose a
     textual warning. This picker is runtime-only; it never starts processes,
     creates windows, or persists agent state.
+
+:Sess sidebar                                               *:Sess-sidebar*
+    Toggle the optional native active-session sidebar. It polls only while
+    open and preserves selection and expansion across refreshes and tab
+    changes. <CR> switches/focuses, <Tab> expands, r or <C-r> refreshes, and
+    q/<Esc> closes. A single mouse click selects and a double click accepts;
+    mappings are buffer-local and do not change the global 'mouse' option.
+
+    sidebar.enabled enables the command; sidebar.start_open opens it after
+    setup. position is left or right; width is clamped to min_width, max_width,
+    and available editor space. active_expand is all, current, or none.
+    toggle_key is false or an unclaimed normal-mode key, and refresh_interval
+    is a positive integer in milliseconds.
+
+    Buffer-local mappings are <CR> (switch/focus), <Tab> (toggle the selected
+    group), <S-Tab> (expand all or collapse all), <C-j>/<C-k> (next/previous
+    session), <C-r> and r (refresh), ? (help), and q/<Esc> (close). When mouse
+    is true, a click selects and a double-click accepts; the global 'mouse'
+    option is not changed.
+
+    Sidebar buffers and windows are transient UI. The editor adapter excludes
+    them from captured and persisted session state, layout/current-window
+    restore, and resource cleanup. The logical sidebar follows the current
+    tab without leaving a background-tab window. Session transitions retain
+    it across committed or rolled-back editor changes; refresh failures do
+    not discard live buffers or jobs.
 
 Tab completion supports subcommands, marks, session names, deleted-session names/ids/keys,
 create paths, and load directory paths. `load` accepts existing `@mark` targets;
@@ -462,7 +500,9 @@ Active query:                                             *sess-api.active*
     api.active.snapshot() returns one read-only application view containing
     sessions, agents_by_id, focused_by_id, marks_by_id, current_id, and
     diagnostics. Telescope and other UIs should format this snapshot rather
-    than repeatedly querying session, mark, and agent APIs.
+    than repeatedly querying session, mark, and agent APIs. Pass a prior view
+    as { previous_snapshot = snapshot } to retain its marks when mark probing
+    fails; the failure remains in diagnostics.
     api.active.snapshot_async(callback, options) builds the same view
     incrementally, yielding between active sessions. It returns a cancellation
     function; the callback receives the completed snapshot unless the operation

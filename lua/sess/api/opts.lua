@@ -19,11 +19,75 @@ local defaults = {
         edit_marks = "<C-e>",
     },
     mark_window = window.defaults(),
+    sidebar = {
+        enabled = true,
+        start_open = false,
+        position = "left",
+        width = 32,
+        min_width = 24,
+        max_width = 48,
+        active_expand = "none",
+        toggle_key = false,
+        refresh_interval = 1000,
+        mouse = true,
+    },
 }
 
 local function keycode(value)
     return vim.api.nvim_replace_termcodes(value, true, false, true)
 end
+
+local function validate_sidebar(sidebar)
+    if type(sidebar) ~= "table" then
+        return false, "sidebar must be a table"
+    end
+    local known = {
+        enabled = true,
+        start_open = true,
+        position = true,
+        width = true,
+        min_width = true,
+        max_width = true,
+        active_expand = true,
+        toggle_key = true,
+        refresh_interval = true,
+        mouse = true,
+    }
+    for name in pairs(sidebar) do
+        if not known[name] then
+            return false, "unknown sidebar option: " .. tostring(name)
+        end
+    end
+    for _, name in ipairs({ "enabled", "start_open", "mouse" }) do
+        if type(sidebar[name]) ~= "boolean" then
+            return false, "sidebar." .. name .. " must be boolean"
+        end
+    end
+    if sidebar.position ~= "left" and sidebar.position ~= "right" then
+        return false, "sidebar.position must be left or right"
+    end
+    if sidebar.active_expand ~= "all" and sidebar.active_expand ~= "current" and sidebar.active_expand ~= "none" then
+        return false, "sidebar.active_expand must be all, current or none"
+    end
+    for _, name in ipairs({ "width", "min_width", "max_width", "refresh_interval" }) do
+        local value = sidebar[name]
+        if type(value) ~= "number" or value % 1 ~= 0 or value <= 0 then
+            return false, "sidebar." .. name .. " must be a positive integer"
+        end
+    end
+    if sidebar.min_width > sidebar.max_width then
+        return false, "sidebar.min_width must not exceed sidebar.max_width"
+    end
+    if sidebar.toggle_key ~= false then
+        local key = sidebar.toggle_key
+        if type(key) ~= "string" or key == "" or keycode(key) == "" then
+            return false, "sidebar.toggle_key must be false or a non-empty key specification"
+        end
+    end
+    return true
+end
+
+M.validate_sidebar = validate_sidebar
 
 local function validate_keymap(keymap)
     if type(keymap) ~= "table" then
@@ -104,6 +168,11 @@ function M.setup(user_opts)
         return false, window_err
     end
 
+    local valid_sidebar, sidebar_err = validate_sidebar(candidate.sidebar)
+    if not valid_sidebar then
+        return false, sidebar_err
+    end
+
     if type(candidate.keymap) ~= "table" then
         return false, "keymap must be a table"
     end
@@ -160,8 +229,16 @@ function M.setup(user_opts)
     end
 
     configured = candidate
-    require("sess.autocmd").setup(candidate)
     loaded = true
+    require("sess.autocmd").setup(candidate)
+    require("sess.ui.sidebar").configure(candidate.sidebar)
+    if candidate.sidebar.start_open then
+        vim.schedule(function()
+            if not loaded then return end
+            local opened, open_err = require("sess.ui.sidebar").open()
+            if not opened then require("sess.log").error(open_err or "failed to open sidebar") end
+        end)
+    end
 
     return true
 end

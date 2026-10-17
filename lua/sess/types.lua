@@ -117,6 +117,18 @@
 ---@field win_options { cursorline: boolean, winblend: integer, winhighlight: string }
 ---@field keymap Sess.MarkWindowKeymap
 
+---@class Sess.SidebarOptions
+---@field enabled boolean
+---@field start_open boolean
+---@field position "left" | "right"
+---@field width integer
+---@field min_width integer
+---@field max_width integer
+---@field active_expand "all" | "current" | "none"
+---@field toggle_key string | false
+---@field refresh_interval integer Milliseconds.
+---@field mouse boolean
+
 ---@class Sess.Opts
 ---@field paths string[]
 ---@field log_level Sess.log_level
@@ -127,3 +139,4 @@
 ---@field store_path Sess.DBPath
 ---@field keymap Sess.Keymap
 ---@field mark_window Sess.MarkWindowOptions
+---@field sidebar Sess.SidebarOptions

@@ -172,6 +172,7 @@ local fallback = status.observe({
     screen = screen({ recent_lines = { "unrecognised" }, current_prompt_lines = {} }),
 })
 assert(fallback.state == "idle" and fallback.source == "fallback")
+assert(#fallback.diagnostics == 0, vim.inspect(fallback.diagnostics))
 
 local missing = status.observe({ name = "not-an-agent", screen = screen({}) })
 assert(missing.state == "unknown" and #missing.diagnostics > 0)

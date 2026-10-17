@@ -87,6 +87,7 @@ local deleted = preview.format({
 local deleted_rendered = table.concat(deleted, "\n")
 assert(deleted_rendered:find("State:%s+deleted"))
 assert(deleted_rendered:find("Restore key:%s+deleted%-123%-1"))
+assert(not deleted_rendered:find("Enter restores this deleted session", 1, true))
 assert(not deleted_rendered:find("Stored state"))
 
 local loading = preview.format(session, { active_loading = true })
@@ -276,6 +277,7 @@ preview_definition.define_preview(preview_self, deleted_entry, { picker = {} })
 local deleted_text = table.concat(vim.api.nvim_buf_get_lines(preview_buffer, 0, -1, false), "\n")
 assert(deleted_text:find("State:%s+deleted"))
 assert(deleted_text:find("Restore key:"))
+assert(not deleted_text:find("Enter restores this deleted session", 1, true))
 assert(not deleted_text:find("session not found", 1, true))
 assert(preview_calls == 0)
 api.session.preview = original_preview

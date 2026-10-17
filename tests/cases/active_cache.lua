@@ -35,6 +35,22 @@ initial.agents_by_id[session.id][1].status = "corrupted"
 local next_initial = api.active.initial_snapshot()
 assert(next_initial.agents_by_id[session.id][1].status == "working")
 
+-- A synchronous refresh keeps the last-known mark map when the mark probe
+-- fails, while retaining both the primary error and probe diagnostics.
+assert(api.session.set_mark(session, "m"))
+local marked = api.active.snapshot()
+assert(marked.marks_by_id[session.id] == "@m")
+local original_list_marks = api.session.list_marks
+api.session.list_marks = function()
+    return false, "injected mark probe failure", nil, { "injected mark diagnostic" }
+end
+local failed_marks = api.active.snapshot()
+api.session.list_marks = original_list_marks
+assert(failed_marks.marks_by_id[session.id] == "@m")
+assert(failed_marks.marks_loaded)
+assert(vim.tbl_contains(failed_marks.diagnostics, "injected mark probe failure"))
+assert(vim.tbl_contains(failed_marks.diagnostics, "injected mark diagnostic"))
+
 -- A lazy refresh replaces the cached rows with the fresh probe result.
 status = "idle"
 local refreshed

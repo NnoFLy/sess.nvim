@@ -65,8 +65,29 @@ require("sess").setup({
         set_mark = "<C-q>",
         edit_marks = "<C-e>",
     },
+    sidebar = {
+        enabled = true,
+        start_open = false,
+        position = "left", -- left | right
+        width = 32,
+        min_width = 24,
+        max_width = 48,
+        active_expand = "none", -- all | current | none
+        toggle_key = false,
+        refresh_interval = 1000, -- positive integer milliseconds
+        mouse = true,
+    },
 })
 ```
+
+`:Sess sidebar` toggles the optional native sidebar. It shows active sessions
+and agents, refreshes while open, and preserves selection across tab changes.
+`<CR>` switches/focuses, `<Tab>` expands or collapses, `<S-Tab>` expands all or
+collapses all, `<C-j>`/`<C-k>` move between sessions, and `<C-r>`/`r` refresh.
+`?` shows help and `q` or `<Esc>` closes it. A click selects and a double-click
+accepts when Neovim mouse reporting is enabled; Sess.nvim never changes the
+global `mouse` option. Sidebar buffers and windows are transient UI and are not
+captured, saved, restored, or unloaded with sessions.
 
 See [`:help sess-api.opts`](doc/sessionizer.txt) for all options and
 [`:help sess-telescope`](doc/sessionizer.txt) for picker options.
@@ -90,7 +111,8 @@ for your own autocommands.
 | `:Sess mark @mark [target]` | Assign a persistent mark to a session. |
 | `:Sess unmark @mark` | Remove a mark. |
 | `:Sess list` | Open the Telescope session picker. |
-| `:Sess active` | Show active sessions and their agents. |
+| `:Sess active` | Show active sessions and their agents in Telescope. |
+| `:Sess sidebar` | Toggle the optional native active-session sidebar. |
 
 For example:
 

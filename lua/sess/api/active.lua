@@ -123,8 +123,16 @@ end
 
 local function add_marks(result)
     local ok, err, entries, diagnostics = sessions.list_marks()
-    if not ok then result.diagnostics[#result.diagnostics + 1] = err end
-    for _, diagnostic in ipairs(diagnostics or {}) do result.diagnostics[#result.diagnostics + 1] = diagnostic end
+    if not ok and err then result.diagnostics[#result.diagnostics + 1] = err end
+    for _, diagnostic in ipairs(diagnostics or {}) do
+        result.diagnostics[#result.diagnostics + 1] = diagnostic
+    end
+    if not ok then
+        -- A failed probe is not an empty registry. Keep the previous map so a
+        -- transient storage failure cannot erase marks from the display.
+        return false
+    end
+    result.marks_by_id = {}
     for _, entry in ipairs(entries or {}) do
         if not entry.stale then
             local mark = result.marks_by_id[entry.id]
@@ -134,6 +142,7 @@ local function add_marks(result)
         end
     end
     result.marks_loaded = true
+    return true
 end
 
 local function add_agents(result, session, previous)
@@ -196,13 +205,24 @@ end
 function M.snapshot(options)
     options = options or {}
     local result = new_snapshot()
+    local previous = options.previous_snapshot or cached_snapshot
+    if previous then
+        result.marks_by_id = vim.deepcopy(previous.marks_by_id or {})
+        result.marks_loaded = previous.marks_loaded == true
+    end
     if options.marks ~= false then
         add_marks(result)
     end
     for _, session in ipairs(result.sessions) do
         add_agents(result, session)
     end
-    return complete_snapshot(result)
+    local completed = complete_snapshot(result)
+    if options.marks ~= false then
+        cached_snapshot = cached_snapshot or {}
+        cached_snapshot.marks_by_id = vim.deepcopy(completed.marks_by_id)
+        cached_snapshot.marks_loaded = completed.marks_loaded == true
+    end
+    return completed
 end
 
 -- Build one agent group per event-loop turn. Mark discovery can be skipped for
@@ -211,8 +231,8 @@ function M.snapshot_async(callback, options)
     options = options or {}
     local include_marks = options.marks ~= false
     local result = new_snapshot()
-    if not include_marks and options.previous_snapshot then
-        result.marks_by_id = options.previous_snapshot.marks_by_id or {}
+    if options.previous_snapshot then
+        result.marks_by_id = vim.deepcopy(options.previous_snapshot.marks_by_id or {})
         result.marks_loaded = options.previous_snapshot.marks_loaded == true
     end
     local cancelled = false
