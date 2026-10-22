@@ -165,7 +165,9 @@ COMMANDS                                                     *sess-commands*
 :Sess sidebar                                               *:Sess-sidebar*
     Toggle the optional native active-session sidebar. It polls only while
     open and preserves selection and expansion across refreshes and tab
-    changes. <CR> switches/focuses, <Tab> expands, r or <C-r> refreshes, and
+    changes. Refresh does not snap the cursor back into session/agent rows
+    when it is on the title, separators, or footer.
+    <CR> switches/focuses, <Tab> expands, r or <C-r> refreshes, and
     q/<Esc> closes. A single mouse click selects and a double click accepts;
     mappings are buffer-local and do not change the global 'mouse' option.
 

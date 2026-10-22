@@ -82,6 +82,8 @@ require("sess").setup({
 
 `:Sess sidebar` toggles the optional native sidebar. It shows active sessions
 and agents, refreshes while open, and preserves selection across tab changes.
+The cursor can move freely onto the title, separators, and footer without
+refresh snapping it back to a session or agent.
 `<CR>` switches/focuses, `<Tab>` expands or collapses, `<S-Tab>` expands all or
 collapses all, `<C-j>`/`<C-k>` move between sessions, and `<C-r>`/`r` refresh.
 `?` shows help and `q` or `<Esc>` closes it. A click selects and a double-click

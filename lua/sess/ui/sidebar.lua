@@ -327,13 +327,21 @@ local function restore_highlights(marks)
     end
 end
 
-local function render(candidate, selected)
+local function render(candidate, selected, force_selection)
     if not valid_buffer(state.buf) or not valid_window(state.win) then
         return false, "sidebar window is unavailable"
     end
     local lines, row_lines = lines_for(candidate)
     local old_lines = vim.api.nvim_buf_get_lines(state.buf, 0, -1, false)
     local old_rows = state.row_lines
+    local saved_view
+    if not force_selection and #old_rows > 0 then
+        local cursor_line = vim.api.nvim_win_get_cursor(state.win)[1]
+        -- Keep free cursor movement outside the session/agent rows on refresh.
+        if not vim.list_contains(old_rows, cursor_line) then
+            saved_view = vim.api.nvim_win_call(state.win, vim.fn.winsaveview)
+        end
+    end
     local highlights_ok, old_highlights = saved_highlights()
     if not highlights_ok then return false, tostring(old_highlights) end
     state.rendering = true
@@ -368,7 +376,11 @@ local function render(candidate, selected)
             if row.key == selected then cursor = row_lines[index] break end
         end
     end
-    pcall(vim.api.nvim_win_set_cursor, state.win, { cursor, 0 })
+    if saved_view then
+        pcall(vim.api.nvim_win_call, state.win, function() vim.fn.winrestview(saved_view) end)
+    else
+        pcall(vim.api.nvim_win_set_cursor, state.win, { cursor, 0 })
+    end
     state.rendering = false
     return true
 end
@@ -678,7 +690,7 @@ local function move_header(direction)
     end
     if not target then return false end
     state.selected_key = state.rows[target].key
-    render(state.rows, state.selected_key)
+    render(state.rows, state.selected_key, true)
     return true
 end
 
