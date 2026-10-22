@@ -12,6 +12,7 @@ local state = {
     agent_report_rejections = {},
     focused_agents = {},
     active_generation = 0,
+    managed_instance = false,
 }
 local views = {}
 
@@ -46,12 +47,14 @@ function M.add_active_session(session)
     for i, active in ipairs(state.active_sessions) do
         if active.id == session.id then
             state.active_sessions[i] = vim.deepcopy(session)
+            state.managed_instance = true
             bump_active_generation()
             return
         end
     end
 
     table.insert(state.active_sessions, vim.deepcopy(session))
+    state.managed_instance = true
     bump_active_generation()
 end
 
@@ -75,6 +78,9 @@ end
 function M.set_current_session(session)
     state.current_session = session and vim.deepcopy(session) or nil
     vim.g.sess_current_session = session and session.metadata.name or nil
+    if session then
+        state.managed_instance = true
+    end
     bump_active_generation()
 end
 
@@ -92,6 +98,49 @@ end
 
 function M.get_active_sessions()
     return vim.deepcopy(state.active_sessions)
+end
+
+-- Restore the recorded order after loading the visible selection last. Only
+-- exact permutations are accepted: membership and current selection are fixed.
+---@param ids Sess.SessionId[]
+---@return boolean, string?
+function M.set_active_order(ids)
+    if type(ids) ~= "table" or not vim.islist(ids) or #ids ~= #state.active_sessions then
+        return false, "active order must contain every active session exactly once"
+    end
+    local by_id = {}
+    for _, session in ipairs(state.active_sessions) do
+        by_id[session.id] = session
+    end
+    local ordered, changed = {}, false
+    for i, id in ipairs(ids) do
+        local session = type(id) == "string" and by_id[id] or nil
+        if not session then
+            return false, "active order must contain every active session exactly once"
+        end
+        ordered[i] = session
+        by_id[id] = nil
+        changed = changed or state.active_sessions[i].id ~= id
+    end
+    if changed then
+        state.active_sessions = ordered
+        bump_active_generation()
+    end
+    return true
+end
+
+-- Once managed, unloading every session must still publish the empty set.
+function M.has_managed_sessions()
+    return state.managed_instance
+end
+
+---@return Sess.ResumeRecord
+function M.get_resume_state()
+    local ids = {}
+    for _, session in ipairs(state.active_sessions) do
+        ids[#ids + 1] = session.id
+    end
+    return { version = 1, active_ids = ids, current_id = M.get_current_session_id() }
 end
 
 function M.get_agents(id)
