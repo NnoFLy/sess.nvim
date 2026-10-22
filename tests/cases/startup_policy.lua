@@ -1,30 +1,16 @@
--- Isolate eligibility at the automation API boundary; resume*.lua supplies
--- complementary real-snapshot startup/exit coverage.
-local boundary = [[
-package.preload["sess.api.resume"] = function()
-    return {
-        startup = function(mode)
-            vim.api.nvim_buf_set_lines(0, 0, -1, false, { "resumed " .. mode })
-            return true, nil, {}
-        end,
-        exit = function() return true, nil, {} end,
-    }
-end
-]]
-
-local function setup(mode, implementation)
-    return (implementation or boundary)
-        .. string.format(
-            [[
+-- Eligibility is exercised with a real saved session at genuine startup.
+local function setup(mode)
+    return string.format(
+        [[
 assert(require("sess").setup({
-    store_path = vim.fn.getcwd() .. "/store",
+    store_path = vim.env.SESS_TEST_ROOT .. "/store",
     smart_auto_load = %q,
     auto_save = false,
     tabline = { enabled = false },
 }))
 ]],
-            mode
-        )
+        mode
+    )
 end
 
 local function observe(assertions)
@@ -41,15 +27,53 @@ vim.api.nvim_create_autocmd("VimEnter", {
 ]]
 end
 
-fixture.startup(setup("current") .. observe([[
-    assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] == "resumed current")
-]]))
+local function untouched(assertions)
+    return observe(assertions .. [[
+        assert(require("sess.api").state.current() == nil)
+        assert(#require("sess.api").state.active() == 0)
+    ]])
+end
 
-fixture.startup(setup("all") .. observe([[
-    assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] == "resumed all")
-]]))
+local function restored(assertions)
+    -- Observe committed loading instead of racing a timer against snapshot work.
+    return [[
+vim.api.nvim_create_autocmd("User", {
+    pattern = "SessLoaded", once = true,
+    callback = function() vim.schedule(function() check(function()
+        local api = require("sess.api")
+        assert(api.state.current().id == "startup")
+        assert(#api.state.active() == 1 and api.state.active()[1].id == "startup")
+        assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] == "restored context")
+]] .. (assertions or "") .. [[
+    end) end) end,
+})
+]]
+end
 
 fixture.startup(setup("none") .. observe([[
+    local root = vim.env.SESS_TEST_ROOT
+    local api = require("sess.api")
+    assert(api.session.create(root, { id = "startup" }))
+    vim.fn.writefile({ "restored context" }, root .. "/saved.txt")
+    vim.cmd.edit(root .. "/saved.txt")
+    assert(api.session.save())
+]]))
+
+local function startup(code, args, stdin)
+    -- Each process starts from the same published selection; tests that manage
+    -- other sessions must not change the next process's resume input.
+    vim.fn.writefile(
+        { '{"version":1,"active_ids":["startup"],"current_id":"startup"}' },
+        fixture.root .. "/store/resume.json"
+    )
+    return fixture.startup(code, args, stdin)
+end
+
+startup(setup("current") .. restored())
+
+startup(setup("all") .. restored())
+
+startup(setup("none") .. untouched([[
     assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] == "")
 ]]))
 
@@ -58,23 +82,23 @@ for _, args in ipairs({
     { "+let g:explicit = 1" },
     { "--cmd", "let g:explicit = 1" },
 }) do
-    fixture.startup(setup("current") .. observe([[
+    startup(setup("current") .. untouched([[
         assert(vim.g.explicit == 1)
         assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] == "")
     ]]), args)
 end
 
 -- Meaningful hidden buffers must not be discarded just because the window is empty.
-fixture.startup(setup("all") .. [[
+startup(setup("all") .. [[
 local hidden = vim.api.nvim_create_buf(false, true)
-]] .. observe([[
+]] .. untouched([[
     assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] == "")
     assert(vim.api.nvim_buf_is_valid(hidden) and vim.bo[hidden].buftype == "nofile")
 ]]))
 
-fixture.startup(setup("current") .. [[
+startup(setup("current") .. [[
 vim.cmd.lcd(vim.fn.getcwd())
-]] .. observe([[
+]] .. untouched([[
     assert(vim.fn.haslocaldir() == 1)
     assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] == "")
 ]]))
@@ -87,30 +111,28 @@ for _, args in ipairs({
     { "--" },
     { "-o1", "-p1" },
 }) do
-    fixture.startup(setup("current") .. observe([[
-        assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] == "resumed current")
-    ]]), args)
+    startup(setup("current") .. restored(), args)
 end
 
 local original = fixture.root .. "/original.txt"
 vim.fn.writefile({ "explicit file" }, original)
-fixture.startup(setup("current") .. observe([[
+startup(setup("current") .. untouched([[
     assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] == "explicit file")
     assert(vim.api.nvim_buf_get_name(0):match("original.txt$"))
 ]]), { original })
 
 vim.fn.writefile({ "separator file" }, fixture.root .. "/+literal")
-fixture.startup(setup("all") .. observe([[
+startup(setup("all") .. untouched([[
     assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] == "separator file")
 ]]), { "--", "+literal" })
 
-fixture.startup(setup("current") .. observe([[
+startup(setup("current") .. untouched([[
     assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] == "stdin content")
 ]]), { "-" }, "stdin content\n")
 
 local script = fixture.root .. "/explicit.vim"
 vim.fn.writefile({ "let g:explicit = 1" }, script)
-fixture.startup(setup("all") .. observe([[
+startup(setup("all") .. untouched([[
     assert(vim.g.explicit == 1)
     assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] == "")
 ]]), { "-S", script })
@@ -144,43 +166,39 @@ for _, case in ipairs({
         "assert(#vim.api.nvim_list_wins() == 2)",
     },
 }) do
-    fixture.startup(
+    startup(
         'vim.api.nvim_create_autocmd("VimEnter", { callback = function()\n'
             .. case[1]
             .. "\nend })\n"
             .. setup("all")
-            .. observe(case[2] .. [[
-        assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] ~= "resumed all")
+            .. untouched(case[2] .. [[
+        assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] ~= "restored context")
     ]])
     )
 end
 
 -- A running terminal remains live when startup is skipped.
-fixture.startup(setup("all") .. [[
+startup(setup("all") .. [[
 vim.api.nvim_create_autocmd("VimEnter", {
     callback = function()
         vim.fn.jobstart({ "sh", "-c", "sleep 60" }, { term = true })
     end,
 })
-]] .. observe([[
+]] .. untouched([[
     assert(vim.bo.buftype == "terminal")
     assert(vim.fn.jobwait({ vim.b.terminal_job_id }, 0)[1] == -1)
 ]]))
 
 -- Transient initialization is not an activity-history veto.
-fixture.startup(setup("current") .. [[
+startup(setup("current") .. [[
 vim.cmd("split")
 vim.cmd("close")
-]] .. observe([[
-    assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] == "resumed current")
-]]))
+]] .. restored())
 
 -- A harmless extra unlisted empty normal buffer is not meaningful work.
-fixture.startup(setup("current") .. [[
+startup(setup("current") .. [[
 vim.api.nvim_create_buf(false, false)
-]] .. observe([[
-    assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] == "resumed current")
-]]))
+]] .. restored())
 
 -- Register work before setup, but execute it only after the VimEnter inspection.
 for _, mutation in ipairs({
@@ -191,27 +209,27 @@ for _, mutation in ipairs({
     "vim.cmd.cd(vim.env.SESS_TEST_REPO)",
     "vim.cmd.lcd(vim.fn.getcwd())",
 }) do
-    fixture.startup([[
+    startup([[
 vim.api.nvim_create_autocmd("VimEnter", {
     callback = function() vim.schedule(function()
 ]] .. mutation .. [[
     end) end,
 })
-]] .. setup("all") .. observe([[
-    assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] ~= "resumed all")
+]] .. setup("all") .. untouched([[
+    assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] ~= "restored context")
 ]]))
 end
 
-fixture.startup(setup("all") .. [[
-assert(require("sess.api").session.create(vim.fn.getcwd()))
+startup(setup("all") .. [[
+assert(require("sess.api").session.load("startup"))
 local original_id = require("sess.api").state.current().id
 ]] .. observe([[
     assert(require("sess.api").state.current().id == original_id)
-    assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] == "")
+    assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] == "restored context")
 ]]))
 
 -- Active membership also disqualifies startup when no session is current.
-fixture.startup(setup("all") .. [[
+startup(setup("all") .. [[
 local api = require("sess.api")
 local a = vim.fn.getcwd() .. "/active-a"
 local b = vim.fn.getcwd() .. "/active-b"
@@ -229,7 +247,7 @@ assert(api.state.current() == nil)
 ]]))
 
 -- Late public setup does not install a catch-up mutation.
-fixture.startup(boundary .. [[
+startup([[
 vim.api.nvim_create_autocmd("VimEnter", {
     callback = function()
         vim.schedule(function()
@@ -241,60 +259,44 @@ vim.api.nvim_create_autocmd("VimEnter", {
         end)
     end,
 })
-]] .. observe([[
+]] .. untouched([[
     assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] == "")
 ]]))
 
-fixture.startup(setup("current") .. [[
+startup(setup("current") .. [[
 local ok, err = require("sess").setup({ smart_auto_load = "all" })
 assert(not ok and err:find("already loaded", 1, true))
-]] .. observe([[
-    assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] == "resumed current")
-]]))
+]] .. restored())
 
 -- Even an empty stdin read has explicit provenance. The actual '-' input path
 -- above uses real stdin; this event covers Neovim's implicit-read notification.
-fixture.startup(setup("all") .. [[
+startup(setup("all") .. [[
 vim.api.nvim_exec_autocmds("StdinReadPre", {})
-]] .. observe([[
+]] .. untouched([[
     assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] == "")
 ]]))
 
--- Startup failure diagnostics include warnings from earlier committed work.
-local failure = fixture.startup(setup(
-    "all",
-    [[
-package.preload["sess.api.resume"] = function()
-    return {
-        startup = function()
-            return false, "startup failed", {}, { "partial startup warning" }
-        end,
-        exit = function() return true end,
-    }
-end
-]]
-) .. observe([[
-    assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] == "")
-]]))
-assert(failure.stderr:find("startup failed", 1, true))
-assert(failure.stderr:find("partial startup warning", 1, true))
+-- Partial startup errors plus earlier diagnostics are exercised by the real
+-- before-hook and snapshot-execution failures in resume_transitions.lua.
+-- Exit error/warning visibility and preserved history on failed publication are
+-- exercised with filesystem failures in resume_exit.lua.
 
--- Normal exit is always delegated, including none mode with autosave disabled.
+-- Normal exit publishes managed membership in every mode, even without autosave.
 for _, mode in ipairs({ "none", "current", "all" }) do
-    local result = fixture.startup(setup(
-        mode,
+    local completion = mode == "none" and observe or restored
+    startup(setup(mode) .. completion(string.format(
         [[
-package.preload["sess.api.resume"] = function()
-    return {
-        startup = function() return true end,
-        exit = function(options)
-            assert(options.auto_save == false)
-            return false, "exit failed " .. options.smart_auto_load, {}, { "exit warning" }
-        end,
-    }
-end
-]]
-    ) .. observe(""))
-    assert(result.stderr:find("exit failed " .. mode, 1, true))
-    assert(result.stderr:find("exit warning", 1, true))
+        local api = require("sess.api")
+        if api.state.current() then assert(api.session.unload()) end
+        local path = vim.env.SESS_TEST_ROOT .. "/exit-" .. %q
+        vim.fn.mkdir(path, "p")
+        assert(api.session.create(path, { id = "exit-" .. %q }))
+    ]],
+        mode,
+        mode
+    )))
+    local record =
+        vim.json.decode(table.concat(vim.fn.readfile(fixture.root .. "/store/resume.json"), "\n"))
+    fixture.equal({ "exit-" .. mode }, record.active_ids)
+    fixture.equal("exit-" .. mode, record.current_id)
 end

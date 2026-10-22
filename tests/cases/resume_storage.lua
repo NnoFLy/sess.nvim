@@ -63,12 +63,13 @@ end
 -- A current session may be absent while other sessions remain active.
 assert(storage.write_resume({ version = 1, active_ids = { "alpha" } }))
 
--- Only successful lifecycle commits make an editor instance managed.
+-- Only successful lifecycle commits authorize publication. Observe this through
+-- the public exit API and persisted selection, not internal management flags.
 fixture.setup()
 local api = require("sess.api")
-local state = require("sess.state")
-fixture.equal(false, state.has_managed_sessions())
-fixture.equal({ version = 1, active_ids = {} }, state.get_resume_state())
+original = vim.fn.readfile(resume_path)
+assert(api.resume.exit())
+fixture.equal(original, vim.fn.readfile(resume_path))
 ok, err = api.session.create(fixture.directory("rejected"), {
     hooks = {
         before_transition = function()
@@ -77,55 +78,30 @@ ok, err = api.session.create(fixture.directory("rejected"), {
     },
 })
 assert(not ok and err:match("reject create"), tostring(err))
-fixture.equal(false, state.has_managed_sessions())
+assert(api.resume.exit())
+fixture.equal(original, vim.fn.readfile(resume_path))
 local a, b
 ok, err, a = api.session.create(fixture.directory("a"))
 assert(ok, err)
 ok, err, b = api.session.create(fixture.directory("b"))
 assert(ok, err)
-local selected = { version = 1, active_ids = { a.id, b.id }, current_id = b.id }
-fixture.equal(true, state.has_managed_sessions())
-fixture.equal(selected, state.get_resume_state())
-record = state.get_resume_state()
-record.active_ids[1] = "not_runtime"
-record.current_id = "not_runtime"
-fixture.equal(selected, state.get_resume_state())
-assert(storage.write_resume(state.get_resume_state()))
+assert(api.resume.exit())
 ok, err, record = storage.read_resume()
 assert(ok, err)
-fixture.equal(selected, record)
+fixture.equal({ version = 1, active_ids = { a.id, b.id }, current_id = b.id }, record)
 assert(api.session.unload(b))
-fixture.equal({ version = 1, active_ids = { a.id } }, state.get_resume_state())
+assert(api.resume.exit())
+ok, err, record = storage.read_resume()
+assert(ok, err)
+fixture.equal({ version = 1, active_ids = { a.id } }, record)
 assert(api.session.unload(a))
-fixture.equal({ version = 1, active_ids = {} }, state.get_resume_state())
-fixture.equal(true, state.has_managed_sessions())
+assert(api.resume.exit())
+ok, err, record = storage.read_resume()
+assert(ok, err)
+fixture.equal({ version = 1, active_ids = {} }, record)
 
--- Restoring the visible selection last must not change remembered active order.
-assert(api.session.load(b))
-assert(api.session.load(a))
-local generation = api.state.active_generation()
-assert(state.set_active_order({ a.id, b.id }))
-fixture.equal(generation + 1, api.state.active_generation())
-fixture.equal(
-    { version = 1, active_ids = { a.id, b.id }, current_id = a.id },
-    state.get_resume_state()
-)
-fixture.equal(a.id, api.state.current().id)
-fixture.equal(
-    { a.id, b.id },
-    vim.tbl_map(function(item)
-        return item.id
-    end, api.state.active())
-)
-generation = api.state.active_generation()
-assert(state.set_active_order({ a.id, b.id }))
-fixture.equal(generation, api.state.active_generation())
-for _, ids in ipairs({ { a.id }, { a.id, a.id }, { a.id, "missing" }, { [1] = a.id, [3] = b.id } }) do
-    ok, err = state.set_active_order(ids)
-    assert(not ok and type(err) == "string")
-    fixture.equal(generation, api.state.active_generation())
-    fixture.equal({ a.id, b.id }, state.get_resume_state().active_ids)
-end
+-- resume_recovery.lua verifies recorded ordering and current-first selection
+-- through genuine startup and api.state.active(), including partial recovery.
 
 -- Filesystem fault injection proves failed publication retains the old bytes.
 assert(storage.write_resume(previous))

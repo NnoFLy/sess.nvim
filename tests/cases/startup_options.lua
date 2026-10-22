@@ -31,10 +31,6 @@ for _, case in ipairs({
 }) do
     fixture.startup(string.format(
         [[
--- Resume orchestration is supplied by the integration owner.
-package.preload["sess.api.resume"] = function()
-    return { exit = function() return true end }
-end
 check(function()
     local options = %s
     if options then options.store_path = vim.fn.getcwd() .. "/options-store" end
