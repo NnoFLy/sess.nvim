@@ -141,6 +141,20 @@ layout-replacing operations retain their close-before-transition ordering;
 non-current failures leave the picker and target visible. Refresh guards prevent
 callbacks from recursively triggering refresh/lifecycle work.
 
+The native sidebar owns its window, row selection, expansion, polling and
+sort mode for each open instance. It consumes the same active snapshots, semantic
+rows and search sorting without importing Telescope. Row actions resolve the
+actual cursor row and revalidate live parent IDs; pending tokens span complete
+input prompts, reject competing refresh/actions, and invalidate late callbacks
+on close/reopen. Mutations remain API/lifecycle-owned. Shared mark assignment
+and safe-unload confirmation adapters accept an optional owner-liveness check
+before accepting prompt results. `ui/sidebar_help.lua` owns only the temporary
+native scrollable help window and origin-focus restoration. Sidebar transient
+suspension dismisses help and removes its split before captures/layout changes;
+resume reattaches the logically open view after committed or rolled-back
+operations. Sidebar-only pin display is an explicit row presentation option;
+Telescope's default headers are unchanged.
+
 The mark popup has two private UI owners. `ui/window.lua` validates its
 supported floating-window options and action keymap, computes editor-relative
 geometry, and owns only the focusable scratch buffer and float. It clamps the

@@ -4,6 +4,9 @@ local icons = require("sess.ui.icons")
 local log = require("sess.log")
 local rows = require("sess.ui.rows")
 local display = require("sess.ui.display")
+local search = require("sess.ui.search")
+local marks = require("sess.ui.marks")
+local help = require("sess.ui.sidebar_help")
 
 local M = {}
 
@@ -32,7 +35,10 @@ local state = {
     timer = nil,
     cancel_task = nil,
     refreshing = false,
-    pending_action = false,
+    pending_action = nil,
+    instance = nil,
+    refresh_token = nil,
+    sort = "default",
     rendering = false,
     window_lost = false,
     closing_window = false,
@@ -81,13 +87,19 @@ end
 
 local function close_window(win)
     local called, result = pcall(vim.api.nvim_win_close, win, true)
-    if not called then return false, result end
-    if result == false then return false, "window close returned false" end
+    if not called then
+        return false, result
+    end
+    if result == false then
+        return false, "window close returned false"
+    end
     return true
 end
 
 local function close_owned_window(win)
-    if state.cleanup_in_progress then return false, "sidebar cleanup already in progress" end
+    if state.cleanup_in_progress then
+        return false, "sidebar cleanup already in progress"
+    end
     state.cleanup_in_progress = true
     state.closing_window = true
     local closed, close_err = close_window(win)
@@ -103,7 +115,9 @@ local function run_operation(name, callback)
     state.operation = name
     local called, result, err = xpcall(callback, debug.traceback)
     state.operation = nil
-    if not called then return false, tostring(result) end
+    if not called then
+        return false, tostring(result)
+    end
     return result, err
 end
 
@@ -124,9 +138,13 @@ local function set_transient(buf)
 end
 
 local function sync_selection()
-    if state.rendering or not state.open or not valid_window(state.win) then return end
+    if state.rendering or not state.open or not valid_window(state.win) then
+        return
+    end
     local ok, cursor = pcall(vim.api.nvim_win_get_cursor, state.win)
-    if not ok then return end
+    if not ok then
+        return
+    end
     for index, line in ipairs(state.row_lines) do
         if line == cursor[1] and state.rows[index] then
             state.selected_key = state.rows[index].key
@@ -163,6 +181,7 @@ local function cancel_refresh()
         state.cancel_task = nil
     end
     state.refreshing = false
+    state.refresh_token = nil
 end
 
 local function stop_polling()
@@ -172,13 +191,19 @@ end
 
 local function start_polling()
     remove_timer()
-    if not state.open then return end
+    if not state.open then
+        return
+    end
     local timer = vim.uv and vim.uv.new_timer() or vim.loop.new_timer()
-    if not timer then return end
+    if not timer then
+        return
+    end
     state.timer = timer
     timer:start(state.options.refresh_interval, state.options.refresh_interval, function()
         vim.schedule(function()
-            if state.open and state.timer == timer then M.refresh() end
+            if state.open and state.timer == timer then
+                M.refresh()
+            end
         end)
     end)
 end
@@ -205,8 +230,9 @@ local function row_options(width)
             unknown = "SessSidebarUnknown",
         },
         show_metadata = false,
+        show_pinned = true,
         show_agent_summary = true,
-        sort = "default",
+        sort = state.sort,
     }
 end
 
@@ -221,15 +247,21 @@ local function initial_expansion(snapshot)
 end
 
 local function selected_index(list)
-    if not state.selected_key then return nil end
+    if not state.selected_key then
+        return nil
+    end
     for index, row in ipairs(list) do
-        if row.key == state.selected_key then return index end
+        if row.key == state.selected_key then
+            return index
+        end
     end
 end
 
 local function choose_selection(candidate)
     local index = selected_index(candidate)
-    if index then return candidate[index].key end
+    if index then
+        return candidate[index].key
+    end
     local old_index
     if state.selected_key then
         local old = state.selected_key
@@ -242,7 +274,9 @@ local function choose_selection(candidate)
         end
         if parent then
             for _, row in ipairs(candidate) do
-                if row.key == parent then return row.key end
+                if row.key == parent then
+                    return row.key
+                end
             end
         end
     end
@@ -261,10 +295,14 @@ local function choose_selection(candidate)
                 end
             end
         end
-        if nearest then return nearest end
+        if nearest then
+            return nearest
+        end
     end
     for _, row in ipairs(candidate) do
-        if row.kind ~= "placeholder" then return row.key end
+        if row.kind ~= "placeholder" then
+            return row.key
+        end
     end
 end
 
@@ -279,7 +317,7 @@ local function lines_for(candidate)
     end
     lines[#lines + 1] = separator
     lines[#lines + 1] = display.truncate_end("<Tab> expand  <CR> switch", width)
-    lines[#lines + 1] = display.truncate_end("? help       r refresh", width)
+    lines[#lines + 1] = display.truncate_end("? help  sort: " .. state.sort, width)
     return lines, row_lines
 end
 
@@ -305,7 +343,9 @@ local function saved_highlights()
     local ok, marks = pcall(vim.api.nvim_buf_get_extmarks, state.buf, namespace, 0, -1, {
         details = true,
     })
-    if not ok then return false, marks end
+    if not ok then
+        return false, marks
+    end
     return true, marks
 end
 
@@ -343,7 +383,9 @@ local function render(candidate, selected, force_selection)
         end
     end
     local highlights_ok, old_highlights = saved_highlights()
-    if not highlights_ok then return false, tostring(old_highlights) end
+    if not highlights_ok then
+        return false, tostring(old_highlights)
+    end
     state.rendering = true
     local ok, err = pcall(function()
         vim.bo[state.buf].modifiable = true
@@ -353,8 +395,9 @@ local function render(candidate, selected, force_selection)
         for index, row in ipairs(candidate) do
             apply_highlights(row_lines[index] - 1, row.display_parts)
         end
-        apply_highlights(#lines - 2, { { text = lines[#lines - 2], highlight = "SessSidebarFooter" } })
-        apply_highlights(#lines - 1, { { text = lines[#lines - 1], highlight = "SessSidebarFooter" } })
+        for line = #lines - 2, #lines - 1 do
+            apply_highlights(line, { { text = lines[line], highlight = "SessSidebarFooter" } })
+        end
         vim.bo[state.buf].modifiable = false
     end)
     if not ok then
@@ -373,11 +416,16 @@ local function render(candidate, selected, force_selection)
     local cursor = 1
     if selected then
         for index, row in ipairs(candidate) do
-            if row.key == selected then cursor = row_lines[index] break end
+            if row.key == selected then
+                cursor = row_lines[index]
+                break
+            end
         end
     end
     if saved_view then
-        pcall(vim.api.nvim_win_call, state.win, function() vim.fn.winrestview(saved_view) end)
+        pcall(vim.api.nvim_win_call, state.win, function()
+            vim.fn.winrestview(saved_view)
+        end)
     else
         pcall(vim.api.nvim_win_set_cursor, state.win, { cursor, 0 })
     end
@@ -386,12 +434,16 @@ local function render(candidate, selected, force_selection)
 end
 
 local function build(snapshot)
-    if type(snapshot) ~= "table" then return nil, "active snapshot is malformed" end
+    if type(snapshot) ~= "table" then
+        return nil, "active snapshot is malformed"
+    end
     local width = vim.api.nvim_win_get_width(state.win)
-    local ok, candidate, metadata = pcall(rows.build_active, snapshot, vim.tbl_extend("force", row_options(width), {
-        expanded = state.expanded,
-    }))
-    if not ok then return nil, tostring(candidate) end
+    local options = row_options(width)
+    options.expanded = state.expanded
+    local ok, candidate, metadata = pcall(rows.build_active, snapshot, options)
+    if not ok then
+        return nil, tostring(candidate)
+    end
     if type(candidate) ~= "table" or type(metadata) ~= "table" then
         return nil, "active rows are malformed"
     end
@@ -403,7 +455,9 @@ local function commit(snapshot, candidate)
     sync_selection()
     local selected = choose_selection(candidate)
     local ok, err = render(candidate, selected)
-    if not ok then return false, err end
+    if not ok then
+        return false, err
+    end
     state.snapshot = vim.deepcopy(snapshot)
     state.rows = vim.deepcopy(candidate)
     state.selected_key = selected
@@ -415,23 +469,47 @@ local function report_error(err)
 end
 
 local function request_refresh(options)
-    if not state.open or not valid_window(state.win) or state.refreshing then return false end
+    if not state.open or not valid_window(state.win) or state.refreshing then
+        return false
+    end
     state.refreshing = true
+    local token, instance = {}, state.instance
+    state.refresh_token = token
+    local function alive()
+        return state.open and state.instance == instance and state.refresh_token == token
+    end
     local function done(snapshot)
-        if not state.open then return end
-        local ok, candidate_or_err = pcall(build, snapshot)
-        if not ok then
-            report_error(candidate_or_err)
-        elseif candidate_or_err then
-            local committed, err = commit(snapshot, candidate_or_err)
-            if not committed then report_error(err) end
+        if not alive() then
+            return
         end
-        state.refreshing = false
-        state.cancel_task = nil
+        local called, committed, err = pcall(function()
+            local candidate, build_err = build(snapshot)
+            if not candidate then
+                return false, build_err
+            end
+            if not alive() then
+                return nil
+            end
+            return commit(snapshot, candidate)
+        end)
+        if alive() then
+            state.refreshing = false
+            state.refresh_token = nil
+            state.cancel_task = nil
+        end
+        if not called then
+            report_error(committed)
+        elseif committed == false then
+            report_error(err)
+        end
     end
     local async_options = vim.tbl_extend("force", {
         previous_snapshot = state.snapshot,
         on_error = function(err)
+            if not alive() then
+                return
+            end
+            state.refresh_token = nil
             state.refreshing = false
             state.cancel_task = nil
             report_error(err)
@@ -439,24 +517,32 @@ local function request_refresh(options)
     }, options or {})
     local ok, cancel_or_err = pcall(api.active.snapshot_async, done, async_options)
     if not ok then
-        state.refreshing = false
+        if alive() then
+            state.refreshing = false
+            state.refresh_token = nil
+        end
         report_error(cancel_or_err)
         return false
     end
-    state.cancel_task = type(cancel_or_err) == "function" and cancel_or_err or nil
+    if alive() then
+        state.cancel_task = type(cancel_or_err) == "function" and cancel_or_err or nil
+    end
     return true
 end
 
 local function content_window()
     local tab = vim.api.nvim_get_current_tabpage()
     for _, win in ipairs(vim.api.nvim_tabpage_list_wins(tab)) do
-        if win ~= state.win and valid_window(win) then return win end
+        if win ~= state.win and valid_window(win) and not editor.is_transient_window(win) then
+            return win
+        end
     end
     return vim.api.nvim_get_current_win()
 end
 
 local function ensure_width()
-    local requested = math.max(state.options.min_width, math.min(state.options.max_width, state.options.width))
+    local requested =
+        math.max(state.options.min_width, math.min(state.options.max_width, state.options.width))
     local current_width = vim.api.nvim_win_get_width(content_window())
     -- A vertical split consumes one separator column. Leave at least one
     -- usable editor column in the window that owns the split.
@@ -468,20 +554,33 @@ local function ensure_width()
 end
 
 local function enforce_width()
-    if not valid_window(state.win) then return false, "sidebar window is unavailable" end
+    if not valid_window(state.win) then
+        return false, "sidebar window is unavailable"
+    end
     local called, width, width_err = pcall(ensure_width)
-    if not called then return false, tostring(width) end
-    if not width then return false, width_err end
+    if not called then
+        return false, tostring(width)
+    end
+    if not width then
+        return false, width_err
+    end
     local ok, err = pcall(vim.api.nvim_win_set_width, state.win, width)
-    if not ok then return false, "failed to resize sidebar: " .. tostring(err) end
+    if not ok then
+        return false, "failed to resize sidebar: " .. tostring(err)
+    end
     return true
 end
 
 local function create_window()
     local width_ok, width, err = pcall(ensure_width)
-    if not width_ok then return nil, tostring(width) end
-    if not width then return nil, err end
-    local command = state.options.position == "right" and "botright vertical " or "topleft vertical "
+    if not width_ok then
+        return nil, tostring(width)
+    end
+    if not width then
+        return nil, err
+    end
+    local command = state.options.position == "right" and "botright vertical "
+        or "topleft vertical "
     local win
     local ok, create_err = pcall(function()
         vim.cmd(command .. tostring(width) .. "split")
@@ -498,7 +597,9 @@ local function create_window()
         vim.wo[win].statusline = ""
     end)
     if not ok then
-        if valid_window(win) then pcall(vim.api.nvim_win_close, win, true) end
+        if valid_window(win) then
+            pcall(vim.api.nvim_win_close, win, true)
+        end
         state.win, state.tab = nil, nil
         return nil, tostring(create_err)
     end
@@ -508,12 +609,18 @@ local function create_window()
 end
 
 local function attach_current(force, operation)
-    if state.cleanup_in_progress then return false, "sidebar cleanup in progress" end
+    if state.cleanup_in_progress then
+        return false, "sidebar cleanup in progress"
+    end
     if state.operation and state.operation ~= operation then
         return false, "sidebar " .. tostring(state.operation) .. " operation already in progress"
     end
-    if state.window_lost then return false, "sidebar window is unavailable" end
-    if not state.open or (editor.is_transient_ui_suspended() and not force) then return true end
+    if state.window_lost then
+        return false, "sidebar window is unavailable"
+    end
+    if not state.open or (editor.is_transient_ui_suspended() and not force) then
+        return true
+    end
     local tab = vim.api.nvim_get_current_tabpage()
     local previous_win = vim.api.nvim_get_current_win()
     if valid_window(state.win) and state.tab == tab then
@@ -521,18 +628,26 @@ local function attach_current(force, operation)
         local replaced = vim.api.nvim_win_get_buf(state.win) ~= sidebar_buf
         if replaced then
             local attached, attach_err = pcall(vim.api.nvim_win_set_buf, state.win, sidebar_buf)
-            if not attached then return false, "failed to restore sidebar buffer: " .. tostring(attach_err) end
+            if not attached then
+                return false, "failed to restore sidebar buffer: " .. tostring(attach_err)
+            end
             state.window_lost = false
             if state.snapshot then
                 local candidate, build_err = build(state.snapshot)
-                if not candidate then return false, build_err end
+                if not candidate then
+                    return false, build_err
+                end
                 local committed, render_err = commit(state.snapshot, candidate)
-                if not committed then return false, render_err end
+                if not committed then
+                    return false, render_err
+                end
             end
         end
         if not state.resizing then
             local sized, size_err = enforce_width()
-            if not sized then return false, size_err end
+            if not sized then
+                return false, size_err
+            end
         end
         return true
     end
@@ -559,37 +674,129 @@ local function attach_current(force, operation)
         local candidate, build_err = build(state.snapshot)
         if candidate then
             local committed, render_err = commit(state.snapshot, candidate)
-            if not committed then report_error(render_err) end
+            if not committed then
+                report_error(render_err)
+            end
         else
             report_error(build_err)
         end
     end
     if not state.resizing then
         local sized, size_err = enforce_width()
-        if not sized then return false, size_err end
+        if not sized then
+            return false, size_err
+        end
     end
     return true
 end
 
+-- A remembered selection is only for refresh/navigation, never an action target.
 local function selected_row()
-    local index = selected_index(state.rows)
-    return index and state.rows[index] or nil
+    if not state.open or not valid_window(state.win) then
+        return nil
+    end
+    local line = vim.api.nvim_win_get_cursor(state.win)[1]
+    for index, row_line in ipairs(state.row_lines) do
+        local row = state.rows[index]
+        if row_line == line and (row.kind == "session" or row.kind == "agent") then
+            return row
+        end
+    end
 end
 
-local function run_action(callback)
-    if state.pending_action then return false end
-    state.pending_action = true
-    local ok, result, err, _, diagnostics = pcall(callback)
-    state.pending_action = false
-    if not ok then report_error(result) return false end
-    if type(diagnostics) == "table" then notify_diagnostics(diagnostics) end
-    if result == false then report_error(err) return false end
+local function busy()
+    return not state.open or state.pending_action ~= nil or state.refreshing
+end
+
+local function live_session(id)
+    for _, session in ipairs(api.state.active()) do
+        if session.id == id then
+            return session
+        end
+    end
+    return nil, "selected session is no longer active"
+end
+
+-- The token spans prompts as well as lifecycle calls. Closing/reopening or a
+-- duplicate callback can never complete an action belonging to an old view.
+local function run_action(start)
+    if busy() then
+        return false
+    end
+    local token, instance = {}, state.instance
+    state.pending_action = token
+    local completed = false
+    local function alive()
+        return state.open and state.instance == instance and state.pending_action == token
+    end
+    local function finish(callback)
+        if completed or not alive() then
+            return false
+        end
+        completed = true
+        local called, ok, err, _, diagnostics = pcall(callback or function()
+            return nil
+        end)
+        if state.pending_action == token then
+            state.pending_action = nil
+        end
+        if not called then
+            log.error("sidebar: " .. tostring(ok))
+            return false
+        end
+        notify_diagnostics(diagnostics)
+        if ok == false then
+            if err == "unload cancelled" or err == "mark cancelled" then
+                log.info(err)
+            else
+                log.error("sidebar: " .. tostring(err))
+            end
+            return false
+        end
+        if ok and state.open and state.instance == instance then
+            local attached, attach_err = attach_current()
+            if not attached then
+                report_error(attach_err)
+            else
+                M.refresh()
+            end
+        end
+        return ok ~= false
+    end
+    local called, err = pcall(start, finish, alive)
+    if not called then
+        if state.pending_action == token then
+            state.pending_action = nil
+        end
+        log.error("sidebar: " .. tostring(err))
+        return false
+    end
     return true
 end
 
+local function session_action(callback)
+    local row = selected_row()
+    if not row then
+        return false
+    end
+    return run_action(function(finish, alive)
+        finish(function()
+            local session, err = live_session(row.session_id)
+            if not session then
+                return false, err
+            end
+            return callback(session, row, alive)
+        end)
+    end)
+end
+
 local function resize_sidebar()
-    if not state.open then return false, "sidebar is closed" end
-    if state.resizing then return true end
+    if not state.open then
+        return false, "sidebar is closed"
+    end
+    if state.resizing then
+        return true
+    end
     state.resizing = true
     local attached, attach_err = attach_current()
     if not attached then
@@ -598,7 +805,9 @@ local function resize_sidebar()
     end
     local sized, size_err = enforce_width()
     state.resizing = false
-    if sized then return true end
+    if sized then
+        return true
+    end
     local closed, close_err = M.close()
     if not closed then
         return false, tostring(size_err) .. "; " .. tostring(close_err)
@@ -606,61 +815,199 @@ local function resize_sidebar()
     return false, size_err
 end
 
-local function restore_after_action()
-    vim.schedule(function()
-        if state.open then
-            attach_current()
-            M.refresh()
+local function accept()
+    return session_action(function(session, row)
+        local diagnostics = {}
+        local agent_id = row.kind == "agent" and row.agent_id or nil
+        if not agent_id then
+            local ok, err, focused, values = api.agent.focused(session.id)
+            if not ok then
+                return false, err, nil, values
+            end
+            vim.list_extend(diagnostics, values or {})
+            agent_id = focused and focused.id
         end
+        local loaded, err, _, values = api.session.load(session.id)
+        vim.list_extend(diagnostics, values or {})
+        if not loaded and err ~= "session is already current" then
+            return false, err, nil, diagnostics
+        end
+        if agent_id then
+            local focused, focus_err, _, focus_values = api.agent.focus(session.id, agent_id)
+            vim.list_extend(diagnostics, focus_values or {})
+            -- Loading may already have committed; a focus failure is feedback,
+            -- not a failed/rolled-back session switch.
+            if not focused then
+                diagnostics[#diagnostics + 1] = focus_err
+            end
+        end
+        return true, nil, nil, diagnostics
     end)
 end
 
-local function accept()
+local function focus_agent()
     local row = selected_row()
-    if not row or not row.actions then return false end
-
-    local ok
-    if row.kind == "session" and row.actions.load then
-        ok = run_action(function() return api.session.load(row.session_id) end)
-    elseif row.kind == "agent" and row.actions.focus then
-        ok = run_action(function()
-            local loaded, load_err, _, load_diagnostics = api.session.load(row.session_id)
-            if not loaded and load_err ~= "session is already current" then
-                return false, load_err, nil, load_diagnostics
-            end
-            local focused_ok, focused_err, _, focus_diagnostics = api.agent.focus(row.session_id, row.agent_id)
-            local diagnostics = {}
-            vim.list_extend(diagnostics, load_diagnostics or {})
-            vim.list_extend(diagnostics, focus_diagnostics or {})
-            return focused_ok, focused_err, nil, diagnostics
-        end)
-    else
+    local current = api.state.current()
+    if not row or row.kind ~= "agent" or not current or current.id ~= row.session_id then
         return false
     end
+    return session_action(function(session)
+        return api.agent.focus(session.id, row.agent_id)
+    end)
+end
 
-    restore_after_action()
-    return ok
+local function prompt_action(kind)
+    local row = selected_row()
+    if not row then
+        return false
+    end
+    return run_action(function(finish, alive)
+        local session, err = live_session(row.session_id)
+        if not session then
+            finish(function()
+                return false, err
+            end)
+            return
+        end
+        local name = session.metadata.name
+        vim.ui.input({
+            prompt = kind == "rename" and ('Rename "' .. name .. '": ')
+                or ('Mark "' .. name .. '" (a-z, 0-9): '),
+            default = kind == "rename" and name or nil,
+        }, function(value)
+            finish(function()
+                local trimmed = value ~= nil and vim.trim(value) or ""
+                if trimmed == "" then
+                    return nil
+                end
+                local target, target_err = live_session(row.session_id)
+                if not target then
+                    return false, target_err
+                end
+                if kind == "rename" then
+                    return api.session.rename(target.id, trimmed)
+                end
+                local mark, parse_err = marks.parse(value)
+                if not mark then
+                    return false, parse_err
+                end
+                return marks.assign(target.id, mark, function()
+                    return alive() and live_session(target.id) ~= nil
+                end)
+            end)
+        end)
+    end)
+end
+
+local function delete_session()
+    return session_action(function(session, _, alive)
+        local current = api.state.current()
+        local message = table.concat({
+            'Delete session "' .. session.metadata.name .. '"?',
+            "Path: " .. session.metadata.cwd,
+            "State: " .. (current and current.id == session.id and "current" or "active"),
+            "This removes the stored session. Buffers and jobs are not deleted.",
+        }, "\n")
+        if vim.fn.confirm(message, "&Yes\n&No", 2) ~= 1 or not alive() then
+            return nil
+        end
+        local target, err = live_session(session.id)
+        if not target then
+            return false, err
+        end
+        return api.session.delete(target.id)
+    end)
+end
+
+local function clear_mark()
+    return session_action(function(session)
+        local ok, err, entries, diagnostics = api.session.list_marks()
+        if not ok then
+            return false, err, nil, diagnostics
+        end
+        for _, entry in ipairs(entries or {}) do
+            if entry.id == session.id then
+                local cleared, clear_err, item, values =
+                    api.session.clear_mark(entry.mark, { expected_id = session.id })
+                return cleared, clear_err, item, vim.list_extend(diagnostics or {}, values or {})
+            end
+        end
+        return nil
+    end)
+end
+
+local function redraw_view()
+    local candidate, err = build(state.snapshot)
+    if not candidate then
+        report_error(err)
+        return false
+    end
+    local committed, render_err = commit(state.snapshot, candidate)
+    if not committed then
+        report_error(render_err)
+    end
+    return committed
 end
 
 local function toggle_selected()
+    if busy() then
+        return false
+    end
     local row = selected_row()
-    if not row or row.kind ~= "session" or not row.expandable then return false end
-    state.expanded[row.key] = not state.expanded[row.key]
-    return M.refresh()
+    if not row then
+        return false
+    end
+    local key = rows.session_key(row.session_id)
+    local previous = state.expanded[key]
+    state.expanded[key] = not previous
+    if redraw_view() then
+        return true
+    end
+    state.expanded[key] = previous
+    return false
 end
 
 local function expand_all()
-    local all_expanded = true
+    if busy() then
+        return false
+    end
+    local previous = vim.deepcopy(state.expanded)
+    local any_expanded = false
     for _, row in ipairs(state.rows) do
-        if row.kind == "session" and not state.expanded[row.key] then all_expanded = false break end
+        if row.kind == "session" and state.expanded[row.key] then
+            any_expanded = true
+            break
+        end
     end
     for _, row in ipairs(state.rows) do
-        if row.kind == "session" then state.expanded[row.key] = not all_expanded end
+        if row.kind == "session" then
+            state.expanded[row.key] = not any_expanded
+        end
     end
-    return M.refresh()
+    if redraw_view() then
+        return true
+    end
+    state.expanded = previous
+    return false
+end
+
+local function cycle_sort()
+    if busy() then
+        return false
+    end
+    local previous = state.sort
+    state.sort = search.next_sort(previous)
+    if redraw_view() then
+        return true
+    end
+    state.sort = previous
+    return false
 end
 
 local function move_header(direction)
+    if busy() then
+        return false
+    end
     local current = selected_index(state.rows) or 1
     local target
     if direction > 0 then
@@ -672,7 +1019,10 @@ local function move_header(direction)
         end
         if not target then
             for index, row in ipairs(state.rows) do
-                if row.kind == "session" then target = index break end
+                if row.kind == "session" then
+                    target = index
+                    break
+                end
             end
         end
     else
@@ -684,11 +1034,16 @@ local function move_header(direction)
         end
         if not target then
             for index = #state.rows, 1, -1 do
-                if state.rows[index].kind == "session" then target = index break end
+                if state.rows[index].kind == "session" then
+                    target = index
+                    break
+                end
             end
         end
     end
-    if not target then return false end
+    if not target then
+        return false
+    end
     state.selected_key = state.rows[target].key
     render(state.rows, state.selected_key, true)
     return true
@@ -696,7 +1051,9 @@ end
 
 local function select_mouse()
     local position = vim.fn.getmousepos()
-    if position.winid ~= state.win then return false end
+    if position.winid ~= state.win then
+        return false
+    end
     for index, line in ipairs(state.row_lines) do
         if line == position.line and state.rows[index] then
             state.selected_key = state.rows[index].key
@@ -710,22 +1067,77 @@ end
 local function install_mappings()
     local opts = { buffer = state.buf, noremap = true, silent = true, nowait = true }
     local function map(lhs, callback)
-        vim.keymap.set("n", lhs, callback, opts)
+        -- r is also the prefix of rr; it must wait for the second key.
+        vim.keymap.set("n", lhs, callback, vim.tbl_extend("force", opts, { nowait = lhs ~= "r" }))
     end
     map("<CR>", accept)
     map("<Tab>", toggle_selected)
     map("<S-Tab>", expand_all)
-    map("<C-j>", function() return move_header(1) end)
-    map("<C-k>", function() return move_header(-1) end)
+    map("<C-j>", function()
+        return move_header(1)
+    end)
+    map("<C-k>", function()
+        return move_header(-1)
+    end)
     map("<C-r>", M.refresh)
     map("r", M.refresh)
-    map("?", function() vim.notify("Sess sidebar: <CR> switch, <Tab> expand, <C-r> refresh, q close") end)
+    map("rr", function()
+        return prompt_action("rename")
+    end)
+    map("uu", function()
+        return session_action(function(session, _, alive)
+            return require("sess.ui.unload")(session.id, alive)
+        end)
+    end)
+    map("dd", delete_session)
+    map("<C-b>", function()
+        return prompt_action("mark")
+    end)
+    map("um", clear_mark)
+    map("p", function()
+        return session_action(function(session)
+            return api.session.toggle_pin(session.id)
+        end)
+    end)
+    map("<C-y>", function()
+        return session_action(function(session)
+            local result = vim.fn.setreg("+", session.metadata.cwd)
+            if result ~= 0 then
+                return false, "failed to copy session path"
+            end
+            return nil
+        end)
+    end)
+    map("<C-o>", focus_agent)
+    map("<C-s>", cycle_sort)
+    map("?", function()
+        local row = selected_row()
+        local current = api.state.current()
+        local reason = not row and "cursor is not on a session/agent row" or nil
+        if row and not live_session(row.session_id) then
+            reason = "session is no longer active"
+        end
+        help.show({
+            row_reason = reason,
+            clear_reason = reason
+                or (not (state.snapshot.marks_by_id or {})[row.session_id] and "session has no mark")
+                or nil,
+            focus_reason = reason
+                or (row.kind ~= "agent" and "select an agent row")
+                or (not current or current.id ~= row.session_id) and "agent session is not current"
+                or nil,
+            busy = state.pending_action ~= nil or state.refreshing,
+            mouse = state.options.mouse,
+        })
+    end)
     map("q", M.close)
     map("<Esc>", M.close)
     if state.options.mouse then
         map("<LeftMouse>", select_mouse)
         map("<2-LeftMouse>", function()
-            if select_mouse() then accept() end
+            if select_mouse() then
+                accept()
+            end
         end)
     end
 end
@@ -735,7 +1147,12 @@ function M.configure(options)
     if state.options.enabled and state.options.toggle_key ~= false then
         local key = vim.api.nvim_replace_termcodes(state.options.toggle_key, true, false, true)
         if vim.fn.maparg(key, "n") == "" then
-            vim.keymap.set("n", state.options.toggle_key, M.toggle, { desc = "Toggle Sess sidebar", silent = true })
+            vim.keymap.set(
+                "n",
+                state.options.toggle_key,
+                M.toggle,
+                { desc = "Toggle Sess sidebar", silent = true }
+            )
         else
             log.warn("sidebar toggle key is already mapped: " .. state.options.toggle_key)
         end
@@ -743,7 +1160,12 @@ function M.configure(options)
 end
 
 local function close_sidebar()
-    if not state.open then return true end
+    if not state.open then
+        return true
+    end
+    if not help.close() then
+        return false, "failed to close sidebar help"
+    end
     stop_polling()
     if valid_window(state.win) then
         local closed, err = close_owned_window(state.win)
@@ -752,21 +1174,32 @@ local function close_sidebar()
         end
     end
     state.open = false
+    state.instance, state.pending_action = nil, nil
     state.win, state.tab = nil, nil
     return true
 end
 
 function M.open()
-    if state.cleanup_in_progress then return false, "sidebar cleanup in progress" end
+    if state.cleanup_in_progress then
+        return false, "sidebar cleanup in progress"
+    end
     return run_operation("open", function()
-        if not state.options.enabled then return false, "sidebar is disabled" end
+        if not state.options.enabled then
+            return false, "sidebar is disabled"
+        end
         if state.open then
             local attached, attach_err = attach_current(nil, "open")
-            if not attached then return false, attach_err end
+            if not attached then
+                return false, attach_err
+            end
             return true
         end
         local snapshot_ok, snapshot = pcall(api.active.initial_snapshot)
-        if not snapshot_ok then return false, tostring(snapshot) end
+        if not snapshot_ok then
+            return false, tostring(snapshot)
+        end
+        state.instance, state.pending_action = {}, nil
+        state.sort = "default"
         state.expanded = initial_expansion(snapshot)
         local win, err = create_window()
         if not win then
@@ -792,12 +1225,16 @@ function M.open()
 end
 
 function M.close()
-    if state.cleanup_in_progress then return false, "sidebar cleanup in progress" end
+    if state.cleanup_in_progress then
+        return false, "sidebar cleanup in progress"
+    end
     return run_operation("close", close_sidebar)
 end
 
 function M.toggle()
-    if state.open then return M.close() end
+    if state.open then
+        return M.close()
+    end
     return M.open()
 end
 
@@ -806,10 +1243,19 @@ function M.is_open()
 end
 
 function M.refresh()
-    if not state.open then return false, "sidebar is closed" end
+    if not state.open then
+        return false, "sidebar is closed"
+    end
+    if state.pending_action then
+        return false, "sidebar action in progress"
+    end
     local attached, attach_err = attach_current()
-    if not attached then return false, attach_err end
-    if state.refreshing then return true end
+    if not attached then
+        return false, attach_err
+    end
+    if state.refreshing then
+        return true
+    end
     return request_refresh({ marks = true })
 end
 
@@ -819,7 +1265,12 @@ function M.stop()
 end
 
 local function suspend_transient()
-    if not state.open then return true end
+    if not state.open then
+        return true
+    end
+    if not help.close() then
+        return false, "failed to close sidebar help"
+    end
     stop_polling()
     local old_win = state.win
     if valid_window(old_win) then
@@ -839,12 +1290,16 @@ local function suspend_transient()
 end
 
 local function resume_transient()
-    if not state.open then return true end
+    if not state.open then
+        return true
+    end
     local attached, attach_err = attach_current(true)
     if not attached then
         stop_polling()
         local err = "sidebar could not attach after editor transition"
-        if attach_err then err = err .. ": " .. tostring(attach_err) end
+        if attach_err then
+            err = err .. ": " .. tostring(attach_err)
+        end
         report_error(err)
         return false, err
     end
@@ -853,16 +1308,22 @@ local function resume_transient()
 end
 
 local function owned_window_closed(win)
-    if state.closing_window or state.win ~= win then return end
+    if state.closing_window or state.win ~= win then
+        return
+    end
     state.win, state.tab = nil, nil
     state.window_lost = true
     stop_polling()
     -- A tab close emits WinClosed before TabEnter for the replacement tab.
     -- Defer deciding whether this was an external close until that callback.
     vim.schedule(function()
-        if not state.window_lost then return end
+        if not state.window_lost then
+            return
+        end
         state.window_lost = false
         state.open = false
+        state.instance, state.pending_action = nil, nil
+        help.close()
     end)
 end
 
@@ -870,6 +1331,10 @@ vim.api.nvim_create_autocmd("TabEnter", {
     group = sidebar_group,
     callback = function()
         if state.open and not editor.is_transient_ui_suspended() then
+            if not help.close() then
+                report_error("failed to close sidebar help on tab change")
+                return
+            end
             state.window_lost = false
             local content_win = vim.api.nvim_get_current_win()
             local attached, attach_err = attach_current()
@@ -885,7 +1350,9 @@ vim.api.nvim_create_autocmd("WinClosed", {
     group = sidebar_group,
     callback = function(args)
         local win = tonumber(args.match)
-        if win then owned_window_closed(win) end
+        if win then
+            owned_window_closed(win)
+        end
     end,
 })
 vim.api.nvim_create_autocmd("BufWipeout", {
@@ -903,25 +1370,36 @@ vim.api.nvim_create_autocmd("BufWipeout", {
                     state.closing_window = false
                     if not closed then
                         state.cleanup_in_progress = false
-                        report_error("failed to close sidebar window after buffer wipe: " .. tostring(close_err))
+                        report_error(
+                            "failed to close sidebar window after buffer wipe: "
+                                .. tostring(close_err)
+                        )
                         return
                     end
                 end
                 state.open, state.win, state.tab = false, nil, nil
+                state.instance, state.pending_action = nil, nil
+                help.close()
                 stop_polling()
             end
             -- Keep the guard through the rest of the current autocmd event:
             -- a nested user callback must not reopen the sidebar after the
             -- owned window is closed but before this cleanup returns.
-            vim.schedule(function() state.cleanup_in_progress = false end)
+            vim.schedule(function()
+                state.cleanup_in_progress = false
+            end)
         end
     end,
 })
 local function on_resize()
-    if not state.open then return end
+    if not state.open then
+        return
+    end
     local resized, resize_err = resize_sidebar()
     if not resized then
-        if resize_err then report_error(resize_err) end
+        if resize_err then
+            report_error(resize_err)
+        end
         return
     end
     M.refresh()
@@ -936,6 +1414,8 @@ local registered, registration_err = editor.register_transient_owner({
     suspend = suspend_transient,
     resume = resume_transient,
 })
-if not registered then log.warn("sidebar transient owner registration failed: " .. tostring(registration_err)) end
+if not registered then
+    log.warn("sidebar transient owner registration failed: " .. tostring(registration_err))
+end
 
 return M

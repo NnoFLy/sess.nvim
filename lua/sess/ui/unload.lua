@@ -62,6 +62,14 @@ local function confirm(request)
     return "save", paths
 end
 
-return function(target)
-    return api.session.unload(target, { confirm = confirm })
+return function(target, is_alive)
+    return api.session.unload(target, {
+        confirm = function(request)
+            local choice, paths = confirm(request)
+            if is_alive and not is_alive() then
+                return "cancel"
+            end
+            return choice, paths
+        end,
+    })
 end

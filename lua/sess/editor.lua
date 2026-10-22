@@ -709,9 +709,15 @@ function M.source_snapshot(snapshot_path, content)
         return false, terminal_error
     end
 
+    -- :mksession remembers the empty starting buffer for cleanup. Autocommands
+    -- or bufhidden=wipe may remove it first; guard only that generated cleanup
+    -- so E517 cannot abort the rest of the snapshot. Do not rewrite stored data
+    -- or suppress other Vimscript errors.
+    content = content:gsub("(\nif exists%('s:wipebuf'%) && )", "%1bufexists(s:wipebuf) && ")
+
     -- Storage reads the snapshot through its descriptor-relative, no-follow
-    -- boundary. Execute those bytes directly; :source would reopen a pathname
-    -- after that validation and reintroduce the leaf-replacement race.
+    -- boundary. Execute the validated content in memory; :source would reopen
+    -- a pathname and reintroduce the leaf-replacement race.
     vim.api.nvim_exec(content, false)
     vim.v.this_session = snapshot_path
     return true

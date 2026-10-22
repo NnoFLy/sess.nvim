@@ -84,12 +84,35 @@ require("sess").setup({
 and agents, refreshes while open, and preserves selection across tab changes.
 The cursor can move freely onto the title, separators, and footer without
 refresh snapping it back to a session or agent.
-`<CR>` switches/focuses, `<Tab>` expands or collapses, `<S-Tab>` expands all or
-collapses all, `<C-j>`/`<C-k>` move between sessions, and `<C-r>`/`r` refresh.
-`?` shows help and `q` or `<Esc>` closes it. A click selects and a double-click
-accepts when Neovim mouse reporting is enabled; Sess.nvim never changes the
-global `mouse` option. Sidebar buffers and windows are transient UI and are not
-captured, saved, restored, or unloaded with sessions.
+All mappings are fixed, buffer-local normal-mode keys:
+
+| Keys | Action |
+| --- | --- |
+| `<CR>` | Load session, then focus the selected agent (or remembered agent on a header). |
+| `<Tab>` / `<S-Tab>` | Toggle parent expansion / collapse all if any expanded, else expand all. |
+| `<C-j>` / `<C-k>` | Next / previous session header. |
+| `r` / `<C-r>` | Refresh. |
+| `rr` / `uu` / `dd` | Rename / safely unload / confirm deletion. |
+| `<C-b>` / `um` | Assign / clear mark. |
+| `p` / `<C-y>` | Toggle pin / copy full cwd to the `+` register. |
+| `<C-o>` | Focus selected agent without switching (current session only). |
+| `<C-s>` | Cycle sort: default → recent → pinned → activity → name. |
+| `?` / `q` / `<Esc>` | Scrollable help / close (in help, dismiss help). |
+
+Help lists available actions first, followed by dimmed unavailable actions grouped
+under a `▸` heading for each shared reason.
+
+Row actions require the cursor on a real session/agent row; session operations
+on agents target their parent. Title, separator, placeholder and footer lines
+never act on a remembered selection. Sort is sidebar-local, survives refresh,
+and resets on close/reopen. Headers show pins and existing marks. A click
+selects and a double-click accepts when mouse reporting is enabled; Sess.nvim
+never changes the global `mouse` option. The sidebar stays open after switches,
+unloads and deletes, including cancellation/failure. Unload uses the shared
+Save/Discard/Cancel and Stop/Cancel safety prompts. Sidebar/help resources are
+transient and excluded from session captures. The sidebar does not require
+Telescope or provide search, create, restore-deleted, density control or
+configurable action keys.
 
 See [`:help sess-api.opts`](doc/sessionizer.txt) for all options and
 [`:help sess-telescope`](doc/sessionizer.txt) for picker options.

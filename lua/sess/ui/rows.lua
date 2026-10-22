@@ -201,7 +201,10 @@ local function session_parts(session, options)
     end
 
     local parts = { { text = tree } }
-    if options.show_metadata ~= false and options.show_pinned ~= false then
+    if
+        options.show_pinned == true
+        or (options.show_metadata ~= false and options.show_pinned ~= false)
+    then
         local pinned = metadata.pinned == true
         parts[#parts + 1] = {
             text = pinned and (symbols.metadata.pinned .. " ") or "  ",
@@ -296,7 +299,10 @@ local function active_session_row(session, view, options, widths)
     local current = view.current_id == session.id
     local stale = type(view.stale_by_id) == "table" and view.stale_by_id[session.id] == true
     local loaded = view.agents_loaded_by_id == nil
-        or (type(view.agents_loaded_by_id) == "table" and view.agents_loaded_by_id[session.id] == true)
+        or (
+            type(view.agents_loaded_by_id) == "table"
+            and view.agents_loaded_by_id[session.id] == true
+        )
     local fields = safe_fields(session, {
         mark = mark,
         current = current,
@@ -314,7 +320,7 @@ local function active_session_row(session, view, options, widths)
         mark = mark,
         mark_width = widths.mark,
         name_width = widths.session_name,
-        show_pinned = false,
+        show_pinned = options.show_pinned == true,
         name_highlight = current and (options.highlights.current or options.highlights.name)
             or options.highlights.active,
         status_highlight = stale and options.highlights.stale or nil,
@@ -347,23 +353,51 @@ local function active_session_row(session, view, options, widths)
     return row, agents, mark, fields, group_ordinal
 end
 
-local function active_agent_row(session, agent, index, count, parent, view, options, widths, mark, group_fields, group_ordinal)
+local function active_agent_row(
+    session,
+    agent,
+    index,
+    count,
+    parent,
+    view,
+    options,
+    widths,
+    mark,
+    group_fields,
+    group_ordinal
+)
     agent = type(agent) == "table" and agent or {}
     local state = status(agent.status)
-    local branch = index == count and options.symbols.tree.last_branch or options.symbols.tree.branch
-    local focused = type(view.focused_by_id) == "table" and view.focused_by_id[session.id] == agent.id
+    local branch = index == count and options.symbols.tree.last_branch
+        or options.symbols.tree.branch
+    local focused = type(view.focused_by_id) == "table"
+        and view.focused_by_id[session.id] == agent.id
     local focus_marker = focused and options.symbols.focus or " "
     local indent = options.available_width and options.available_width < 40 and "" or "  "
     local info = agent.info and text(agent.info) ~= "" and "  " .. text(agent.info) or ""
     local parts = display.fit_parts({
         {
-            text = indent .. branch .. " " .. focus_marker .. " " .. options.symbols.status[state] .. " ",
+            text = indent
+                .. branch
+                .. " "
+                .. focus_marker
+                .. " "
+                .. options.symbols.status[state]
+                .. " ",
             highlight = focused and (options.highlights.focused or options.highlights.agent)
                 or options.highlights.agent,
         },
-        { text = pad(agent.name, widths.agent_name), highlight = options.highlights.agent, shrink_priority = 3, min_width = 1 },
+        {
+            text = pad(agent.name, widths.agent_name),
+            highlight = options.highlights.agent,
+            shrink_priority = 3,
+            min_width = 1,
+        },
         { text = "  " },
-        { text = pad(state, widths.status), highlight = options.highlights[state] or options.highlights.agent },
+        {
+            text = pad(state, widths.status),
+            highlight = options.highlights[state] or options.highlights.agent,
+        },
         {
             text = info,
             highlight = options.highlights.agent,
@@ -434,11 +468,15 @@ function M.build_active(view, options)
     end
     for _, session in ipairs(sorted) do
         local metadata = type(session.metadata) == "table" and session.metadata or {}
-        widths.session_name = math.max(widths.session_name, display.display_width(text(metadata.name)))
-        local session_agents = type(agents_by_id[session.id]) == "table" and agents_by_id[session.id] or {}
+        widths.session_name =
+            math.max(widths.session_name, display.display_width(text(metadata.name)))
+        local session_agents = type(agents_by_id[session.id]) == "table"
+                and agents_by_id[session.id]
+            or {}
         for _, agent in ipairs(session_agents) do
             if type(agent) == "table" then
-                widths.agent_name = math.max(widths.agent_name, display.display_width(text(agent.name)))
+                widths.agent_name =
+                    math.max(widths.agent_name, display.display_width(text(agent.name)))
                 widths.status = math.max(widths.status, display.display_width(status(agent.status)))
             end
         end
@@ -448,13 +486,15 @@ function M.build_active(view, options)
     for _, session in ipairs(sorted) do
         local session_key = M.session_key(session.id)
         local is_expanded = expanded[session_key] == true or expanded[session.id] == true
-        local header, agents, mark, group_fields, group_ordinal = active_session_row(session, view, {
-            expanded = is_expanded,
-            available_width = options.available_width,
-            symbols = options.symbols,
-            highlights = options.highlights,
-            show_metadata = options.show_metadata,
-        }, widths)
+        local header, agents, mark, group_fields, group_ordinal =
+            active_session_row(session, view, {
+                expanded = is_expanded,
+                available_width = options.available_width,
+                symbols = options.symbols,
+                highlights = options.highlights,
+                show_metadata = options.show_metadata,
+                show_pinned = options.show_pinned,
+            }, widths)
         rows[#rows + 1] = header
         if is_expanded then
             local valid_agents = {}
@@ -465,7 +505,12 @@ function M.build_active(view, options)
             end
             if #valid_agents == 0 then
                 local parts = display.fit_parts({
-                    { text = options.available_width and options.available_width < 40 and options.symbols.tree.empty or "  " .. options.symbols.tree.empty },
+                    {
+                        text = options.available_width
+                                and options.available_width < 40
+                                and options.symbols.tree.empty
+                            or "  " .. options.symbols.tree.empty,
+                    },
                     { text = "no agents", shrink_priority = 1, min_width = 1 },
                 }, options.available_width)
                 local row = row_base("placeholder", { session_id = session.id }, {
@@ -504,12 +549,13 @@ function M.build_active(view, options)
             end
         end
     end
-    return rows, {
-        count = #rows,
-        session_count = #sorted,
-        generation = view.generation or view.snapshot_generation,
-        diagnostics = copy(view.diagnostics or {}),
-    }
+    return rows,
+        {
+            count = #rows,
+            session_count = #sorted,
+            generation = view.generation or view.snapshot_generation,
+            diagnostics = copy(view.diagnostics or {}),
+        }
 end
 
 local function regular_session_row(session, view, options, widths)
@@ -532,8 +578,11 @@ local function regular_session_row(session, view, options, widths)
         mark = view.marks_by_id and view.marks_by_id[session.id],
         mark_width = widths.mark,
         name_width = widths.name,
-        session_metadata = session.id and options.mode ~= "compact" and options.show_metadata ~= false
-            and M.format_session_metadata(metadata, options.now, options.symbols.separator) or nil,
+        session_metadata = session.id
+                and options.mode ~= "compact"
+                and options.show_metadata ~= false
+                and M.format_session_metadata(metadata, options.now, options.symbols.separator)
+            or nil,
         available_width = options.available_width,
         path_style = options.path_style,
         show_metadata = options.show_metadata,
@@ -576,43 +625,70 @@ function M.build(view, options, expansion)
                 local deleted_at = tonumber(entry.deleted_at)
                 local deleted = deleted_at and os.date("%Y-%m-%d %H:%M", deleted_at) or "unknown"
                 local parts = display.fit_parts({
-                    { text = text(metadata.name or entry.name), shrink_priority = 3, min_width = 1 },
+                    {
+                        text = text(metadata.name or entry.name),
+                        shrink_priority = 3,
+                        min_width = 1,
+                    },
                     { text = "  " },
-                    { text = text(metadata.cwd or entry.path), truncate = "middle", ellipsis = options.symbols.ellipsis, shrink_priority = 1, min_width = 1, expendable = true },
+                    {
+                        text = text(metadata.cwd or entry.path),
+                        truncate = "middle",
+                        ellipsis = options.symbols.ellipsis,
+                        shrink_priority = 1,
+                        min_width = 1,
+                        expendable = true,
+                    },
                     { text = "  " .. deleted, omit_priority = 5 },
                 }, options.available_width)
-                local row = row_base("deleted_session", entry, { key = M.deleted_key(entry.id or entry.key), actions = { restore = true } })
+                local row = row_base(
+                    "deleted_session",
+                    entry,
+                    { key = M.deleted_key(entry.id or entry.key), actions = { restore = true } }
+                )
                 row.deleted = entry
                 row.display_parts, row.display = parts, parts_text(parts)
-                row.search_fields, row.ordinal = fields, search.ordinal(fields) .. " " .. text(entry.id) .. " " .. text(entry.key) .. " " .. deleted
+                row.search_fields = fields
+                row.ordinal = table.concat({
+                    search.ordinal(fields),
+                    text(entry.id),
+                    text(entry.key),
+                    deleted,
+                }, " ")
                 rows[#rows + 1] = row
             end
         end
-        return search.sort_results(rows, options.sort), {
-            count = #rows,
-            generation = view.generation or view.snapshot_generation,
-            diagnostics = copy(view.diagnostics or {}),
-        }
+        return search.sort_results(rows, options.sort),
+            {
+                count = #rows,
+                generation = view.generation or view.snapshot_generation,
+                diagnostics = copy(view.diagnostics or {}),
+            }
     end
 
     if options.mode == "directory" then
         local rows = {}
         for _, entry in ipairs(view.directories or view.entries or {}) do
             if type(entry) == "table" then
-                local row = row_base("directory", entry, { key = M.directory_key(entry.path or entry.cwd), actions = { load = true, create = true } })
+                local row = row_base("directory", entry, {
+                    key = M.directory_key(entry.path or entry.cwd),
+                    actions = { load = true, create = true },
+                })
                 row.path, row.prompt, row.directory = entry.path, entry.prompt, true
-                row.display_parts = entry.display_parts or { { text = text(entry.name or entry.path) } }
+                row.display_parts = entry.display_parts
+                    or { { text = text(entry.name or entry.path) } }
                 row.display = parts_text(row.display_parts)
                 row.search_fields = entry.search_fields or safe_fields(entry)
                 row.ordinal = search.ordinal(row.search_fields)
                 rows[#rows + 1] = row
             end
         end
-        return search.sort_results(rows, options.sort), {
-            count = #rows,
-            generation = view.generation or view.snapshot_generation,
-            diagnostics = copy(view.diagnostics or {}),
-        }
+        return search.sort_results(rows, options.sort),
+            {
+                count = #rows,
+                generation = view.generation or view.snapshot_generation,
+                diagnostics = copy(view.diagnostics or {}),
+            }
     end
 
     local sessions = view.sessions or view.entries or {}
@@ -620,22 +696,27 @@ function M.build(view, options, expansion)
     for _, session in ipairs(sessions) do
         if type(session) == "table" then
             local metadata = type(session.metadata) == "table" and session.metadata or {}
-            widths.name = math.max(widths.name, display.display_width(text(metadata.name or session.name)))
+            widths.name =
+                math.max(widths.name, display.display_width(text(metadata.name or session.name)))
             local mark = view.marks_by_id and view.marks_by_id[session.id]
             widths.mark = math.max(widths.mark, display.display_width(text(mark)))
         end
     end
     for _, session in ipairs(sessions) do
-        if type(session) == "table" and not (view.exclude_current and view.current_id == session.id) then
+        if
+            type(session) == "table"
+            and not (view.exclude_current and view.current_id == session.id)
+        then
             rows[#rows + 1] = regular_session_row(session, view, options, widths)
         end
     end
     rows = search.sort_results(rows, options.sort)
-    return rows, {
-        count = #rows,
-        generation = view.generation or view.snapshot_generation,
-        diagnostics = copy(view.diagnostics or {}),
-    }
+    return rows,
+        {
+            count = #rows,
+            generation = view.generation or view.snapshot_generation,
+            diagnostics = copy(view.diagnostics or {}),
+        }
 end
 
 M.build_rows = M.build

@@ -167,9 +167,10 @@ COMMANDS                                                     *sess-commands*
     open and preserves selection and expansion across refreshes and tab
     changes. Refresh does not snap the cursor back into session/agent rows
     when it is on the title, separators, or footer.
-    <CR> switches/focuses, <Tab> expands, r or <C-r> refreshes, and
-    q/<Esc> closes. A single mouse click selects and a double click accepts;
-    mappings are buffer-local and do not change the global 'mouse' option.
+    Session actions require the cursor on a real session or agent row, never
+    a remembered selection on title/separator/placeholder/footer lines. Agent
+    rows target their parent for session operations. Confirmations identify
+    the target. View-wide actions work anywhere.
 
     sidebar.enabled enables the command; sidebar.start_open opens it after
     setup. position is left or right; width is clamped to min_width, max_width,
@@ -177,13 +178,45 @@ COMMANDS                                                     *sess-commands*
     toggle_key is false or an unclaimed normal-mode key, and refresh_interval
     is a positive integer in milliseconds.
 
-    Buffer-local mappings are <CR> (switch/focus), <Tab> (toggle the selected
-    group), <S-Tab> (expand all or collapse all), <C-j>/<C-k> (next/previous
-    session), <C-r> and r (refresh), ? (help), and q/<Esc> (close). When mouse
-    is true, a click selects and a double-click accepts; the global 'mouse'
-    option is not changed.
+    Fixed buffer-local normal-mode mappings (no keymap configuration):
+      <CR>            Load session, then focus selected agent; on a header,
+                      focus its remembered agent if present.
+      <Tab>           Toggle parent expansion (session or agent row).
+      <S-Tab>         Collapse all if ANY expanded; otherwise expand all.
+      <C-j>/<C-k>     Next/previous session header, wrapping.
+      r / <C-r>       Refresh (r waits briefly because it also prefixes rr).
+      rr              Rename selected session/parent; blank input cancels.
+      uu              Safely unload selected session/parent using shared
+                      Save/Discard/Cancel and Stop/Cancel confirmations.
+      dd              Confirm deletion of selected session/parent; default No.
+                      Removes stored session, not live buffers/jobs.
+      <C-b>           Assign mark (a-z, 0-9); confirm replacing an owner.
+      um              Clear parent's assigned mark; no-op when none.
+      p               Toggle parent's pin (shown only on sidebar headers).
+      <C-y>           Copy full parent cwd to + register; report clipboard errors.
+      <C-o>           Focus selected agent WITHOUT switching; current session
+                      only, not a session-header action.
+      <C-s>           Cycle default -> recent -> pinned -> activity -> name
+                      -> default using shared picker sorting.
+      ?               Temporary, scrollable native help listing ALL actions.
+                      Available actions come first; unavailable actions are
+                      dimmed and grouped under a ▸ heading for each shared
+                      reason, including disabled mouse actions.
+      q / <Esc>       Close sidebar; in help, dismiss and restore origin focus
+                      without changing sidebar selection or view.
+    When mouse is true, a click selects and a double-click accepts; the global
+    'mouse' option is not changed. Pending prompts block conflicting actions
+    and refresh. Late callbacks after close/reopen or a vanished target cannot
+    mutate the old selection. Errors are reported separately from successful
+    diagnostics; cancellation preserves live state and sidebar visibility.
 
-    Sidebar buffers and windows are transient UI. The editor adapter excludes
+    Sort is sidebar-local: preserved while open/across refresh and reset on
+    close/reopen. The footer shows the current mode; failed redraw retains the
+    previous mode/view. Pins use the existing icon/ASCII fallback; Telescope
+    headers are unchanged. The sidebar does not require Telescope or provide
+    search/filter, create, restore-deleted or density controls.
+
+    Sidebar and help buffers/windows are transient UI. The editor adapter excludes
     them from captured and persisted session state, layout/current-window
     restore, and resource cleanup. The logical sidebar follows the current
     tab without leaving a background-tab window. Session transitions retain
