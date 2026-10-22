@@ -625,6 +625,7 @@ local function restore_impl(view, rollback)
     command("cd", view.cwd)
 
     local selected
+    local restored_tabs = {}
     local diagnostics = {}
     local tabs = {}
     for _, tab in ipairs(view.tabs) do
@@ -654,28 +655,14 @@ local function restore_impl(view, rollback)
             error(layout_err)
         end
 
+        local restored_tab = { id = vim.api.nvim_get_current_tabpage(), windows = {} }
+        restored_tabs[#restored_tabs + 1] = restored_tab
         for old, win in pairs(mapping) do
-            local width_ok, width_err =
-                pcall(vim.api.nvim_win_set_width, win, tab.windows[old].width)
-            if not width_ok then
-                table.insert(
-                    diagnostics,
-                    string.format("failed to restore window %s width: %s", old, tostring(width_err))
-                )
-            end
-
-            local height_ok, height_err =
-                pcall(vim.api.nvim_win_set_height, win, tab.windows[old].height)
-            if not height_ok then
-                table.insert(
-                    diagnostics,
-                    string.format(
-                        "failed to restore window %s height: %s",
-                        old,
-                        tostring(height_err)
-                    )
-                )
-            end
+            restored_tab.windows[#restored_tab.windows + 1] = {
+                id = old,
+                win = win,
+                saved = tab.windows[old],
+            }
         end
 
         for _, float in ipairs(tab.floats) do
@@ -715,6 +702,45 @@ local function restore_impl(view, rollback)
 
         if tab.id == view.current then
             selected = vim.api.nvim_get_current_win()
+        end
+    end
+
+    -- Build every tab before applying dimensions: with showtabline=1, sizing
+    -- the first tab while it is alone gives the hidden tabline's row to
+    -- cmdheight. Repeated captures/restores would keep accumulating that row.
+    for _, tab in ipairs(restored_tabs) do
+        -- Resize in the owning tab so Neovim uses its command/status-line space.
+        local focused, focus_err = pcall(vim.api.nvim_set_current_tabpage, tab.id)
+        if not focused then
+            error(tostring(focus_err))
+        end
+
+        for _, window in ipairs(tab.windows) do
+            local width_ok, width_err =
+                pcall(vim.api.nvim_win_set_width, window.win, window.saved.width)
+            if not width_ok then
+                table.insert(
+                    diagnostics,
+                    string.format(
+                        "failed to restore window %s width: %s",
+                        window.id,
+                        tostring(width_err)
+                    )
+                )
+            end
+
+            local height_ok, height_err =
+                pcall(vim.api.nvim_win_set_height, window.win, window.saved.height)
+            if not height_ok then
+                table.insert(
+                    diagnostics,
+                    string.format(
+                        "failed to restore window %s height: %s",
+                        window.id,
+                        tostring(height_err)
+                    )
+                )
+            end
         end
     end
 
