@@ -81,19 +81,26 @@ require("sess").setup({
 })
 ```
 
-`smart_auto_load` defaults to `"current"`: at a pristine startup, load the session
-for the exact normalized cwd, or create one if no session matches. Choose
+`smart_auto_load` defaults to `"current"`: at an implicit startup, load the session
+for the exact normalized cwd. If none matches, create one only when the startup
+editor is empty; meaningful unmanaged state is left untouched. Choose
 `"all"` to resume the previous managed editor instance's active sessions, in
 recorded order, with its current session visible. Saved-only sessions stay
 inactive. Choose `"none"` to disable automatic loading; booleans are rejected.
 Omitted/nil configuration uses the default.
 
-Both loading modes skip explicit files, stdin, `-S`, `-c`, `+cmd`, `--cmd`, late
-setup, existing sessions, and non-pristine editor state. Eligibility is checked
-again before deferred loading, so later work is not replaced. Ambiguous lookups
-or failed loads never create replacements; all mode never falls back to cwd
-creation. Unusable resume entries are skipped with warnings; execution failures
-stop further restores and retain earlier commits.
+Both loading modes skip explicit files/directories, stdin, `-S`, `-c`, `+cmd`,
+`--cmd`, late setup, and existing sessions. Typed input before the deferred attempt
+cancels restoration; programmatic plugin buffers (even modified), splits, floats,
+and cwd/view changes do not. The restored session owns the visible layout.
+Displaced startup buffers and terminal jobs remain alive but unlisted: recover
+them with `:ls!` and `:buffer N` (ordinary buffer pickers may hide them). They are
+not automatically saved or adopted into the restored session. Their old layout
+is not retained. Plugins that inject typed input also cancel restoration;
+arbitrary destructive sourced code/autocmds cannot be fully rolled back.
+Ambiguous lookups or failed loads never create replacements; all mode never falls
+back to cwd creation. Unusable resume entries are skipped with warnings;
+execution failures stop further restores and retain earlier commits.
 
 Normal managed exits remember active membership and current selection in every
 mode, including `"none"`. A never-managed one-off edit leaves history untouched;

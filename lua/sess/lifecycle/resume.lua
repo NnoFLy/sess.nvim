@@ -4,6 +4,7 @@ local storage = require("sess.storage")
 local load = require("sess.lifecycle.load")
 local create = require("sess.lifecycle.create")
 local save = require("sess.lifecycle.save")
+local editor = require("sess.editor")
 
 local M = {}
 
@@ -27,8 +28,10 @@ local function current(context)
     local ok, operation_err, loaded, warnings
     if item then
         ok, operation_err, loaded, warnings = load.run(item.id, nil, context)
-    else
+    elseif editor.is_empty_startup() then
         ok, operation_err, loaded, warnings = create.run(vim.fn.getcwd(), nil, context)
+    else
+        return true, nil, result(), diagnostics
     end
     vim.list_extend(diagnostics, warnings or {})
     local resumed = result()
@@ -111,12 +114,27 @@ end
 function M.startup(mode, context)
     if mode == "none" then
         return true, nil, result(), {}
-    elseif mode == "current" then
-        return current(context)
-    elseif mode == "all" then
-        return all(context)
+    elseif mode ~= "current" and mode ~= "all" then
+        return false, "smart_auto_load must be none, current or all", result(), {}
     end
-    return false, "smart_auto_load must be none, current or all", result(), {}
+
+    -- Keep unmanaged buffers/jobs alive through hooks, callback drains and all
+    -- successive loads. Ordinary hide leaves them unlisted (:ls! / :buffer N),
+    -- outside outgoing live-view and snapshot ownership. No startup session is
+    -- invented to hold them. Each failed load still rolls back its own layout.
+    local resume = mode == "current" and current or all
+    local response
+    local protected, protection_err = editor.preserve_startup(function()
+        response = { resume(context) }
+        return true
+    end)
+    if not protected then
+        return false,
+            protection_err,
+            response and response[3] or result(),
+            response and response[4] or {}
+    end
+    return unpack(response, 1, 4)
 end
 
 function M.exit(options, context)

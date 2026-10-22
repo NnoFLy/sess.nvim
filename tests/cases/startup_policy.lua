@@ -28,7 +28,7 @@ vim.api.nvim_create_autocmd("VimEnter", {
 end
 
 local function untouched(assertions)
-    return observe(assertions .. [[
+    return observe((assertions or "") .. [[
         assert(require("sess.api").state.current() == nil)
         assert(#require("sess.api").state.active() == 0)
     ]])
@@ -88,20 +88,17 @@ for _, args in ipairs({
     ]]), args)
 end
 
--- Meaningful hidden buffers must not be discarded just because the window is empty.
+-- Hidden plugin buffers do not veto restoration and remain manually recoverable.
 startup(setup("all") .. [[
 local hidden = vim.api.nvim_create_buf(false, true)
-]] .. untouched([[
-    assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] == "")
+]] .. restored([[
     assert(vim.api.nvim_buf_is_valid(hidden) and vim.bo[hidden].buftype == "nofile")
+    assert(not vim.bo[hidden].buflisted)
 ]]))
 
 startup(setup("current") .. [[
 vim.cmd.lcd(vim.fn.getcwd())
-]] .. untouched([[
-    assert(vim.fn.haslocaldir() == 1)
-    assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] == "")
-]]))
+]] .. restored())
 
 -- Ordinary option operands are not files or commands, even when prefixed '+'.
 for _, args in ipairs({
@@ -121,6 +118,8 @@ startup(setup("current") .. untouched([[
     assert(vim.api.nvim_buf_get_name(0):match("original.txt$"))
 ]]), { original })
 
+startup(setup("all") .. untouched(), { fixture.root })
+
 vim.fn.writefile({ "separator file" }, fixture.root .. "/+literal")
 startup(setup("all") .. untouched([[
     assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] == "separator file")
@@ -137,57 +136,34 @@ startup(setup("all") .. untouched([[
     assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] == "")
 ]]), { "-S", script })
 
--- Every skip must retain the context, not just refrain from resuming.
-for _, case in ipairs({
-    {
-        'vim.v.this_session = "explicit-session.vim"',
-        'assert(vim.v.this_session == "explicit-session.vim")',
-    },
-    {
-        'vim.api.nvim_buf_set_lines(0, 0, -1, false, { "work" })',
-        'assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] == "work")',
-    },
-    { "vim.bo.modified = true", "assert(vim.bo.modified)" },
-    { 'vim.bo.buftype = "nofile"', 'assert(vim.bo.buftype == "nofile")' },
-    { 'vim.cmd("split")', "assert(#vim.api.nvim_list_wins() == 2)" },
-    { 'vim.cmd("tabnew")', "assert(#vim.api.nvim_list_tabpages() == 2)" },
-    { "vim.cmd.tcd(vim.fn.getcwd())", "assert(vim.fn.haslocaldir(-1, 0) ~= 0)" },
-    { "local b = vim.api.nvim_create_buf(true, false)", "assert(#vim.api.nvim_list_bufs() == 2)" },
-    {
-        'local b = vim.api.nvim_create_buf(false, false); vim.api.nvim_buf_set_name(b, "hidden.txt")',
-        "assert(#vim.api.nvim_list_bufs() == 2)",
-    },
-    {
-        'local b = vim.api.nvim_create_buf(false, false); vim.api.nvim_buf_set_lines(b, 0, -1, false, { "hidden work" })',
-        "assert(#vim.api.nvim_list_bufs() == 2)",
-    },
-    {
-        'local b = vim.api.nvim_create_buf(false, false); vim.api.nvim_open_win(b, false, { relative = "editor", row = 0, col = 0, width = 8, height = 2 })',
-        "assert(#vim.api.nvim_list_wins() == 2)",
-    },
+-- Native session provenance still suppresses automatic loading.
+startup(setup("all") .. [[
+vim.v.this_session = "explicit-session.vim"
+]] .. untouched([[
+    assert(vim.v.this_session == "explicit-session.vim")
+]]))
+
+-- Plugin-created layouts, views, cwd scopes and buffers do not imply user intent.
+for _, preparation in ipairs({
+    'vim.api.nvim_buf_set_lines(0, 0, -1, false, { "work" })',
+    "vim.bo.modified = true",
+    'vim.bo.buftype = "nofile"',
+    'vim.cmd("split")',
+    'vim.cmd("tabnew")',
+    "vim.cmd.tcd(vim.fn.getcwd())",
+    "vim.api.nvim_create_buf(true, false)",
+    'local b = vim.api.nvim_create_buf(false, false); vim.api.nvim_buf_set_name(b, "hidden.txt")',
+    'local b = vim.api.nvim_create_buf(false, false); vim.api.nvim_buf_set_lines(b, 0, -1, false, { "hidden work" })',
+    'local b = vim.api.nvim_create_buf(false, true); vim.api.nvim_open_win(b, true, { relative = "editor", row = 0, col = 0, width = 8, height = 2 })',
 }) do
     startup(
         'vim.api.nvim_create_autocmd("VimEnter", { callback = function()\n'
-            .. case[1]
+            .. preparation
             .. "\nend })\n"
             .. setup("all")
-            .. untouched(case[2] .. [[
-        assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] ~= "restored context")
-    ]])
+            .. restored()
     )
 end
-
--- A running terminal remains live when startup is skipped.
-startup(setup("all") .. [[
-vim.api.nvim_create_autocmd("VimEnter", {
-    callback = function()
-        vim.fn.jobstart({ "sh", "-c", "sleep 60" }, { term = true })
-    end,
-})
-]] .. untouched([[
-    assert(vim.bo.buftype == "terminal")
-    assert(vim.fn.jobwait({ vim.b.terminal_job_id }, 0)[1] == -1)
-]]))
 
 -- Transient initialization is not an activity-history veto.
 startup(setup("current") .. [[
@@ -200,7 +176,7 @@ startup(setup("current") .. [[
 vim.api.nvim_create_buf(false, false)
 ]] .. restored())
 
--- Register work before setup, but execute it only after the VimEnter inspection.
+-- Programmatic activity between inspection and dispatch is not typed input.
 for _, mutation in ipairs({
     'vim.api.nvim_buf_set_lines(0, 0, -1, false, { "late work" })',
     'vim.api.nvim_buf_set_lines(0, 0, -1, false, { "temporary" }); vim.api.nvim_buf_set_lines(0, 0, -1, false, { "" }); vim.bo.modified = false',
@@ -215,10 +191,64 @@ vim.api.nvim_create_autocmd("VimEnter", {
 ]] .. mutation .. [[
     end) end,
 })
-]] .. setup("all") .. untouched([[
-    assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] ~= "restored context")
-]]))
+ ]] .. setup("all") .. restored())
 end
+
+-- Exercise real input processing, not a mocked changedtick or on_key callback.
+-- Non-typed feedkeys are programmatic; the 't' flag uses Neovim's typed path.
+for _, typed in ipairs({ false, true }) do
+    local input = [[
+local listeners_before = vim.on_key()
+vim.api.nvim_create_autocmd("VimEnter", { callback = function()
+    vim.schedule(function()
+        local keys = vim.api.nvim_replace_termcodes("ityped work<Esc>", true, false, true)
+        vim.api.nvim_feedkeys(keys, ]] .. (typed and '"ntx"' or '"nx"') .. [[, false)
+    end)
+end })
+]]
+    local assertions = [[assert(vim.on_key() == listeners_before)]]
+    if typed then
+        startup(input .. setup("all") .. untouched(assertions .. [[
+assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] == "typed work")
+]]))
+    else
+        startup(input .. setup("all") .. restored(assertions))
+    end
+end
+
+-- Internal managed reconfiguration invalidates old registrations and input
+-- listeners. A deferred operation is one-shot, even with a synthetic VimEnter.
+startup([[
+local listeners_before = vim.on_key()
+]] .. setup("all") .. [[
+local group = vim.api.nvim_create_augroup("SessNvimInternal", { clear = true })
+require("sess.startup").setup(group, "current", function() error("stale registration") end)
+vim.api.nvim_clear_autocmds({ group = group, event = "VimEnter" })
+local calls = 0
+require("sess.startup").setup(group, "all", function(mode)
+    calls = calls + 1
+    assert(mode == "all")
+end)
+]] .. untouched([[
+assert(calls == 1)
+assert(vim.on_key() == listeners_before)
+vim.api.nvim_exec_autocmds("VimEnter", {})
+assert(calls == 1)
+]]))
+
+-- Reconfiguration during the deferred gap cancels the older scheduled token;
+-- late registration never performs catch-up loading.
+startup([[
+local listeners_before = vim.on_key()
+vim.api.nvim_create_autocmd("VimEnter", { callback = function()
+    vim.schedule(function()
+        local group = vim.api.nvim_create_augroup("SessNvimInternal", { clear = true })
+        require("sess.startup").setup(group, "none", function() error("disabled") end)
+    end)
+end })
+]] .. setup("all") .. untouched([[
+assert(vim.on_key() == listeners_before)
+]]))
 
 startup(setup("all") .. [[
 assert(require("sess.api").session.load("startup"))
@@ -226,6 +256,33 @@ local original_id = require("sess.api").state.current().id
 ]] .. observe([[
     assert(require("sess.api").state.current().id == original_id)
     assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] == "restored context")
+]]))
+
+-- A session started in the deferred gap still wins, even if then unloaded.
+startup([[
+vim.api.nvim_create_autocmd("VimEnter", { callback = function()
+    vim.schedule(function()
+        local api = require("sess.api")
+        assert(api.session.load("startup"))
+        assert(api.session.unload())
+    end)
+end })
+]] .. setup("all") .. [[
+vim.api.nvim_create_autocmd("User", { pattern = "SessUnloaded", once = true,
+    callback = function() vim.schedule(function() check(function()
+        assert(require("sess.state").has_managed_sessions())
+        assert(require("sess.api").state.current() == nil)
+        assert(#require("sess.api").state.active() == 0)
+    end) end) end,
+})
+]])
+
+startup([[
+vim.api.nvim_create_autocmd("VimEnter", { callback = function()
+    vim.schedule(function() vim.v.this_session = "late-native.vim" end)
+end })
+]] .. setup("all") .. untouched([[
+assert(vim.v.this_session == "late-native.vim")
 ]]))
 
 -- Active membership also disqualifies startup when no session is current.

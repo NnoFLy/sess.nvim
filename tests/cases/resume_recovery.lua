@@ -28,11 +28,26 @@ local function publish(ids, current)
         path
     )
 end
-local function resume(before, assertion)
+local function resume(before, assertion, current)
+    local completion = after(assertion)
+    if current then
+        -- Timers can run in an earlier transition's callback drain. Observe the
+        -- final selected session's commit before checking the complete active set.
+        completion = string.format(
+            [[
+vim.api.nvim_create_autocmd("User", { pattern = "SessLoaded", callback = function(event)
+    if event.data.current.id == %q then vim.schedule(function() check(function()
+]],
+            current
+        ) .. assertion .. [[
+    end) end) end
+end })
+]]
+    end
     return fixture.startup(
         setup:gsub('smart_auto_load = "none"', 'smart_auto_load = "all"')
             .. (before or "")
-            .. after(assertion)
+            .. completion
     )
 end
 local function assert_order(ids, current)
@@ -49,10 +64,10 @@ assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] == %q)
 end
 -- Selection loaded last must not reorder active membership, even if first recorded.
 publish({ "a", "b", "c" }, "a")
-resume(nil, assert_order({ "a", "b", "c" }, "a"))
+resume(nil, assert_order({ "a", "b", "c" }, "a"), "a")
 -- Missing current: skip it, select first survivor deterministically, no creation.
 publish({ "a", "missing", "b" }, "missing")
-local skipped = resume(nil, assert_order({ "a", "b" }, "a"))
+local skipped = resume(nil, assert_order({ "a", "b" }, "a"), "a")
 assert(skipped.stderr:find("cannot resume missing", 1, true))
 
 -- Empty, absent, wholly unusable, corrupt, incompatible and unsafe history never
@@ -95,18 +110,18 @@ local metadata = fixture.root .. "/store/sessions/b/metadata.json"
 local old_metadata = vim.fn.readfile(metadata)
 vim.fn.writefile({ "broken" }, metadata)
 publish({ "a", "b", "c" }, "b")
-local broken = resume(nil, assert_order({ "a", "c" }, "a"))
+local broken = resume(nil, assert_order({ "a", "c" }, "a"), "a")
 assert(broken.stderr:find("cannot resume b", 1, true))
 fixture.equal({ "broken" }, vim.fn.readfile(metadata))
 vim.fn.writefile(old_metadata, metadata)
 assert(vim.uv.fs_rename(fixture.root .. "/b", fixture.root .. "/b-away"))
 publish({ "a", "b", "c" }, "b")
-local missing_cwd = resume(nil, assert_order({ "a", "c" }, "a"))
+local missing_cwd = resume(nil, assert_order({ "a", "c" }, "a"), "a")
 assert(missing_cwd.stderr:find("directory does not exist", 1, true))
 assert(vim.uv.fs_rename(fixture.root .. "/b-away", fixture.root .. "/b"))
 assert(vim.uv.fs_unlink(fixture.root .. "/store/sessions/b/session.vim"))
 publish({ "a", "b", "c" }, "b")
-local missing_snapshot = resume(nil, assert_order({ "a", "c" }, "a"))
+local missing_snapshot = resume(nil, assert_order({ "a", "c" }, "a"), "a")
 assert(missing_snapshot.stderr:find("cannot resume b", 1, true))
 
 -- Structurally corrupt snapshots are diagnosed in preflight, never sourced.
@@ -117,7 +132,7 @@ vim.fn.writefile(
 publish({ "a", "b", "c" }, "b")
 local corrupt_snapshot = resume(nil, assert_order({ "a", "c" }, "a") .. [[
 assert(vim.g.corrupt_snapshot_was_sourced == nil)
-]])
+]], "a")
 assert(corrupt_snapshot.stderr:find("cannot resume b", 1, true))
 
 -- Unsafe resume paths and snapshot symlinks never source outside the store.
@@ -139,6 +154,6 @@ vim.fn.writefile(
 assert(vim.uv.fs_symlink(outside_snapshot, snapshot_path))
 publish({ "a", "b", "c" }, "b")
 local unsafe_snapshot =
-    resume(nil, assert_order({ "a", "c" }, "a") .. [[assert(vim.g.outside_sourced == nil)]])
+    resume(nil, assert_order({ "a", "c" }, "a") .. [[assert(vim.g.outside_sourced == nil)]], "a")
 assert(unsafe_snapshot.stderr:find("cannot resume b", 1, true))
 assert(vim.uv.fs_lstat(snapshot_path).type == "link")

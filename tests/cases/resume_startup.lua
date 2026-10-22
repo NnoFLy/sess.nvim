@@ -13,6 +13,17 @@ vim.api.nvim_create_autocmd("VimEnter", { callback = function() vim.defer_fn(fun
 end) end, 50) end })
 ]]
 end
+local function loaded(assertions)
+    return [[
+vim.api.nvim_create_autocmd("User", { pattern = "SessLoaded", once = true,
+    callback = function() vim.schedule(function() check(function()
+assert(api.state.current().id == "a")
+assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] == "restored context")
+]] .. (assertions or "") .. [[
+    end) end) end,
+})
+]]
+end
 fixture.startup(setup .. after([[
 assert(api.session.create(root, { id = "a" }))
 vim.fn.writefile({ "restored context" }, root .. "/saved.txt")
@@ -48,32 +59,33 @@ assert(#api.state.active() == 0)
         fixture.equal(history, vim.fn.readfile(path))
     end
     -- Option operands and a terminal separator still permit real restoration.
-    fixture.startup(config .. after([[
-assert(api.state.current().id == "a")
-assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] == "restored context")
-]]), { "--startuptime", "+timing", "--" })
+    fixture.startup(config .. loaded(), { "--startuptime", "+timing", "--" })
     history = vim.fn.readfile(path)
-    -- A scheduled edit after inspection vetoes actual restoration.
+    -- A scheduled plugin edit is not typed input, and remains recoverable.
     fixture.startup([[
+local displaced
 vim.api.nvim_create_autocmd("VimEnter", { callback = function() vim.schedule(function()
-vim.api.nvim_buf_set_lines(0, 0, -1, false, { "late work" })
+displaced = vim.api.nvim_get_current_buf()
+vim.api.nvim_buf_set_lines(displaced, 0, -1, false, { "late work" })
 end) end })
-]] .. config .. after([[
-assert(api.state.current() == nil)
-assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] == "late work")
+]] .. config .. loaded([[
+assert(vim.api.nvim_buf_get_lines(displaced, 0, -1, false)[1] == "late work")
+assert(not vim.bo[displaced].buflisted)
 ]]))
-    fixture.equal(history, vim.fn.readfile(path))
-    -- An explicitly owned layout is not replaced by a valid, usable snapshot.
+    fixture.equal(
+        vim.json.decode(table.concat(history, "\n")),
+        vim.json.decode(table.concat(vim.fn.readfile(path), "\n"))
+    )
+    -- Plugin layout/cwd initialization permits a valid, usable snapshot.
     fixture.startup(config .. [[
 vim.api.nvim_create_autocmd("VimEnter", { callback = function()
 vim.cmd("split")
 vim.bo.buftype = "nofile"
 vim.cmd.lcd(root)
 end })
-]] .. after([[
-assert(api.state.current() == nil)
-assert(#vim.api.nvim_list_wins() == 2)
-assert(vim.bo.buftype == "nofile")
-assert(vim.fn.haslocaldir() ~= 0)
+]] .. loaded([[
+assert(#vim.api.nvim_list_wins() == 1)
+assert(vim.bo.buftype == "")
 ]]))
+    history = vim.fn.readfile(path)
 end

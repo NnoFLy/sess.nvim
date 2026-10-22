@@ -4,6 +4,14 @@ local M = {}
 local registration = 0
 local attempted = false
 local stdin_read = false
+local interacted = false
+local input_namespace = vim.api.nvim_create_namespace("sess.startup.input")
+
+local function stop_listening(token)
+    if token == registration then
+        vim.on_key(nil, input_namespace)
+    end
+end
 
 -- Consume option operands before interpreting file/command roles. In particular,
 -- a config, shada, log, or socket path beginning with '+' is not a +command.
@@ -59,89 +67,37 @@ local function implicit_startup()
     return true
 end
 
-local function capture()
+local function eligible()
     local state = require("sess.state")
     if
         vim.v.this_session ~= ""
         or state.get_current_session()
         or #state.get_active_sessions() > 0
+        or state.has_managed_sessions()
     then
         return nil
     end
-    if #vim.api.nvim_list_tabpages() ~= 1 or #vim.api.nvim_list_wins() ~= 1 then
-        return nil
-    end
-    local win = vim.api.nvim_get_current_win()
-    local config = vim.api.nvim_win_get_config(win)
-    if
-        config.relative ~= ""
-        or config.external
-        or vim.fn.haslocaldir() ~= 0
-        or vim.fn.haslocaldir(-1, 0) ~= 0
-    then
-        return nil
-    end
-    local buf = vim.api.nvim_get_current_buf()
-    if
-        vim.bo[buf].buftype ~= ""
-        or vim.bo[buf].modified
-        or vim.api.nvim_buf_get_name(buf) ~= ""
-        or vim.api.nvim_buf_line_count(buf) ~= 1
-        or vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1] ~= ""
-    then
-        return nil
-    end
-    local buffers = {}
-    for _, candidate in ipairs(vim.api.nvim_list_bufs()) do
-        local loaded = vim.api.nvim_buf_is_loaded(candidate)
-        local entry = {
-            name = vim.api.nvim_buf_get_name(candidate),
-            kind = vim.bo[candidate].buftype,
-            modified = vim.bo[candidate].modified,
-            listed = vim.bo[candidate].buflisted,
-            loaded = loaded,
-            tick = vim.api.nvim_buf_get_changedtick(candidate),
-            line_count = loaded and vim.api.nvim_buf_line_count(candidate) or nil,
-            first_line = loaded and vim.api.nvim_buf_get_lines(candidate, 0, 1, false)[1] or nil,
-        }
-        if
-            candidate ~= buf
-            and (
-                entry.name ~= ""
-                or entry.kind ~= ""
-                or entry.modified
-                or entry.listed
-                or (loaded and (entry.line_count ~= 1 or entry.first_line ~= ""))
-            )
-        then
-            return nil
-        end
-        buffers[candidate] = entry
-    end
-    return {
-        buf = buf,
-        buffers = buffers,
-        win = win,
-        tab = vim.api.nvim_get_current_tabpage(),
-        config = config,
-        width = vim.api.nvim_win_get_width(win),
-        height = vim.api.nvim_win_get_height(win),
-        view = vim.fn.winsaveview(),
-        cwd = vim.fn.getcwd(),
-        global_cwd = vim.fn.getcwd(-1, -1),
-        generation = state.get_active_generation(),
-    }
+    return true
 end
 
 ---@param group integer Managed augroup, cleared by the event adapter on setup.
 ---@param mode "none"|"current"|"all"
 ---@param callback fun(mode: string)
 function M.setup(group, mode, callback)
+    vim.on_key(nil, input_namespace)
     registration = registration + 1
     local token = registration
     if mode == "none" or attempted or vim.v.vim_did_enter ~= 0 then
         return
     end
+    -- Only typed input carries user provenance. Buffer/window changes and
+    -- non-typed feedkeys from plugins must not cancel startup restoration.
+    vim.on_key(function(_, typed)
+        if typed and typed ~= "" then
+            interacted = true
+            stop_listening(token)
+        end
+    end, input_namespace)
     vim.api.nvim_create_autocmd("StdinReadPre", {
         group = group,
         callback = function()
@@ -152,23 +108,23 @@ function M.setup(group, mode, callback)
         group = group,
         once = true,
         callback = function()
-            if stdin_read or not implicit_startup() then
-                return
-            end
-            local stamp = capture()
-            if not stamp then
+            if interacted or stdin_read or not implicit_startup() or not eligible() then
+                stop_listening(token)
                 return
             end
             vim.schedule(function()
                 if
                     token ~= registration
                     or attempted
+                    or interacted
                     or stdin_read
                     or not implicit_startup()
-                    or not vim.deep_equal(stamp, capture())
+                    or not eligible()
                 then
+                    stop_listening(token)
                     return
                 end
+                stop_listening(token)
                 attempted = true
                 callback(mode)
             end)

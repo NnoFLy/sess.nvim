@@ -67,7 +67,9 @@ smart_auto_load accepts only "none", "current", or "all". Omitted/nil uses
 
   current   Load the exact normalized startup cwd identity (realpath where
             available); no parent/project-root search. Create only after a
-            successful lookup with no match. Ambiguity, failed lookup, corrupt
+            successful lookup with no match AND an empty startup editor. With
+            meaningful unmanaged state, no match succeeds without creating or
+            changing anything. Ambiguity, failed lookup, corrupt
             catalog entries preventing uniqueness checks, or failed load is
             reported without replacement creation.
   all       Resume the previous managed instance's active set, not every saved
@@ -77,21 +79,47 @@ smart_auto_load accepts only "none", "current", or "all". Omitted/nil uses
 auto_save snapshots only the current session on exit, unless the current
 filetype is excluded. None of these options writes modified files to disk.
 
-Both loading modes require setup before VimEnter, implicit startup provenance,
-and a pristine editor. Files, stdin (including StdinReadPre), -S scripts/sessions,
--c commands, +cmd, and --cmd disqualify startup. Option operands are interpreted
-by role; a config/log/shada path beginning '+' is not a command. A terminal --
-with no file is allowed. Late setup never performs catch-up loading.
+Both loading modes require setup before VimEnter and implicit launch intent.
+Files/directories, stdin (including StdinReadPre), -S scripts/sessions, -c commands,
++cmd, and --cmd disqualify startup. Option operands are interpreted by role; a
+config/log/shada path beginning '+' is not a command. A terminal -- with no file
+is allowed. Late setup never performs catch-up loading. Existing native sessions
+or an already-started sess.nvim session also suppress automatic restoration.
 
-An existing editor session or active sess.nvim sessions disqualify startup.
-Require one tab, one ordinary window, an empty unnamed unmodified normal buffer,
-no meaningful hidden buffers, terminals/jobs, special buffers, floating UI, or
-local cwd scopes. A harmless empty unlisted normal buffer is allowed. Provenance
-and editor state are checked at VimEnter and compared again immediately before
-the deferred operation, including buffer identity/content, layout, cwd and
-runtime membership changes. This is not an activity-history latch: transient
-initialization that leaves pristine state is allowed. Managed registrations
-replace older scheduled tokens; public setup() still rejects repeated setup.
+Plugin-created buffers (including modified named/unnamed, scratch/nofile and
+terminal buffers), splits, tabs, floats, local cwd scopes and view changes do NOT
+suppress restoration. Launch intent/session membership is rechecked immediately
+before the one deferred attempt. Typed input observed by vim.on_key() from setup
+to that attempt cancels it; programmatic buffer/window changes and non-typed
+feedkeys do not. This uses Neovim's typed-input provenance, not changedticks or
+hardware identity: nvim_input() and feedkeys with the 't' flag also count as typed
+input. Input listeners are removed on cancellation, dispatch, or reconfiguration.
+Managed registrations invalidate older scheduled tokens; public setup() still
+rejects repeated setup. There is no retry or late catch-up.
+
+The restored session owns the visible layout. Displaced startup buffers retain
+live IDs, contents and terminal jobs, but become unlisted and are not implicitly
+owned or saved by the restored sessions. Use :ls! and :buffer N to recover them;
+ordinary buffer pickers may omit unlisted buffers. A snapshot's explicit reference
+to the same file can reuse its live buffer, retaining unsaved contents. Explicitly
+displaying a buffer in a session can make it part of that session's live view.
+The old startup layout is not retained after success or kept as a separate active
+context. Protection covers bufhidden=wipe/delete/unload and disables autowrite
+during transitions, including buffers created in the adapter's callback drain.
+No modified files are written just to restore a session. Missing/unusable history
+leaves startup state untouched; a failed load attempts to restore its pre-transition
+live layout.
+Arbitrary sourced Vimscript or autocmd effects during any transition cannot be
+fully rolled back. This includes deletion, stopped jobs, writes, and callbacks
+that override lifetime protection (for example, resetting bufhidden to wipe
+inside BufLeave). Such callbacks can still destroy buffers or jobs.
+UI2 source-window repair remains internal to the editor adapter, including on
+source failure; no plugin allowlist controls startup eligibility.
+
+Empty-only unmatched creation requires one ordinary window/tab, no local cwd
+scopes, and empty unnamed unmodified normal buffers (extra hidden buffers must
+also be unlisted). Editor-owned UI2 presentation is ignored for this test. This
+stricter creation check never blocks restoration of an existing session.
 
 The reserved SessNvimInternal augroup is used for sess.nvim's managed
 autocommands. Use a different augroup for user autocommands.
@@ -150,8 +178,9 @@ Automation API (used by managed startup/exit adapters): >
 Both require setup() and hold one lifecycle operation scope through observers;
 recursive mutations fail. startup(mode) defaults to configured smart_auto_load.
 The editor/event adapter owns eligibility checks; calling startup() directly is
-not a safe substitute for those checks and is intended only for eligible empty
-startup state. result contains restored_ids in recorded order, current_id, and
+not a substitute for launch-intent/input checks. The lifecycle preserves displaced
+unmanaged buffers and applies empty-only unmatched creation even for direct calls.
+result contains restored_ids in recorded order, current_id, and
 failed_id on an execution-time failure. Errors may return partial committed
 results and diagnostics; missing/empty history succeeds with no restored IDs.
 exit() uses configured autosave/filetype policy and returns the attempted record,
@@ -499,8 +528,9 @@ User autocommands or trusted sourced code can still explicitly destroy state.
 
 Live views, unsaved text and running jobs are process-local. After restarting
 Neovim, only the persisted Vimscript snapshot is available. Unsaved text/jobs
-cannot be recovered from it. Buffers present before the first session are
-hidden but remain manually accessible.
+cannot be recovered from it. Buffers displaced by startup restoration are
+hidden/unlisted but remain manually accessible with :ls! and :buffer N; they
+are not persisted in a separate startup session.
 
 Active records track visited sessions except those explicitly unloaded/deleted.
 Unloading wipes buffers owned only by the target session, stops their terminal

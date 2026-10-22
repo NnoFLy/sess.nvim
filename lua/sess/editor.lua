@@ -1,6 +1,15 @@
 local M = {}
 
 local parking
+local buffer_protectors = {}
+
+local function protect_buffers()
+    for _, protect in ipairs(buffer_protectors) do
+        for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+            protect(buf)
+        end
+    end
+end
 
 -- Transient UI owners temporarily remove their windows while the editor
 -- changes layouts or writes Vim session files. The adapter knows only this
@@ -276,27 +285,75 @@ function M.capture()
     return view
 end
 
+-- Creation is intentionally stricter than restoration: never turn meaningful
+-- unmanaged startup state into an implicitly created session.
+function M.is_empty_startup()
+    if #vim.api.nvim_list_tabpages() ~= 1 then
+        return false
+    end
+    local ordinary_windows = 0
+    for _, win in ipairs(vim.api.nvim_list_wins()) do
+        if not is_ui2_window(win) then
+            ordinary_windows = ordinary_windows + 1
+            local config = vim.api.nvim_win_get_config(win)
+            if config.relative ~= "" or config.external then
+                return false
+            end
+        end
+    end
+    if ordinary_windows ~= 1 or vim.fn.haslocaldir() ~= 0 or vim.fn.haslocaldir(-1, 0) ~= 0 then
+        return false
+    end
+    local current = vim.api.nvim_get_current_buf()
+    for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+        if
+            not is_ui2_buffer(buf)
+            and (
+                vim.bo[buf].buftype ~= ""
+                or vim.bo[buf].modified
+                or vim.api.nvim_buf_get_name(buf) ~= ""
+                or (buf ~= current and vim.bo[buf].buflisted)
+                or (
+                    vim.api.nvim_buf_is_loaded(buf)
+                    and (
+                        vim.api.nvim_buf_line_count(buf) ~= 1
+                        or vim.api.nvim_buf_get_lines(buf, 0, 1, false)[1] ~= ""
+                    )
+                )
+            )
+        then
+            return false
+        end
+    end
+    return true
+end
+
 -- Prevent normal window/buffer switches from writing or destroying buffers,
--- including plugin buffers with bufhidden=wipe/delete/unload. Trusted sourced
--- code or user autocommands can still explicitly destroy state.
-function M.protected(fn)
+-- including plugin buffers with bufhidden=wipe/delete/unload. Sourced code or
+-- callbacks can still destroy state or override lifetime options mid-transition.
+local function preserve_buffers(fn)
     local options =
         { hidden = vim.o.hidden, autowrite = vim.o.autowrite, autowriteall = vim.o.autowriteall }
     local hidden = {}
+    local function protect_buffer(buf)
+        if vim.api.nvim_buf_is_valid(buf) and not is_session_excluded_buffer(buf) then
+            if hidden[buf] == nil then
+                hidden[buf] = vim.bo[buf].bufhidden
+            end
+            vim.bo[buf].bufhidden = "hide"
+        end
+    end
+    buffer_protectors[#buffer_protectors + 1] = protect_buffer
 
     local ok, result = xpcall(function()
-        for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-            if not is_session_excluded_buffer(buf) then
-                hidden[buf] = vim.bo[buf].bufhidden
-                vim.bo[buf].bufhidden = "hide"
-            end
-        end
+        protect_buffers()
 
         vim.o.hidden, vim.o.autowrite, vim.o.autowriteall = true, false, false
 
-        return { transient_call(fn) }
+        return { fn() }
     end, debug.traceback)
 
+    table.remove(buffer_protectors)
     local action_ok = ok and result[1] ~= false
     local action_err = ok and result[2] or result
     local cleanup_errors = {}
@@ -331,7 +388,20 @@ function M.protected(fn)
     return true, result[1]
 end
 
+function M.protected(fn)
+    return preserve_buffers(function()
+        return transient_call(fn)
+    end)
+end
+
+-- Startup preflight/no-op paths must not suspend or recreate plugin UI. Only
+-- actual editor transitions use the transient-owner protocol in protected().
+function M.preserve_startup(fn)
+    return preserve_buffers(fn)
+end
+
 local function close_window(win)
+    protect_buffers()
     local valid, is_valid = pcall(vim.api.nvim_win_is_valid, win)
     if not valid or not is_valid then
         return true
@@ -349,7 +419,8 @@ function M.hide()
     -- Close views, not buffers. No bang: errors must not force-discard data.
     for _, win in ipairs(vim.api.nvim_list_wins()) do
         local valid, config = pcall(vim.api.nvim_win_get_config, win)
-        if valid
+        if
+            valid
             and (config.relative ~= "" or config.external)
             and not is_session_excluded_window(win, vim.api.nvim_win_get_buf(win))
         then
@@ -360,6 +431,7 @@ function M.hide()
         end
     end
 
+    protect_buffers()
     local tabs_closed, tabs_err = pcall(vim.cmd, "silent tabonly")
     if not tabs_closed then
         error(tostring(tabs_err))
@@ -373,6 +445,9 @@ function M.hide()
         error(tostring(drain_err))
     end
 
+    -- BufWinLeave is too late to change a pending wipe. Refresh protection
+    -- after the callback drain, before closing any newly created views.
+    protect_buffers()
     local current_tab = vim.api.nvim_get_current_tabpage()
     local keep
     for _, win in ipairs(vim.api.nvim_tabpage_list_wins(current_tab)) do
@@ -406,6 +481,7 @@ function M.hide()
         parking = vim.api.nvim_create_buf(false, true)
     end
 
+    protect_buffers()
     local parked, park_err = pcall(vim.api.nvim_win_set_buf, 0, parking)
     if not parked then
         error(tostring(park_err))
@@ -432,7 +508,11 @@ local function is_clean_empty_buffer(buf)
 end
 
 local function remove_restore_placeholder(buf, diagnostics)
-    if M.is_transient_buffer(buf) or not is_clean_empty_buffer(buf) or #vim.fn.win_findbuf(buf) > 0 then
+    if
+        M.is_transient_buffer(buf)
+        or not is_clean_empty_buffer(buf)
+        or #vim.fn.win_findbuf(buf) > 0
+    then
         return
     end
 
@@ -473,7 +553,9 @@ function M.empty(cwd, options)
     local emptied, err = transient_call(function()
         return empty_impl(cwd, options)
     end)
-    if emptied == false and err then error(err) end
+    if emptied == false and err then
+        error(err)
+    end
     return emptied
 end
 
@@ -520,10 +602,8 @@ local function layout(node, windows, win, mapping)
             return false, tostring(focus_err)
         end
 
-        local split, split_err = pcall(
-            vim.cmd,
-            node[1] == "row" and "rightbelow vsplit" or "rightbelow split"
-        )
+        local split, split_err =
+            pcall(vim.cmd, node[1] == "row" and "rightbelow vsplit" or "rightbelow split")
         if not split then
             return false, tostring(split_err)
         end
@@ -568,22 +648,15 @@ local function restore_impl(view, rollback)
         end
 
         local mapping = {}
-        local laid_out, layout_err = layout(
-            tab.layout,
-            tab.windows,
-            vim.api.nvim_get_current_win(),
-            mapping
-        )
+        local laid_out, layout_err =
+            layout(tab.layout, tab.windows, vim.api.nvim_get_current_win(), mapping)
         if not laid_out then
             error(layout_err)
         end
 
         for old, win in pairs(mapping) do
-            local width_ok, width_err = pcall(
-                vim.api.nvim_win_set_width,
-                win,
-                tab.windows[old].width
-            )
+            local width_ok, width_err =
+                pcall(vim.api.nvim_win_set_width, win, tab.windows[old].width)
             if not width_ok then
                 table.insert(
                     diagnostics,
@@ -591,11 +664,8 @@ local function restore_impl(view, rollback)
                 )
             end
 
-            local height_ok, height_err = pcall(
-                vim.api.nvim_win_set_height,
-                win,
-                tab.windows[old].height
-            )
+            local height_ok, height_err =
+                pcall(vim.api.nvim_win_set_height, win, tab.windows[old].height)
             if not height_ok then
                 table.insert(
                     diagnostics,
@@ -670,7 +740,9 @@ function M.restore(view, rollback)
     local restored, err = transient_call(function()
         return restore_impl(view, rollback)
     end)
-    if restored == false and err then error(err) end
+    if restored == false and err then
+        error(err)
+    end
     return restored
 end
 
@@ -704,6 +776,7 @@ function M.source_snapshot(snapshot_path, content)
         return false, "secure session snapshot content is required"
     end
 
+    protect_buffers()
     local terminal_mode_left, terminal_error = leave_terminal_mode()
     if not terminal_mode_left then
         return false, terminal_error
@@ -718,7 +791,30 @@ function M.source_snapshot(snapshot_path, content)
     -- Storage reads the snapshot through its descriptor-relative, no-follow
     -- boundary. Execute the validated content in memory; :source would reopen
     -- a pathname and reintroduce the leaf-replacement race.
-    vim.api.nvim_exec(content, false)
+    local module = get_ui2()
+    local ui2_active = false
+    if module and type(module.check_targets) == "function" then
+        for _, win in pairs(module.wins or {}) do
+            if vim.api.nvim_win_is_valid(win) then
+                ui2_active = true
+                break
+            end
+        end
+    end
+
+    local sourced, source_err = pcall(vim.api.nvim_exec, content, false)
+    -- Generated :only/:tabonly commands can close editor-owned UI2 floats.
+    -- Reconcile their targets even when snapshot execution fails, before rollback.
+    local refreshed, refresh_err = true, nil
+    if ui2_active then
+        refreshed, refresh_err = pcall(module.check_targets)
+    end
+    if not sourced then
+        error(tostring(source_err) .. (refreshed and "" or "; UI2: " .. tostring(refresh_err)))
+    end
+    if not refreshed then
+        error("failed to restore UI2 targets: " .. tostring(refresh_err))
+    end
     vim.v.this_session = snapshot_path
     return true
 end
