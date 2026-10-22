@@ -7,7 +7,7 @@ local configured
 
 local defaults = {
     paths = {},
-    smart_auto_load = true,
+    smart_auto_load = "current",
     auto_save = true,
     log_level = "info",
     exclude_filetypes = { "gitcommit" },
@@ -230,8 +230,16 @@ function M.setup(user_opts)
         return false, "log_level must be debug, info, warn or error"
     end
 
-    if type(candidate.auto_save) ~= "boolean" or type(candidate.smart_auto_load) ~= "boolean" then
-        return false, "auto_save and smart_auto_load must be boolean"
+    if type(candidate.auto_save) ~= "boolean" then
+        return false, "auto_save must be boolean"
+    end
+
+    if
+        candidate.smart_auto_load ~= "none"
+        and candidate.smart_auto_load ~= "current"
+        and candidate.smart_auto_load ~= "all"
+    then
+        return false, "smart_auto_load must be none, current or all"
     end
 
     local valid, err = M.validate_hooks(candidate.hooks)

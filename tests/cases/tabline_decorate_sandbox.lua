@@ -17,7 +17,7 @@ vim.g.sess_sandbox_original = original
 vim.cmd("sandbox let &tabline = g:sess_sandbox_original")
 assert(require("sess").setup({
     store_path = fixture.root .. "/store",
-    smart_auto_load = false,
+    smart_auto_load = "none",
     auto_save = false,
     tabline = { enabled = true },
 }))

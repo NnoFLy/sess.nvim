@@ -8,7 +8,7 @@ assert(default_sidebar.active_expand == "all")
 local store = fixture.root .. "/sidebar"
 local ok, err = require("sess").setup({
     store_path = store,
-    smart_auto_load = false,
+    smart_auto_load = "none",
     auto_save = false,
     sidebar = {
         enabled = true,

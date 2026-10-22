@@ -132,7 +132,7 @@
 ---@class Sess.Opts
 ---@field paths string[]
 ---@field log_level Sess.log_level
----@field smart_auto_load boolean
+---@field smart_auto_load "none" | "current" | "all"
 ---@field auto_save boolean
 ---@field exclude_filetypes string[]
 ---@field hooks Sess.Hooks

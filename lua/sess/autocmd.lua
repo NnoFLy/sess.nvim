@@ -3,83 +3,29 @@ local M = {}
 -- Reserved for sess.nvim; keep the internal suffix to avoid common user groups.
 local GROUP = "SessNvimInternal"
 
-local autocmds = {
-    ---@param group integer
-    smart_auto_load = function(group)
-        vim.api.nvim_create_autocmd("VimEnter", {
-            group = group,
-            callback = function()
-                vim.schedule(function()
-                    if vim.fn.argc() ~= 0 then
-                        return
-                    end
-
-                    local api = require("sess.api")
-                    local log = require("sess.log")
-
-                    local cwd = vim.fs.normalize(vim.fn.getcwd())
-                    local found, lookup_err, item = api.session.get_by_path(cwd)
-                    if not found then
-                        log.error(lookup_err or "Failed to find auto-load session")
-                        return
-                    end
-
-                    local ok, err, _, diagnostics
-                    if item then
-                        ok, err, _, diagnostics = api.session.load(item)
-                    else
-                        ok, err, _, diagnostics = api.session.create(cwd)
-                    end
-
-                    if not ok then
-                        log.error(err or "Failed to initialize session for current directory")
-                    else
-                        log.diagnostics(diagnostics)
-                    end
-                end)
-            end,
-        })
-    end,
-
-    ---@param group integer
-    ---@param opts Sess.Opts
-    auto_save = function(group, opts)
-        vim.api.nvim_create_autocmd("VimLeavePre", {
-            group = group,
-            callback = function()
-                local state = require("sess.api").state
-                if not state.current() then
-                    return
-                end
-
-                local filetype = vim.bo.filetype
-                if vim.list_contains(opts.exclude_filetypes, filetype) then
-                    return
-                end
-
-                local ok, err, _, diagnostics = require("sess.api").session.save()
-                local log = require("sess.log")
-                if not ok then
-                    log.error(err or "Failed to auto save session")
-                else
-                    log.diagnostics(diagnostics)
-                end
-            end,
-        })
-    end,
-}
+local function report(ok, err, _, diagnostics)
+    local log = require("sess.log")
+    if not ok then
+        log.error(err or "Automatic session operation failed")
+    end
+    -- Partial failures can carry useful diagnostics from committed operations.
+    log.diagnostics(diagnostics)
+end
 
 ---@param opts Sess.Opts
 function M.setup(opts)
     local group = vim.api.nvim_create_augroup(GROUP, { clear = true })
 
-    if opts.smart_auto_load then
-        autocmds.smart_auto_load(group)
-    end
+    require("sess.startup").setup(group, opts.smart_auto_load, function(mode)
+        report(require("sess.api.resume").startup(mode))
+    end)
 
-    if opts.auto_save then
-        autocmds.auto_save(group, opts)
-    end
+    vim.api.nvim_create_autocmd("VimLeavePre", {
+        group = group,
+        callback = function()
+            report(require("sess.api.resume").exit(opts))
+        end,
+    })
 end
 
 return M

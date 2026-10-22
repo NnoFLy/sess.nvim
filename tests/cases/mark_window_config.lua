@@ -31,7 +31,7 @@ assert(vim.fn.isdirectory(fixture.root .. "/global-conflicting-keymap") == 0)
 
 assert(opts.setup({
     store_path = fixture.root .. "/store",
-    smart_auto_load = false,
+    smart_auto_load = "none",
     auto_save = false,
     mark_window = {
         position = "left_top",

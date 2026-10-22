@@ -2,7 +2,7 @@ vim.o.tabline = "existing custom tabline"
 vim.o.showtabline = 0
 assert(require("sess").setup({
     store_path = fixture.root .. "/store",
-    smart_auto_load = false,
+    smart_auto_load = "none",
     auto_save = false,
     tabline = { enabled = false },
 }))
