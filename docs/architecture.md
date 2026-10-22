@@ -53,6 +53,7 @@ The lifecycle API is a thin facade over focused modules under `lua/sess/lifecycl
 - `commit` applies runtime activation after persistence and editor changes succeed;
 - `transaction` is only a compatibility facade for those focused modules;
 - `save` coordinates storage-selected snapshot callbacks (including optional descriptors), usage metadata, outgoing saves, and save diagnostics;
+- `resume` owns startup current/all orchestration and normal-exit publication, using ordinary `create`, `load`, and `save` operations under one scope. `api.resume` resolves setup/configuration/hooks; `startup` owns provenance/pristine-editor eligibility and deferred revalidation; `autocmd` only delegates and reports. All-mode preflight skips unusable catalog/cwd/snapshot entries, then ordinary loads revalidate each survivor. A failed transition stops with partial committed progress and diagnostics; after-observer warnings remain nonfatal.
 - `create`, `load`, `unload`, `mutations`, and `marks` own operation-specific catalog/editor/runtime mutations. They receive an operation context and never import the public options API. Mark operations only update the registry and publish observers; loading a mark delegates to `load`.
 
 Operation modules follow this ordering:
@@ -71,7 +72,7 @@ The guard remains held through post-operation observers. Rollback is limited to 
 
 ### Runtime state
 
-Runtime state is the in-memory source of truth for the current and previous sessions, active sessions, and per-session views. It also owns process-local agent records and focused-agent IDs keyed by canonical session ID. Reads and writes should use defensive copies so callers cannot mutate internal state accidentally. Agents are not initialized from disk and never enter metadata, snapshots, or Vim session files.
+Runtime state is the in-memory source of truth for the current and previous sessions, ordered active sessions, and per-session views. It remembers whether this instance has ever managed a session, independently of current membership. Resume selection is a defensive data-only projection; an exact-permutation helper restores recorded active order after loading the visible selection last (including partial progress). It also owns process-local agent records and focused-agent IDs keyed by canonical session ID. Reads and writes should use defensive copies so callers cannot mutate internal state accidentally. Agents are not initialized from disk and never enter metadata, snapshots, or Vim session files.
 
 ### Editor adapter
 
@@ -83,7 +84,7 @@ The agent API validates registrations and delegates focus to the editor adapter.
 
 ### Storage
 
-Storage owns the on-disk representation, including metadata, snapshots, session directories, deleted-session entries, and the atomically-written `marks.json` registry. It is responsible for:
+Storage owns the on-disk representation, including metadata, snapshots, session directories, deleted-session entries, and the atomically-written `marks.json` registry and `resume.json` selection. It is responsible for:
 
 - validating filesystem-derived identifiers;
 - creating private directories;
@@ -92,6 +93,7 @@ Storage owns the on-disk representation, including metadata, snapshots, session 
 - listing records with diagnostics;
 - moving deleted records to reversible trash;
 - validating and atomically replacing the independent mark registry;
+- validating versioned data-only resume selections and atomically publishing a whole document without merging instances or repairing corrupt history;
 - refusing unsafe paths and malformed records.
 
 Storage failures must be visible to callers. Corrupt records are skipped with diagnostics and are not automatically repaired or removed. On Linux, Darwin, and FreeBSD with an exposed `/proc/self/fd` or `/dev/fd` namespace, reads and writes walk opened storage-directory descriptors with `O_DIRECTORY|O_NOFOLLOW`; regular-file reads add `O_NOFOLLOW`, and temporary snapshot writes use the opened file descriptor itself. Other platforms, and restricted POSIX environments without these primitives, retain compatibility through a private-store path fallback: every existing component is checked as a directory and symlinked components are rejected, but a concurrent pathname replacement can still race between checks. The fallback does not claim descriptor-level containment; users must keep the store private, and operation-specific filesystem failures remain visible as errors (or diagnostics when the operation can complete) rather than making initialization fail.
@@ -196,6 +198,14 @@ Capture the current editor view, write the session snapshot, update usage metada
 ### Load or create
 
 Resolve or create the target, save the outgoing session when applicable, protect the editor transition, restore or initialize the target, commit runtime state, and notify observers. If the editor transition fails, reversible editor state should be restored.
+
+### Startup resume and exit
+
+`smart_auto_load` is `none`, `current` (default), or `all`. Current uses exact normalized cwd lookup and only creates after a successful unmatched lookup. All reads the remembered active set, not every saved session. It restores survivors in recorded order with the recorded current (or deterministic first survivor) last. Missing, empty, or wholly unusable history never falls back to creation. Structural snapshot inspection in preflight does not execute Vimscript; ordinary loads still source trusted-store snapshots and retain their existing safety/rollback limits.
+
+Startup registrations are installed before VimEnter, check argument/stdin provenance and pristine editor state, and compare that state again before deferred mutation. Late setup never catches up. Runtime selection and editor state remain independent of the UI adapters.
+
+Normal exit publishes only managed instances, including intentionally empty membership. Required current-session autosave precedes publication; auto_save=false and excluded filetypes skip content saving without disabling bookkeeping. Never-managed instances do not touch history. The last successful whole-record publication wins. Snapshot writes and selection publication are not a multi-file transaction or historical snapshot isolation. Persistence errors and diagnostics reach the adapter; exit logging uses synchronous echo rather than deferrable notification rendering. Actual exit saves suppress UI observers even when the exit code is zero.
 
 ### Unload
 

@@ -15,7 +15,7 @@ CONFIGURATION                                      *sess-setup* *sess.setup*
 setup() returns (ok, err) and logs failures. Call once. Unknown options fail. >
     require("sess").setup({
         paths = {}, -- picker directories/glob patterns
-        smart_auto_load = true,
+        smart_auto_load = "current", -- current | all | none
         auto_save = true,
         exclude_filetypes = { "gitcommit" },
         log_level = "info", -- debug | info | warn | error
@@ -62,12 +62,103 @@ setup() returns (ok, err) and logs failures. Call once. Unknown options fail. >
         },
     })
 <
-smart_auto_load loads/creates a session for cwd when Neovim starts without
-arguments. auto_save snapshots the current session on exit, unless the current
-filetype is excluded. Neither option writes modified files to disk.
+smart_auto_load accepts only "none", "current", or "all". Omitted/nil uses
+"current"; booleans and unsupported values are errors (no compatibility aliases).
+
+  current   Load the exact normalized startup cwd identity (realpath where
+            available); no parent/project-root search. Create only after a
+            successful lookup with no match. Ambiguity, failed lookup, corrupt
+            catalog entries preventing uniqueness checks, or failed load is
+            reported without replacement creation.
+  all       Resume the previous managed instance's active set, not every saved
+            session. See |sess-resume|.
+  none      Disable automatic startup loading/creation, not exit bookkeeping.
+
+auto_save snapshots only the current session on exit, unless the current
+filetype is excluded. None of these options writes modified files to disk.
+
+Both loading modes require setup before VimEnter, implicit startup provenance,
+and a pristine editor. Files, stdin (including StdinReadPre), -S scripts/sessions,
+-c commands, +cmd, and --cmd disqualify startup. Option operands are interpreted
+by role; a config/log/shada path beginning '+' is not a command. A terminal --
+with no file is allowed. Late setup never performs catch-up loading.
+
+An existing editor session or active sess.nvim sessions disqualify startup.
+Require one tab, one ordinary window, an empty unnamed unmodified normal buffer,
+no meaningful hidden buffers, terminals/jobs, special buffers, floating UI, or
+local cwd scopes. A harmless empty unlisted normal buffer is allowed. Provenance
+and editor state are checked at VimEnter and compared again immediately before
+the deferred operation, including buffer identity/content, layout, cwd and
+runtime membership changes. This is not an activity-history latch: transient
+initialization that leaves pristine state is allowed. Managed registrations
+replace older scheduled tokens; public setup() still rejects repeated setup.
 
 The reserved SessNvimInternal augroup is used for sess.nvim's managed
 autocommands. Use a different augroup for user autocommands.
+
+==============================================================================
+RESUME                                                         *sess-resume*
+
+Each store has one version-1 data-only resume.json with ordered active_ids and
+an optional current_id belonging to that set. IDs are validated before filesystem
+use; targets are resolved through the catalog. It contains no executable code,
+snapshot paths, or snapshot contents. Missing or intentionally empty history is
+a no-op in all mode. Malformed/incompatible/unsafe history is reported, never
+silently repaired, deleted, or replaced with cwd loading.
+
+All mode preflights metadata, cwd and snapshot availability/structure. Unusable
+entries are skipped with diagnostics, without creating replacements. Survivors
+load in recorded order except that the recorded current session loads last. If
+it is unavailable (or absent), the first survivor in recorded order loads last
+as the deterministic selection. Active order is preserved separately, including
+partial progress. With no survivors, startup stays untouched.
+
+Restoration uses ordinary lifecycle loads: outgoing saves, before hooks, commit,
+after hooks and User events, under one recursion guard. Each target is revalidated
+at execution. A before-hook, execution, editor-transition, or persistence failure
+stops further restoration and retains earlier commits; ordinary per-transition
+rollback protects reversible editor state. Post-operation hooks and subscribers
+see committed state; their failures are nonfatal diagnostics and do not halt
+restoration. Arbitrary sourced code and callback effects cannot be rolled back.
+
+On normal exit, an instance that has managed any session publishes its whole
+active set and selection, even in none/current modes or with autosave disabled.
+A never-managed instance leaves history untouched. Intentionally unloading all
+sessions publishes an empty set. No inactive snapshots are forcibly saved.
+Required current-session autosave must succeed before publication; excluded
+filetypes and auto_save=false skip that save, but still publish membership.
+Write/save failures are reported and preserve the previous resume document;
+metadata warnings can accompany a successful save/publication. Exit diagnostics
+are emitted synchronously so they are not lost when the process terminates.
+Hooks and User events are suppressed during actual exit saves.
+
+The last successful managed normal exit atomically replaces the whole record;
+instances neither merge memberships nor read/modify/write a shared active set.
+There is no transaction across snapshots and the resume document. Retaining an
+old document does not revert snapshots already saved by this or another editor.
+Resume refers to ordinary mutable snapshots, not immutable historical versions,
+and does not resurrect live processes, runtime agents, or jobs. Fidelity remains
+limited by Neovim's session capabilities/options. Keep the store private: resume
+data cannot choose arbitrary snapshot paths, but normal Vim session snapshots
+execute code under the existing trusted-store model, not a sandbox.
+
+Automation API (used by managed startup/exit adapters): >
+    local api = require("sess.api")
+    local ok, err, result, diagnostics = api.resume.startup(mode)
+    local ok, err, record, diagnostics = api.resume.exit()
+<
+Both require setup() and hold one lifecycle operation scope through observers;
+recursive mutations fail. startup(mode) defaults to configured smart_auto_load.
+The editor/event adapter owns eligibility checks; calling startup() directly is
+not a safe substitute for those checks and is intended only for eligible empty
+startup state. result contains restored_ids in recorded order, current_id, and
+failed_id on an execution-time failure. Errors may return partial committed
+results and diagnostics; missing/empty history succeeds with no restored IDs.
+exit() uses configured autosave/filetype policy and returns the attempted record,
+or nil when never managed or when a required save fails. The managed adapter may
+pass its captured setup options to exit(options). Neither call logs directly;
+managed adapters report errors separately from diagnostics. Boundary/setup or
+unexpected exception failures may return only (false, err).
 
 ==============================================================================
 COMMANDS                                                     *sess-commands*

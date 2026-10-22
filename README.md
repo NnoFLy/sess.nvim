@@ -57,7 +57,7 @@ require("sess").setup({
         "~/code/personal/project",
         "~/code/work/*",
     },
-    smart_auto_load = true,
+    smart_auto_load = "current", -- current | all | none
     auto_save = true,
     exclude_filetypes = { "gitcommit" },
     keymap = {
@@ -80,6 +80,32 @@ require("sess").setup({
     },
 })
 ```
+
+`smart_auto_load` defaults to `"current"`: at a pristine startup, load the session
+for the exact normalized cwd, or create one if no session matches. Choose
+`"all"` to resume the previous managed editor instance's active sessions, in
+recorded order, with its current session visible. Saved-only sessions stay
+inactive. Choose `"none"` to disable automatic loading; booleans are rejected.
+Omitted/nil configuration uses the default.
+
+Both loading modes skip explicit files, stdin, `-S`, `-c`, `+cmd`, `--cmd`, late
+setup, existing sessions, and non-pristine editor state. Eligibility is checked
+again before deferred loading, so later work is not replaced. Ambiguous lookups
+or failed loads never create replacements; all mode never falls back to cwd
+creation. Unusable resume entries are skipped with warnings; execution failures
+stop further restores and retain earlier commits.
+
+Normal managed exits remember active membership and current selection in every
+mode, including `"none"`. A never-managed one-off edit leaves history untouched;
+unloading every session remembers an empty set. `auto_save` and
+`exclude_filetypes` still control current-session exit snapshots, not membership
+bookkeeping. Required save failures prevent publication. The last successful
+managed exit wins; snapshots and membership are not one transaction.
+
+Resume uses ordinary saved snapshots, not historical backups or live process
+recovery. Keep the store private: resume history is validated data, but ordinary
+session snapshots execute trusted Vimscript. Corrupt history is reported without
+repair or deletion. See `:help sess-resume` for ordering and failure details.
 
 `:Sess sidebar` toggles the optional native sidebar. It shows active sessions
 and agents, refreshes while open, and preserves selection across tab changes.

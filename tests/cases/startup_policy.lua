@@ -1,5 +1,5 @@
--- Until resume integration lands, substitute only the agreed resume API boundary.
--- Observe the resulting editor contents, not helper names or invocation counts.
+-- Isolate eligibility at the automation API boundary; resume*.lua supplies
+-- complementary real-snapshot startup/exit coverage.
 local boundary = [[
 package.preload["sess.api.resume"] = function()
     return {
@@ -12,8 +12,8 @@ package.preload["sess.api.resume"] = function()
 end
 ]]
 
-local function setup(mode)
-    return boundary
+local function setup(mode, implementation)
+    return (implementation or boundary)
         .. string.format(
             [[
 assert(require("sess").setup({
@@ -261,7 +261,9 @@ vim.api.nvim_exec_autocmds("StdinReadPre", {})
 ]]))
 
 -- Startup failure diagnostics include warnings from earlier committed work.
-local failure = fixture.startup(setup("all") .. [[
+local failure = fixture.startup(setup(
+    "all",
+    [[
 package.preload["sess.api.resume"] = function()
     return {
         startup = function()
@@ -270,7 +272,8 @@ package.preload["sess.api.resume"] = function()
         exit = function() return true end,
     }
 end
-]] .. observe([[
+]]
+) .. observe([[
     assert(vim.api.nvim_buf_get_lines(0, 0, -1, false)[1] == "")
 ]]))
 assert(failure.stderr:find("startup failed", 1, true))
@@ -278,10 +281,9 @@ assert(failure.stderr:find("partial startup warning", 1, true))
 
 -- Normal exit is always delegated, including none mode with autosave disabled.
 for _, mode in ipairs({ "none", "current", "all" }) do
-    local result = fixture.startup(setup(mode) .. [[
--- Capture the notification boundary synchronously: newer Neovim may defer its
--- own UI rendering until after VimLeavePre, when the process is already gone.
-vim.notify = function(message) io.stderr:write(message .. "\n") end
+    local result = fixture.startup(setup(
+        mode,
+        [[
 package.preload["sess.api.resume"] = function()
     return {
         startup = function() return true end,
@@ -291,7 +293,8 @@ package.preload["sess.api.resume"] = function()
         end,
     }
 end
-]] .. observe(""))
+]]
+    ) .. observe(""))
     assert(result.stderr:find("exit failed " .. mode, 1, true))
     assert(result.stderr:find("exit warning", 1, true))
 end

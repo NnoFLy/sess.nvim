@@ -1225,11 +1225,6 @@ function M.root()
     return root_path
 end
 
----@class Sess.ResumeRecord
----@field version integer
----@field active_ids Sess.SessionId[]
----@field current_id Sess.SessionId?
-
 local function validate_resume(record)
     if type(record) ~= "table" or record.version ~= 1 then
         return false, "unsupported resume record version"

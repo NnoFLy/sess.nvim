@@ -17,6 +17,16 @@
 ---@field id Sess.SessionId
 ---@field metadata Sess.SessionMetadata
 
+---@class Sess.ResumeRecord
+---@field version integer Currently 1.
+---@field active_ids Sess.SessionId[] Recorded active order, not all saved sessions.
+---@field current_id Sess.SessionId?
+
+---@class Sess.ResumeResult
+---@field restored_ids Sess.SessionId[] Committed restores in recorded order.
+---@field current_id Sess.SessionId?
+---@field failed_id Sess.SessionId? Execution-time failure, if any.
+
 ---@alias Sess.Mark string One lowercase ASCII letter or digit.
 
 ---@class Sess.MarkEntry

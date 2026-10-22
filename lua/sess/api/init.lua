@@ -5,4 +5,5 @@ return {
     opts = require("sess.api.opts"),
     agent = require("sess.api.agent"),
     active = require("sess.api.active"),
+    resume = require("sess.api.resume"),
 }

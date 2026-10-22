@@ -19,7 +19,15 @@ local function notify(msg, level)
         return
     end
 
-    vim.notify(base_msg .. msg, vim.log.levels[string.upper(level)])
+    if vim.v.exiting ~= vim.NIL then
+        -- Default vim.notify defers rendering; scheduled work is lost on exit.
+        local highlight = level == "error" and "ErrorMsg"
+            or level == "warn" and "WarningMsg"
+            or "Normal"
+        vim.api.nvim_echo({ { base_msg .. msg, highlight } }, true, {})
+    else
+        vim.notify(base_msg .. msg, vim.log.levels[string.upper(level)])
+    end
 end
 
 ---@param msg string
