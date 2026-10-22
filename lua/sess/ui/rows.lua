@@ -503,49 +503,20 @@ function M.build_active(view, options)
                     valid_agents[#valid_agents + 1] = agent
                 end
             end
-            if #valid_agents == 0 then
-                local parts = display.fit_parts({
-                    {
-                        text = options.available_width
-                                and options.available_width < 40
-                                and options.symbols.tree.empty
-                            or "  " .. options.symbols.tree.empty,
-                    },
-                    { text = "no agents", shrink_priority = 1, min_width = 1 },
-                }, options.available_width)
-                local row = row_base("placeholder", { session_id = session.id }, {
-                    key = M.key("placeholder", session.id),
-                    parent_key = header.key,
-                    depth = 1,
-                    actions = {},
-                })
-                row.session_id = session.id
-                row.session = session
-                row.value.session_id = session.id
-                row.display_parts = parts
-                row.display = parts_text(parts)
-                row.search_fields = safe_fields(session, { agents = {}, active = true })
-                row.search_fields.info = (row.search_fields.info or "") .. " no agents"
-                row.ordinal = search.ordinal(row.search_fields)
-                row.active_group_fields = group_fields
-                row.active_group_ordinal = group_ordinal
-                rows[#rows + 1] = row
-            else
-                for index, agent in ipairs(valid_agents) do
-                    rows[#rows + 1] = active_agent_row(
-                        session,
-                        agent,
-                        index,
-                        #valid_agents,
-                        header,
-                        view,
-                        options,
-                        widths,
-                        mark,
-                        group_fields,
-                        group_ordinal
-                    )
-                end
+            for index, agent in ipairs(valid_agents) do
+                rows[#rows + 1] = active_agent_row(
+                    session,
+                    agent,
+                    index,
+                    #valid_agents,
+                    header,
+                    view,
+                    options,
+                    widths,
+                    mark,
+                    group_fields,
+                    group_ordinal
+                )
             end
         end
     end

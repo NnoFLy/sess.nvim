@@ -47,6 +47,7 @@ setup() returns (ok, err) and logs failures. Call once. Unknown options fail. >
                 rename = "R",
             },
         },
+        tabline = { enabled = true },
         sidebar = {
             enabled = true,
             start_open = false,
@@ -54,7 +55,7 @@ setup() returns (ok, err) and logs failures. Call once. Unknown options fail. >
             width = 32,
             min_width = 24,
             max_width = 48,
-            active_expand = "none", -- all | current | none
+            active_expand = "all", -- all | current | none
             toggle_key = false,
             refresh_interval = 1000,
             mouse = true,
@@ -139,7 +140,7 @@ COMMANDS                                                     *sess-commands*
     Each active session header ends with counts such as "agents: 1 working · 2 idle";
     loading and stale probes are shown explicitly. Current headers, focused
     agents, blocked/unknown statuses, and stale data have distinct visual
-    treatment. Empty groups show a non-actionable "no agents" row. <C-b> prompts
+    treatment. Empty expanded groups show only their session header. <C-b> prompts
     for a mark on the selected session. Marks appear on active session headers and
     regular picker rows. Known agent commands
     running in terminal buffers (including pi, codex, claude, and opencode) are
@@ -168,13 +169,16 @@ COMMANDS                                                     *sess-commands*
     changes. Refresh does not snap the cursor back into session/agent rows
     when it is on the title, separators, or footer.
     Session actions require the cursor on a real session or agent row, never
-    a remembered selection on title/separator/placeholder/footer lines. Agent
+    a remembered selection on title/separator/footer lines. Agent
     rows target their parent for session operations. Confirmations identify
     the target. View-wide actions work anywhere.
 
     sidebar.enabled enables the command; sidebar.start_open opens it after
     setup. position is left or right; width is clamped to min_width, max_width,
-    and available editor space. active_expand is all, current, or none.
+    and available editor space. active_expand is all (default), current, or none.
+    The selected expansion policy also applies to sessions added while open;
+    refresh preserves manual expansion choices.
+    Expanded sessions without agents show only their session header.
     toggle_key is false or an unclaimed normal-mode key, and refresh_interval
     is a positive integer in milliseconds.
 
@@ -211,8 +215,8 @@ COMMANDS                                                     *sess-commands*
     diagnostics; cancellation preserves live state and sidebar visibility.
 
     Sort is sidebar-local: preserved while open/across refresh and reset on
-    close/reopen. The footer shows the current mode; failed redraw retains the
-    previous mode/view. Pins use the existing icon/ASCII fallback; Telescope
+    close/reopen. The footer shows `sort: <state>`, a blank line, then
+    `? - Help`. Failed redraw retains the previous mode/view. Pins use the existing icon/ASCII fallback; Telescope
     headers are unchanged. The sidebar does not require Telescope or provide
     search/filter, create, restore-deleted or density controls.
 
@@ -222,6 +226,93 @@ COMMANDS                                                     *sess-commands*
     tab without leaving a background-tab window. Session transitions retain
     it across committed or rolled-back editor changes; refresh failures do
     not discard live buffers or jobs.
+
+NATIVE TABLINE                                               *sess-tabline*
+
+    setup() defaults to tabline = { enabled = true }. It decorates an existing
+    custom native tabline, or supplies Sess's clickable tab list when 'tabline'
+    is empty. To disable both the UI and decoration: >lua
+        require("sess").setup({ tabline = { enabled = false } })
+<
+    tabline must be a table with enabled as its only option; enabled must be
+    boolean. Unknown nested keys (including ui) are rejected before editor
+    options, storage or mappings change. setup() is one-shot, not a runtime toggle.
+    enabled=false leaves both 'tabline' and 'showtabline' untouched.
+    'showtabline' is always preserved:
+        0   Tabline hidden; sidebar keeps its in-buffer heading.
+        1   Tabline visible only with multiple tabs; one tab keeps that heading.
+        2   Tabline always visible.
+    Sess's own UI shows each tab's number and safe filename label, uses native
+    tab-number click targets, and highlights the selected tab.
+    This UI replaces Neovim's internal default, not an existing custom provider.
+    Closing the sidebar leaves the supplied tab list in place.
+
+    An existing nonempty native format or top-level %! expression is wrapped
+    without flattening its output. Original click/callback targets, highlights,
+    groups, alignment and truncation remain native format directives. A %! provider
+    is evaluated once per render in the original current-window context; its
+    FORMAT result is decorated, then Neovim evaluates any %{} items natively.
+    Closing the sidebar returns that format unchanged. A provider installed later
+    owns the option; it is never automatically adopted or rewrapped.
+
+    Executable configuration keeps Neovim's sandbox restrictions. Sandboxed
+    options fall back to their original format; restoration of the original
+    option is deferred outside textlock and emits one warning. A first render
+    delayed until after setup is reconciled at the next SafeState (idle) event.
+    Raw script-local s: or <SID> references in expressions are left untouched
+    with a warning, since their ambient script context cannot be retained reliably.
+    Use explicit <SNR> references instead. Quoted text is not rewritten. A failing
+    provider retains Neovim's native error/reset behavior and restores the sidebar
+    heading; initial rendering failures are also reported as a warning without
+    aborting setup. Sess never evaluates captured executable strings through
+    trusted Lua.
+
+    Replacing 'tabline' suspends heading integration; restoring the installed
+    expression permits it again. Hidden, unsupported or external UI tablines
+    (ext_tabline) keep the in-buffer sidebar heading. No tabline plugin is required.
+    Third-party provider configuration is not changed.
+
+    Low-level helpers in require("sess.ui.tabline") remain available:
+
+    setup(expression_or_false) -> true | false, error
+        Registers the exact non-empty native 'tabline' expression whose renderer
+        calls render(). false disables the offset. Invalid arguments return
+        false and an error without changing the registration. Does NOT change
+        'tabline', 'showtabline', or any provider. Replacing 'tabline'
+        suspends the offset; restoring the registered expression allows it
+        again. External UI tablines (ext_tabline) are not integrated.
+
+    label(tabpage?) -> string
+        Accepts a Neovim tabpage handle, NOT a tab number; defaults to current.
+        Returns its focused non-floating, non-transient editing window's buffer
+        basename. While sidebar/help/other transient UI is focused, uses the
+        last-focused editing window/buffer pair if still valid in that tab;
+        otherwise another valid editing window, then [No Name]. Invalid tab
+        handles and unnamed buffers also yield [No Name]. Closed tabs are
+        forgotten. Percent signs are doubled for safe insertion into native
+        tabline format text; control bytes become spaces. Do not escape again.
+
+    render(content) -> string
+        content is trusted native tabline format text (not a label), including
+        your own click targets and highlights. Returns it unchanged when
+        disabled, hidden, replaced, externally drawn, or without an attached
+        edge sidebar in the current tab. Otherwise reserves the sidebar's
+        actual displayed left/right width and position for ACTIVE SESSIONS.
+        The heading is truncated or padded to its display-cell width. A bounded
+        native format group clips overflowing labels while preserving tab click
+        and highlight directives. The heading has no tab click target.
+        Content should describe tabs, not contain a second tabline expression.
+
+    After render() first supplies the integrated heading for a registration,
+    heading ownership remains with the visible integrated tabline across tab
+    switches and resizing, without briefly restoring the in-buffer title.
+    Buffer changes are deferred out of tabline evaluation; row selection,
+    cursor mapping, and highlights follow the shifted rows.
+    Hiding/disabling/replacing the tabline restores the in-buffer heading.
+    With 'showtabline'=1 a single tab retains that heading; multiple tabs permit
+    the offset. Closing/reopening, tab changes and resizing recompute geometry.
+    Session capture and lifecycle behavior are unchanged. These helpers do not
+    configure third-party tabline plugins.
 
 Tab completion supports subcommands, marks, session names, deleted-session names/ids/keys,
 create paths, and load directory paths. `load` accepts existing `@mark` targets;
@@ -811,7 +902,7 @@ expand/collapse all. <Enter> switches and focuses. Its title and session headers
 show stable compact counts; current headers, focused agents, blocked/unknown
 statuses, and stale/loading data are visually distinct. Each session header ends
 with agent counts such as `agents: 1 working · 2 idle`. Empty expanded sessions
-show a non-actionable "no agents" row. Manual expansion and selection are
+show only their session header. Manual expansion and selection are
 preserved while the picker is open and across status refreshes. A selected agent
 that disappears falls back to its parent session. Failed best-effort probes keep
 the last rows usable and report a diagnostic. It shows session headers

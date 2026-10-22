@@ -19,6 +19,7 @@ local defaults = {
         edit_marks = "<C-e>",
     },
     mark_window = window.defaults(),
+    tabline = { enabled = true },
     sidebar = {
         enabled = true,
         start_open = false,
@@ -26,7 +27,7 @@ local defaults = {
         width = 32,
         min_width = 24,
         max_width = 48,
-        active_expand = "none",
+        active_expand = "all",
         toggle_key = false,
         refresh_interval = 1000,
         mouse = true,
@@ -66,7 +67,11 @@ local function validate_sidebar(sidebar)
     if sidebar.position ~= "left" and sidebar.position ~= "right" then
         return false, "sidebar.position must be left or right"
     end
-    if sidebar.active_expand ~= "all" and sidebar.active_expand ~= "current" and sidebar.active_expand ~= "none" then
+    if
+        sidebar.active_expand ~= "all"
+        and sidebar.active_expand ~= "current"
+        and sidebar.active_expand ~= "none"
+    then
         return false, "sidebar.active_expand must be all, current or none"
     end
     for _, name in ipairs({ "width", "min_width", "max_width", "refresh_interval" }) do
@@ -88,6 +93,21 @@ local function validate_sidebar(sidebar)
 end
 
 M.validate_sidebar = validate_sidebar
+
+local function validate_tabline(tabline)
+    if type(tabline) ~= "table" then
+        return false, "tabline must be a table"
+    end
+    for name in pairs(tabline) do
+        if name ~= "enabled" then
+            return false, "unknown tabline option: " .. tostring(name)
+        end
+    end
+    if type(tabline.enabled) ~= "boolean" then
+        return false, "tabline.enabled must be boolean"
+    end
+    return true
+end
 
 local function validate_keymap(keymap)
     if type(keymap) ~= "table" then
@@ -173,6 +193,11 @@ function M.setup(user_opts)
         return false, sidebar_err
     end
 
+    local valid_tabline, tabline_err = validate_tabline(candidate.tabline)
+    if not valid_tabline then
+        return false, tabline_err
+    end
+
     if type(candidate.keymap) ~= "table" then
         return false, "keymap must be a table"
     end
@@ -232,11 +257,18 @@ function M.setup(user_opts)
     loaded = true
     require("sess.autocmd").setup(candidate)
     require("sess.ui.sidebar").configure(candidate.sidebar)
+    if candidate.tabline.enabled then
+        require("sess.ui.tabline").install()
+    end
     if candidate.sidebar.start_open then
         vim.schedule(function()
-            if not loaded then return end
+            if not loaded then
+                return
+            end
             local opened, open_err = require("sess.ui.sidebar").open()
-            if not opened then require("sess.log").error(open_err or "failed to open sidebar") end
+            if not opened then
+                require("sess.log").error(open_err or "failed to open sidebar")
+            end
         end)
     end
 

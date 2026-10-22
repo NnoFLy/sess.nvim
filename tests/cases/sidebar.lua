@@ -3,6 +3,7 @@ local opts = require("sess.api.opts")
 local default_sidebar = opts.get().sidebar
 assert(default_sidebar.enabled == true)
 assert(default_sidebar.position == "left")
+assert(default_sidebar.active_expand == "all")
 
 local store = fixture.root .. "/sidebar"
 local ok, err = require("sess").setup({
@@ -120,7 +121,7 @@ assert(vim.api.nvim_win_get_width(tab_sidebar_win) >= 20)
 vim.wait(100)
 local sidebar_width = vim.api.nvim_win_get_width(tab_sidebar_win)
 local sidebar_lines = vim.api.nvim_buf_get_lines(sidebar_buf, 0, -1, false)
-for index = #sidebar_lines - 1, #sidebar_lines do
+for index = #sidebar_lines - 2, #sidebar_lines do
     assert(
         vim.fn.strdisplaywidth(sidebar_lines[index]) <= sidebar_width,
         "sidebar footer exceeds narrow width: " .. sidebar_lines[index]

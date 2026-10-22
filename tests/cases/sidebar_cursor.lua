@@ -28,7 +28,14 @@ fixture.equal({ 3, 0 }, vim.api.nvim_win_get_cursor(win))
 
 -- Refresh must not pull the cursor back into the session rows when the user
 -- moves onto the title, separators, or footer.
-for _, position in ipairs({ { 1, 4 }, { 2, 3 }, { #lines - 2, 3 }, { #lines - 1, 4 }, { #lines, 4 } }) do
+for _, position in ipairs({
+    { 1, 4 },
+    { 2, 3 },
+    { #lines - 3, 3 },
+    { #lines - 2, 4 },
+    { #lines - 1, 0 },
+    { #lines, 4 },
+}) do
     vim.api.nvim_win_set_cursor(win, position)
     vim.api.nvim_exec_autocmds("CursorMoved", { buffer = buf })
     assert(sidebar.refresh())

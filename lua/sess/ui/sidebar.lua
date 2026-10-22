@@ -7,6 +7,7 @@ local display = require("sess.ui.display")
 local search = require("sess.ui.search")
 local marks = require("sess.ui.marks")
 local help = require("sess.ui.sidebar_help")
+local tabline = require("sess.ui.tabline")
 
 local M = {}
 
@@ -18,7 +19,7 @@ local state = {
         width = 32,
         min_width = 24,
         max_width = 48,
-        active_expand = "none",
+        active_expand = "all",
         toggle_key = false,
         refresh_interval = 1000,
         mouse = true,
@@ -45,6 +46,7 @@ local state = {
     cleanup_in_progress = false,
     operation = nil,
     resizing = false,
+    buffer_heading_visible = true,
 }
 
 local namespace = vim.api.nvim_create_namespace("sess-sidebar")
@@ -309,15 +311,20 @@ end
 local function lines_for(candidate)
     local width = math.max(1, vim.api.nvim_win_get_width(state.win))
     local separator = string.rep("─", width)
-    local lines = { display.truncate_end("ACTIVE SESSIONS", width), separator }
+    local lines = {}
+    if not tabline.heading_visible() then
+        lines[#lines + 1] = display.truncate_end("ACTIVE SESSIONS", width)
+    end
+    lines[#lines + 1] = separator
     local row_lines = {}
     for index, row in ipairs(candidate) do
         row_lines[#row_lines + 1] = #lines + 1
         lines[#lines + 1] = row.display or ""
     end
     lines[#lines + 1] = separator
-    lines[#lines + 1] = display.truncate_end("<Tab> expand  <CR> switch", width)
-    lines[#lines + 1] = display.truncate_end("? help  sort: " .. state.sort, width)
+    lines[#lines + 1] = display.truncate_end("sort: " .. state.sort, width)
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = display.truncate_end("? - Help", width)
     return lines, row_lines
 end
 
@@ -380,6 +387,12 @@ local function render(candidate, selected, force_selection)
         -- Keep free cursor movement outside the session/agent rows on refresh.
         if not vim.list_contains(old_rows, cursor_line) then
             saved_view = vim.api.nvim_win_call(state.win, vim.fn.winsaveview)
+            local buffer_heading_visible = not tabline.heading_visible()
+            if state.buffer_heading_visible ~= buffer_heading_visible then
+                local delta = buffer_heading_visible and 1 or -1
+                saved_view.lnum = math.max(1, saved_view.lnum + delta)
+                saved_view.topline = math.max(1, saved_view.topline + delta)
+            end
         end
     end
     local highlights_ok, old_highlights = saved_highlights()
@@ -391,7 +404,9 @@ local function render(candidate, selected, force_selection)
         vim.bo[state.buf].modifiable = true
         vim.api.nvim_buf_clear_namespace(state.buf, namespace, 0, -1)
         vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, lines)
-        apply_highlights(0, { { text = lines[1], highlight = "SessSidebarTitle" } })
+        if not tabline.heading_visible() then
+            apply_highlights(0, { { text = lines[1], highlight = "SessSidebarTitle" } })
+        end
         for index, row in ipairs(candidate) do
             apply_highlights(row_lines[index] - 1, row.display_parts)
         end
@@ -413,6 +428,7 @@ local function render(candidate, selected, force_selection)
         return false, tostring(err)
     end
     state.row_lines = row_lines
+    state.buffer_heading_visible = not tabline.heading_visible()
     local cursor = 1
     if selected then
         for index, row in ipairs(candidate) do
@@ -439,7 +455,8 @@ local function build(snapshot)
     end
     local width = vim.api.nvim_win_get_width(state.win)
     local options = row_options(width)
-    options.expanded = state.expanded
+    -- Apply defaults to newly observed sessions, preserving explicit false values.
+    options.expanded = vim.tbl_extend("keep", state.expanded, initial_expansion(snapshot))
     local ok, candidate, metadata = pcall(rows.build_active, snapshot, options)
     if not ok then
         return nil, tostring(candidate)
@@ -460,6 +477,11 @@ local function commit(snapshot, candidate)
     end
     state.snapshot = vim.deepcopy(snapshot)
     state.rows = vim.deepcopy(candidate)
+    for _, row in ipairs(candidate) do
+        if row.kind == "session" then
+            state.expanded[row.key] = row.expanded
+        end
+    end
     state.selected_key = selected
     return true
 end
@@ -1240,6 +1262,37 @@ end
 
 function M.is_open()
     return state.open and valid_window(state.win) or false
+end
+
+-- Internal UI seam: report only an attached edge split in the current tab.
+function M.tabline_geometry()
+    if
+        not M.is_open()
+        or state.tab ~= vim.api.nvim_get_current_tabpage()
+        or vim.api.nvim_win_get_buf(state.win) ~= state.buf
+    then
+        return nil
+    end
+    local col = vim.api.nvim_win_get_position(state.win)[2]
+    local width = vim.api.nvim_win_get_width(state.win)
+    local at_edge = col == 0 or col + width == vim.o.columns
+    if not at_edge or width >= vim.o.columns - 1 then
+        return nil
+    end
+    return { win = state.win, col = col, width = width }
+end
+
+-- Called outside tabline evaluation; never probes metadata or mutates sessions.
+function M.redraw_heading()
+    local buffer_heading_visible = not tabline.heading_visible()
+    if not M.is_open() or state.buffer_heading_visible == buffer_heading_visible then
+        return
+    end
+    sync_selection()
+    local ok, err = render(state.rows, state.selected_key)
+    if not ok then
+        report_error(err)
+    end
 end
 
 function M.refresh()

@@ -153,7 +153,27 @@ native scrollable help window and origin-focus restoration. Sidebar transient
 suspension dismisses help and removes its split before captures/layout changes;
 resume reattaches the logically open view after committed or rolled-back
 operations. Sidebar-only pin display is an explicit row presentation option;
-Telescope's default headers are unchanged.
+Telescope's default headers are unchanged. Setup installs `ui/tabline.lua`'s
+native tabline integration by default (`tabline.enabled=true`), without changing
+visibility preferences. It decorates a nonempty existing format or top-level
+expression, or supplies its built-in clickable UI when the option is empty.
+Disabling integration leaves both native options untouched. A native
+expression trampoline evaluates the original provider once and wraps its FORMAT
+result without flattening click targets, highlights or nested expressions. Partial
+native option edits retain Neovim's hidden insecure-option flag; a script-local
+Vimscript bridge catches sandbox prohibition and returns the original format.
+Deferred reconciliation restores sandboxed options with one warning. A direct
+`SafeState` check also handles first renders delayed until after setup's scheduled
+work; idle checks do not schedule recurring work. Raw script-local expression
+references fall back unchanged with a warning; explicit `<SNR>` references remain
+supported. Later provider replacements are never adopted. The adapter remembers
+editing focus per tab and wraps native tabline text using the sidebar's displayed
+edge geometry. The sidebar owns buffer rendering and row, cursor and highlight
+mapping. Heading reconciliation is
+scheduled outside tabline evaluation. Once confirmed, heading ownership does not
+depend on cached render geometry, so reattaching the sidebar does not briefly
+restore the in-buffer heading. Neither adapter changes editor visibility
+preferences or lifecycle behavior.
 
 The mark popup has two private UI owners. `ui/window.lua` validates its
 supported floating-window options and action keymap, computes editor-relative

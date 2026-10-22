@@ -23,7 +23,7 @@ api.active.snapshot_async = function(callback)
     callback(snapshot)
 end
 local sidebar = require("sess.ui.sidebar")
-sidebar.configure({ active_expand = "all", refresh_interval = 60000 })
+sidebar.configure({ refresh_interval = 60000 })
 assert(sidebar.open())
 local win = vim.api.nvim_get_current_win()
 local buf = vim.api.nvim_win_get_buf(win)
@@ -149,12 +149,12 @@ key("p")
 assert(notifications[#notifications][1]:find("pin failed", 1, true))
 assert(sidebar.is_open())
 
--- Free cursor locations and placeholders never reuse a remembered target.
+-- Free cursor locations never reuse a remembered target.
 local targeted = { "rr", "uu", "dd", "<C-b>", "um", "p", "<C-y>", "<C-o>", "<CR>", "<Tab>" }
 local lines = vim.api.nvim_buf_line_count(buf)
 count = #calls
 local prompt_count = #prompts
-for _, line in ipairs({ 1, 2, 6, lines - 2, lines - 1, lines }) do
+for _, line in ipairs({ 1, 2, lines - 3, lines - 2, lines - 1, lines }) do
     cursor(line)
     for _, lhs in ipairs(targeted) do
         key(lhs)
@@ -169,9 +169,9 @@ cursor(4)
 key("<Tab>")
 fixture.equal(8, vim.api.nvim_buf_line_count(buf))
 key("<S-Tab>")
-fixture.equal(7, vim.api.nvim_buf_line_count(buf)) -- both collapsed
+fixture.equal(8, vim.api.nvim_buf_line_count(buf)) -- both collapsed
 key("<S-Tab>")
-fixture.equal(9, vim.api.nvim_buf_line_count(buf)) -- both expanded
+fixture.equal(9, vim.api.nvim_buf_line_count(buf)) -- both expanded; no empty child
 local before = refreshes
 cursor(1)
 key("r")

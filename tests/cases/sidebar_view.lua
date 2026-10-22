@@ -36,7 +36,7 @@ local function order(expected, mode)
     for index, name in ipairs(expected) do
         assert(lines[index + 2]:find(name, 1, true), vim.inspect(lines))
     end
-    assert(lines[#lines]:find("sort: " .. mode, 1, true))
+    fixture.equal({ "sort: " .. mode, "", "? - Help" }, vim.list_slice(lines, #lines - 2))
 end
 order({ "Zulu", "Beta", "Alpha" }, "default")
 vim.api.nvim_win_set_cursor(win, { 1, 0 }) -- view-wide sort works off-row

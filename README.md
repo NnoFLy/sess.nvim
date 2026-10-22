@@ -65,6 +65,7 @@ require("sess").setup({
         set_mark = "<C-q>",
         edit_marks = "<C-e>",
     },
+    tabline = { enabled = true },
     sidebar = {
         enabled = true,
         start_open = false,
@@ -72,7 +73,7 @@ require("sess").setup({
         width = 32,
         min_width = 24,
         max_width = 48,
-        active_expand = "none", -- all | current | none
+        active_expand = "all", -- all | current | none
         toggle_key = false,
         refresh_interval = 1000, -- positive integer milliseconds
         mouse = true,
@@ -82,8 +83,12 @@ require("sess").setup({
 
 `:Sess sidebar` toggles the optional native sidebar. It shows active sessions
 and agents, refreshes while open, and preserves selection across tab changes.
+Sidebar sessions start expanded, including sessions added while it is open;
+the active picker starts collapsed. Refresh preserves manual expansion choices.
+Expanded sessions without agents show only their session header.
 The cursor can move freely onto the title, separators, and footer without
 refresh snapping it back to a session or agent.
+The footer shows `sort: <state>`, a blank line, then `? - Help`.
 All mappings are fixed, buffer-local normal-mode keys:
 
 | Keys | Action |
@@ -103,7 +108,7 @@ Help lists available actions first, followed by dimmed unavailable actions group
 under a `▸` heading for each shared reason.
 
 Row actions require the cursor on a real session/agent row; session operations
-on agents target their parent. Title, separator, placeholder and footer lines
+on agents target their parent. Title, separator and footer lines
 never act on a remembered selection. Sort is sidebar-local, survives refresh,
 and resets on close/reopen. Headers show pins and existing marks. A click
 selects and a double-click accepts when mouse reporting is enabled; Sess.nvim
@@ -113,6 +118,34 @@ Save/Discard/Cancel and Stop/Cancel safety prompts. Sidebar/help resources are
 transient and excluded from session captures. The sidebar does not require
 Telescope or provide search, create, restore-deleted, density control or
 configurable action keys.
+
+### Native tabline
+
+Setup defaults to `tabline = { enabled = true }`. It decorates an existing
+custom native tabline without changing its dynamic content, click targets or
+highlights. When `vim.o.tabline` is empty, Sess supplies a clickable tab list.
+To opt out entirely:
+
+```lua
+require("sess").setup({ tabline = { enabled = false } })
+```
+
+`enabled` is the only tabline option and must be boolean. Disabling it leaves
+both `tabline` and `showtabline` untouched. Setup is one-shot. Sandboxed providers
+and raw script-local references are left unchanged, with a warning; explicit
+`<SNR>` references are supported. Providers installed later are not rewrapped.
+Sess.nvim never changes `showtabline`: `0` hides the tabline, `1` shows it only
+with multiple tabs, and `2` always shows it.
+
+When the native tabline is visible, `ACTIVE SESSIONS` moves above the sidebar,
+matching its displayed width and edge. It stays there across tab switches and
+resizing without flashing inside the sidebar. Tabs retain native click targets
+and selected-tab highlights. Sess's labels safely display filenames from each
+tab's focused editing window, remembering it while Sess transient UI is focused.
+Closing the sidebar leaves the tab list in place. Hidden, replaced, or externally
+drawn tablines keep the in-buffer heading instead. No tabline plugin is required;
+third-party provider configuration is unchanged.
+See `:help sess-tabline` for fallback and low-level helper contracts.
 
 See [`:help sess-api.opts`](doc/sessionizer.txt) for all options and
 [`:help sess-telescope`](doc/sessionizer.txt) for picker options.

@@ -37,13 +37,15 @@ local collapsed = rows.build_active({
 assert(#collapsed == 1)
 assert(collapsed[1].expandable)
 
-local placeholder = rows.build_active({
+local empty, empty_meta = rows.build_active({
     sessions = { first },
     agents_by_id = { one = {} },
     expanded = { one = true },
 }, { available_width = 40, highlights = {} })
-assert(placeholder[2].kind == "placeholder")
-assert(placeholder[2].parent_key == placeholder[1].key)
+assert(#empty == 1)
+assert(empty_meta.count == 1)
+assert(empty[1].kind == "session")
+assert(empty[1].expanded)
 
 local narrow, metadata = rows.build({
     sessions = { first },
