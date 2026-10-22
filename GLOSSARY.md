@@ -24,3 +24,17 @@ The saved editor state of one session. It does not promise to preserve live proc
 **Resume state**:
 The remembered active-session set, its order, and the current-session selection from a previous editor instance. It describes which contexts to resume, rather than containing their editor state.
 _Avoid_: All saved sessions, whole-editor snapshot
+
+## Persistent terminals (planned)
+
+**Persistent terminal**:
+A managed terminal execution that remains available independently of its editor views. It may contain an interactive shell, an agent, or another command.
+
+**Terminal view**:
+An editor attachment to a persistent terminal. Closing the view does not mean stopping its execution.
+
+**Terminal owner**:
+The optional session to which a persistent terminal belongs. Displaying a terminal in a session's layout does not change its owner.
+
+**Unassigned terminal**:
+A persistent terminal with no owning session. It remains independent of the sessions whose layouts display its views.

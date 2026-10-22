@@ -67,12 +67,7 @@ function M.show(context)
     end
     local origin = vim.api.nvim_get_current_win()
     local origin_tab = vim.api.nvim_get_current_tabpage()
-    local lines = {
-        "SESS SIDEBAR ACTIONS",
-        "Session actions on agent rows target their parent session.",
-        "j/k, <C-f>/<C-b> scroll help; q/<Esc> dismiss.",
-        "",
-    }
+    local lines = {}
     local available, unavailable, groups_by_reason = {}, {}, {}
     local function add_action(action, reason)
         if not reason then

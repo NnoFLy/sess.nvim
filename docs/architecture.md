@@ -221,6 +221,46 @@ Pre-transition hooks run before a mutating lifecycle operation and may abort it.
 
 Observers receive defensive payloads containing the operation, affected session, and current session. Recursive lifecycle mutations are rejected while an operation is in progress. Agent register/update/unregister/focus are independent runtime operations but are explicitly rejected while a lifecycle operation is scoped; focus therefore cannot mutate editor state from a transition hook.
 
+## Planned persistent-terminal boundary
+
+[Issue #14](https://github.com/nnofly/sess.nvim/issues/14) specifies the agreed,
+not-yet-implemented persistent-terminal feature.
+[ADR 0001](adr/0001-separate-terminal-execution-from-editor-views.md) records
+why terminal execution and editor-view lifetimes must be separate. The current
+runtime-agent and ordinary-terminal behavior described above remains unchanged.
+
+The planned backend owns terminal launch, identity, inventory, attachment, and
+explicit termination through an isolated tmux server. Session lifecycle code
+coordinates ownership, restoration, unload, deletion, and error/diagnostic
+handling; the editor adapter owns Neovim views. Buffer-based agent registrations
+remain runtime observations of views, not persistent execution identities.
+Sidebar and Telescope consume shared queries and semantic rows rather than
+managing processes or persistence themselves.
+
+A verified backend inventory reconciles remote-created and closed windows,
+including changes made while Neovim was closed. Failed inventory queries retain
+unavailable state instead of implying deletion. Snapshot restoration reconnects
+views without executing launch commands, and preserves the existing remembered
+active-session set and ordering. New backend terminals appear in lists without
+forcing new windows into restored layouts. Ownership never follows layout
+membership: an unassigned terminal can appear in a session snapshot without
+becoming owned by it.
+
+Owned terminals appear beneath active sessions; inactive owners' terminals and
+unassigned terminals appear in the final Background terminals group. Selecting
+an inactive owner's terminal first uses the normal session-load lifecycle.
+Closing views or unloading detaches without stopping work. Deleting an owner
+offers Stop owned terminals and delete / Cancel, without affecting unassigned
+terminals. Process termination is irreversible even if subsequent deletion
+fails; operation results must describe that partial progress honestly.
+
+The new trust boundary includes tmux metadata, backend identities, and remote
+inventory. Validate these inputs before targeting processes. Only explicit
+launch/restart may execute a user-supplied shell command; restore and discovery
+must not execute stored commands. Use private socket permissions and the user's
+existing authenticated remote transport, not a new network listener. Direct
+external tmux termination is outside sess's confirmation UI.
+
 ## Design rules for future changes
 
 - Keep persistence, lifecycle, editor, state, and UI responsibilities separate.
