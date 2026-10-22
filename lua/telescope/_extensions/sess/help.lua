@@ -54,7 +54,7 @@ local descriptors = {
         [actions.active_enter] = {
             id = "enter",
             short = "switch/focus",
-            label = "Switch and focus agent",
+            label = "Switch/focus terminal or agent; expand background",
         },
         [actions.toggle_active] = {
             id = "expand",
@@ -69,17 +69,17 @@ local descriptors = {
         [actions.next_active_header] = {
             id = "next_header",
             short = "next header",
-            label = "Next session header",
+            label = "Next group header",
         },
         [actions.previous_active_header] = {
             id = "previous_header",
             short = "previous header",
-            label = "Previous session header",
+            label = "Previous group header",
         },
         [actions.refresh_active] = {
             id = "refresh",
             short = "refresh",
-            label = "Refresh agent data",
+            label = "Refresh active inventory",
         },
         [actions.focus_agent] = {
             id = "focus",
@@ -174,8 +174,7 @@ local function custom_description(custom, kind, mode, key, action, fallback)
         value = custom[key]
     end
     if value == nil and type(custom[kind]) == "table" then
-        value = custom[kind][mode] and custom[kind][mode][key]
-            or custom[kind][key]
+        value = custom[kind][mode] and custom[kind][mode][key] or custom[kind][key]
     end
     if type(value) == "table" then
         value = value.label or value.help or value.short
@@ -239,6 +238,12 @@ local function available(kind, item, value)
         if item.id == "expand_all" then
             return true
         end
+        if item.id == "enter" or item.id == "expand" then
+            return value.kind == "terminal"
+                or value.kind == "background_terminals"
+                or value.kind == "session"
+                or value.kind == "agent"
+        end
         if item.id == "focus" then
             return value.kind == "agent" and value.current == true
         end
@@ -298,11 +303,7 @@ end
 
 function M.footer(kind, mode, mappings, options)
     local action_help = get_action_help(options)
-    if
-        action_help == false
-        or action_help.enabled == false
-        or action_help.footer == false
-    then
+    if action_help == false or action_help.enabled == false or action_help.footer == false then
         return nil
     end
 

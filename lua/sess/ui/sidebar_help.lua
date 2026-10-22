@@ -4,10 +4,14 @@ local popup
 local help_ns = vim.api.nvim_create_namespace("sess_sidebar_help")
 
 local actions = {
-    { "<CR>", "Load session, then focus selected/remembered agent", "row" },
-    { "<Tab>", "Toggle parent session expansion", "row" },
+    {
+        "<CR>",
+        "Load session, then focus selected/remembered agent; terminal focus; background expand",
+        "accept",
+    },
+    { "<Tab>", "Toggle parent group expansion", "accept" },
     { "<S-Tab>", "Collapse all if any expanded; otherwise expand all" },
-    { "<C-j> / <C-k>", "Next / previous session header" },
+    { "<C-j> / <C-k>", "Next / previous group header" },
     { "r / <C-r>", "Refresh" },
     { "rr", "Rename session", "row" },
     { "uu", "Safely unload session (Save/Discard/Cancel; Stop/Cancel)", "row" },
@@ -84,7 +88,12 @@ function M.show(context)
     end
     for _, action in ipairs(actions) do
         local reason
-        if action[3] == "row" then
+        if action[3] == "accept" then
+            reason = context.accept_reason
+            if reason == nil then
+                reason = context.row_reason
+            end
+        elseif action[3] == "row" then
             reason = context.row_reason
         elseif action[3] == "focus" then
             reason = context.focus_reason

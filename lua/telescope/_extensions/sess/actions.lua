@@ -223,9 +223,7 @@ local function restore_refresh_state(picker, state)
             state.expanded[key] = value
         end
     end
-    local prompt_border = picker.layout
-        and picker.layout.prompt
-        and picker.layout.prompt.border
+    local prompt_border = picker.layout and picker.layout.prompt and picker.layout.prompt.border
     if prompt_border and state.border_title_present then
         pcall(prompt_border.change_title, prompt_border, state.border_title)
     end
@@ -310,12 +308,7 @@ local function finish_action(prompt_bufnr, picker, status)
                 and type(current_status) == "string"
                 and current_status:match("^Failed:")
             )
-            or (
-                status == "Done"
-                and type(current_status) == "string"
-                and current_status ~= "Working..."
-                and current_status ~= "Done"
-            )
+            or (status == "Done" and type(current_status) == "string" and current_status ~= "Working..." and current_status ~= "Done")
             or (status == "Focused agent" and current_status == "Done with diagnostics")
         then
             return
@@ -389,12 +382,8 @@ local function refresh(prompt_bufnr, finder, key)
             picker._sess_search_options
         )
     end
-    next_finder = next_finder or finders.generate_new_finder(
-        display_opts,
-        nil,
-        nil,
-        picker._sess_search_options
-    )
+    next_finder = next_finder
+        or finders.generate_new_finder(display_opts, nil, nil, picker._sess_search_options)
     -- Mutations redraw the preview and rows without discarding user input. The
     -- shared transaction also protects background hydration and resize paths.
     return M.transactional_refresh(picker, next_finder, key)
@@ -439,7 +428,7 @@ end
 -- in session and use session_id. These helpers let lifecycle actions handle both
 -- shapes, so inherited mappings remain usable in the active picker.
 local function session_id(value)
-    if not value then
+    if not value or value.kind == "terminal" or value.kind == "background_terminals" then
         return nil
     end
     local session = value.session
@@ -487,9 +476,7 @@ end
 local function update_active_title(picker, snapshot)
     local title = finders.active_dashboard_title(snapshot)
     picker.prompt_title = title
-    local prompt_border = picker.layout
-        and picker.layout.prompt
-        and picker.layout.prompt.border
+    local prompt_border = picker.layout and picker.layout.prompt and picker.layout.prompt.border
     if prompt_border and type(prompt_border.change_title) == "function" then
         prompt_border:change_title(title)
     end
@@ -566,7 +553,15 @@ end
 
 function M.toggle_active(prompt_bufnr)
     local value = selected_value()
-    if not value or (value.kind ~= "session" and value.kind ~= "agent") then
+    if
+        not value
+        or (
+            value.kind ~= "session"
+            and value.kind ~= "agent"
+            and value.kind ~= "terminal"
+            and value.kind ~= "background_terminals"
+        )
+    then
         return
     end
 
@@ -575,8 +570,13 @@ function M.toggle_active(prompt_bufnr)
         return
     end
     local expanded = copy_expanded(picker._sess_expanded)
-    local session_id = value.session_id
-    expanded[session_id] = not expanded[session_id]
+    local background_key = require("sess.ui.rows").key("background_terminals", "")
+    local expansion_key = (
+        value.kind == "background_terminals" or value.parent_key == background_key
+    )
+            and background_key
+        or value.session_id
+    expanded[expansion_key] = not expanded[expansion_key]
     refresh_active(prompt_bufnr, expanded)
 end
 
@@ -588,7 +588,15 @@ function M.toggle_all_active(prompt_bufnr)
     local expanded = copy_expanded(picker._sess_expanded)
     local active_snapshot = picker._sess_active_snapshot
     local sessions = active_snapshot and active_snapshot.sessions or api.state.active()
-    local any_expanded = false
+    local background_key = require("sess.ui.rows").key("background_terminals", "")
+    local has_background = false
+    for _, entry in ipairs(picker.finder and picker.finder.results or {}) do
+        if (entry.value or entry).kind == "background_terminals" then
+            has_background = true
+            break
+        end
+    end
+    local any_expanded = has_background and expanded[background_key] == true
     for _, session in ipairs(sessions) do
         if expanded[session.id] then
             any_expanded = true
@@ -597,6 +605,9 @@ function M.toggle_all_active(prompt_bufnr)
     end
     for _, session in ipairs(sessions) do
         expanded[session.id] = not any_expanded
+    end
+    if has_background then
+        expanded[background_key] = not any_expanded
     end
     refresh_active(prompt_bufnr, expanded)
 end
@@ -636,7 +647,7 @@ local function navigate_active_header(prompt_bufnr, direction)
     local headers = {}
     for index, entry in ipairs(entries) do
         local value = entry.value or entry
-        if value.kind == "session" then
+        if value.kind == "session" or value.kind == "background_terminals" then
             headers[#headers + 1] = { index = index, value = value }
         end
     end
@@ -685,6 +696,39 @@ M.active_previous_header = M.previous_active_header
 
 function M.active_enter(prompt_bufnr)
     local value = selected_value()
+    if value and value.kind == "background_terminals" then
+        local picker = current_picker(prompt_bufnr)
+        if picker_is_alive(picker) and not (picker._sess_expanded or {})[value.key] then
+            return M.toggle_active(prompt_bufnr)
+        end
+        return
+    end
+    if value and value.kind == "terminal" then
+        local active_picker = current_picker(prompt_bufnr)
+        if not picker_is_alive(active_picker) or active_picker._sess_refreshing then
+            return
+        end
+        local picker, started = begin_action(prompt_bufnr)
+        if not started then
+            return
+        end
+        if picker then
+            picker._sess_terminal_focusing = true
+        end
+        local called, ok, err, _, diagnostics = pcall(function()
+            actions.close(prompt_bufnr)
+            return api.terminal.focus(value.terminal_id or value.id)
+        end)
+        if picker then
+            picker._sess_terminal_focusing = nil
+        end
+        if not called then
+            ok, err = false, ok
+        end
+        local succeeded = report_result(picker, ok, err, diagnostics)
+        finish_action(prompt_bufnr, picker, succeeded and "Done" or "Failed")
+        return
+    end
     if not value or (value.kind ~= "session" and value.kind ~= "agent") then
         return
     end
@@ -967,7 +1011,9 @@ function M.on_picker_close(picker)
         pcall(cancel)
     end
     selection.cancel(picker)
-    finish_action(picker.prompt_bufnr, picker, "Cancelled")
+    if not picker._sess_terminal_focusing then
+        finish_action(picker.prompt_bufnr, picker, "Cancelled")
+    end
 end
 
 M.refresh_active_agents = M.refresh_active

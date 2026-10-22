@@ -115,10 +115,14 @@ session snapshots execute trusted Vimscript. Corrupt history is reported without
 repair or deletion. See `:help sess-resume` for ordering and failure details.
 
 `:Sess sidebar` toggles the optional native sidebar. It shows active sessions
-and agents, refreshes while open, and preserves selection across tab changes.
-Sidebar sessions start expanded, including sessions added while it is open;
-the active picker starts collapsed. Refresh preserves manual expansion choices.
-Expanded sessions without agents show only their session header.
+and agents plus persistent terminals, refreshes while open, and preserves selection
+across tab changes. Sidebar sessions and the background group start expanded,
+including groups added while it is open; the active picker starts collapsed.
+Refresh preserves manual expansion choices.
+Active owners show terminal children alongside explicit/detected agents. A final expandable
+**Background terminals** group contains inactive owners’ and unassigned terminals,
+with owner labels. Inventory never activates a session. Terminal execution states
+(`running`, `completed`, `unknown`) are separate from agent work status.
 The cursor can move freely onto the title, separators, and footer without
 refresh snapping it back to a session or agent.
 The footer shows `sort: <state>`, a blank line, then `? - Help`.
@@ -126,9 +130,9 @@ All mappings are fixed, buffer-local normal-mode keys:
 
 | Keys | Action |
 | --- | --- |
-| `<CR>` | Load session, then focus the selected agent (or remembered agent on a header). |
+| `<CR>` | Load/focus a session or agent; reconnect a terminal; expand Background terminals. |
 | `<Tab>` / `<S-Tab>` | Toggle parent expansion / collapse all if any expanded, else expand all. |
-| `<C-j>` / `<C-k>` | Next / previous session header. |
+| `<C-j>` / `<C-k>` | Next / previous group header. |
 | `r` / `<C-r>` | Refresh. |
 | `rr` / `uu` / `dd` | Rename / safely unload / confirm deletion. |
 | `<C-b>` / `um` | Assign / clear mark. |
@@ -140,8 +144,9 @@ All mappings are fixed, buffer-local normal-mode keys:
 Help lists available actions first, followed by dimmed unavailable actions grouped
 under a `▸` heading for each shared reason.
 
-Row actions require the cursor on a real session/agent row; session operations
-on agents target their parent. Title, separator and footer lines
+Session actions require the cursor on a real session/agent row; session operations
+on agents target their parent. Terminal rows only reconnect/focus; the background
+header Enter only expands; Tab toggles expansion. Title, separator and footer lines
 never act on a remembered selection. Sort is sidebar-local, survives refresh,
 and resets on close/reopen. Headers show pins and existing marks. A click
 selects and a double-click accepts when mouse reporting is enabled; Sess.nvim
@@ -203,7 +208,7 @@ for your own autocommands.
 | `:Sess mark @mark [target]` | Assign a persistent mark to a session. |
 | `:Sess unmark @mark` | Remove a mark. |
 | `:Sess list` | Open the Telescope session picker. |
-| `:Sess active` | Show active sessions and their agents in Telescope. |
+| `:Sess active` | Show active sessions, agents and persistent terminals in Telescope. |
 | `:Sess sidebar` | Toggle the optional native active-session sidebar. |
 
 For example:
@@ -248,11 +253,19 @@ sessions, and exiting Neovim leave the execution alive. Completed output stays
 available for inspection. This is not reboot or backend-loss recovery; work
 does not advance while the host sleeps.
 
-Keep the ID returned by `api.terminal.launch()` and explicitly reconnect with
-`api.terminal.attach(id)`. Saved layouts contain inert synthetic references,
-not commands to replay. Automatic view restoration, inventory/reconciliation,
-remote collection, and stop/delete controls are deferred. Until those controls
-exist, deleting an owner with surviving terminals or incomplete associations is
+Find surviving launched terminals in the sidebar or `:Sess active`, including
+from a fresh Neovim instance. Selecting a terminal calls `api.terminal.focus(id)`:
+it reuses/reconnects a verified execution, loading its owner through ordinary
+session safety checks first. Unassigned work opens without creating/activating a
+session. Completed executions reopen read-only output, not a job. Captures over
+64 KiB fail with an error without opening output; they are not truncated.
+Failed inventory queries retain uncertain identities as unknown/unavailable with
+diagnostics; they are not evidence of deletion. Explicit `api.terminal.attach(id)` still opens
+an independent view without loading an owner. No selection replays a command.
+
+Saved layouts contain inert synthetic references, not commands to replay.
+Automatic view restoration, adoption of remote-created windows, remote collection,
+and stop/delete controls are deferred. Until those controls exist, deleting an owner with surviving terminals or incomplete associations is
 refused. Ordinary terminal jobs still need the usual Stop confirmation on
 unload. See `:help sess-terminal` for results, failures and trust limits.
 
@@ -297,20 +310,25 @@ and diagnostic strings. Successful operations may include warnings from
 metadata updates, restoration, hooks, or events. State getters return
 defensive copies.
 
-Persistent-terminal operations take no options or hooks and emit no new events:
+Persistent-terminal operations take no options or hook overrides. Focus uses the
+ordinary configured session lifecycle when loading an owner:
 
 ```lua
 local ok, err, item, diagnostics = api.terminal.launch("make test")
 if ok then
-    -- Save item.id if you want to attach after closing this view or editor.
-    api.terminal.attach(item.id)
+    api.terminal.focus(item.id) -- safe owner load, then reuse/reconnect
+    -- api.terminal.attach(item.id) opens another independent attachment instead.
 end
 -- Success: true, nil, { id, execution, bufnr, job_id }, diagnostics
 -- Failure: false, error (a committed execution may still survive).
+local listed, list_err, entries, warnings = api.terminal.list()
+-- entries: { id, owner_id?, owner_name?, name, execution_state, available }
+-- Failures retain uncertain identities as unknown/unavailable.
 ```
 
-Agent state is runtime-only and is never stored in session snapshots. Detected
-and registered agents are shown by `:Sess active`. See [`:help sess-api`](doc/sessionizer.txt)
+Agent state is runtime-only and is never stored in session snapshots. Automatic
+agent detection excludes managed attachment views; explicit buffer registrations
+remain supported. Detected and registered agents are shown by `:Sess active`. See [`:help sess-api`](doc/sessionizer.txt)
 for the agent integration API and full failure behavior.
 
 ## Hooks and events

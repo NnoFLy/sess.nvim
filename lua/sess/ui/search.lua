@@ -125,7 +125,10 @@ function M.validate(options)
         local seen = {}
         for index, field in ipairs(options.fields) do
             if type(field) ~= "string" or not allowed_fields[field] then
-                return false, "search.fields[" .. index .. '] must be one of name, cwd, mark, pinned, last, current, active, agent, status, or info'
+                return false,
+                    "search.fields["
+                        .. index
+                        .. "] must be one of name, cwd, mark, pinned, last, current, active, agent, status, or info"
             end
             if seen[field] then
                 return false, "search.fields must not contain duplicates"
@@ -195,7 +198,18 @@ end
 local function configured_fields(options)
     local fields = options and options.fields
     if type(fields) ~= "table" or #fields == 0 then
-        return { "name", "cwd", "mark", "pinned", "last", "current", "active", "agent", "status", "info" }
+        return {
+            "name",
+            "cwd",
+            "mark",
+            "pinned",
+            "last",
+            "current",
+            "active",
+            "agent",
+            "status",
+            "info",
+        }
     end
     return fields
 end
@@ -393,7 +407,8 @@ function M.new_sorter(base, options)
         local query = filter and filter.query or prompt
         local plain_match = plain_matches(fields, query, options)
         if filter then
-            if not allowed_fields[filter.field]
+            if
+                not allowed_fields[filter.field]
                 or not field_matches(fields, filter.field, filter.query)
             then
                 return -1
@@ -469,7 +484,11 @@ function M.new_active_sorter(base, options)
             end
             group_scores[group_ordinal] = group_score
         end
-        return group_score >= 0 and group_score or row_score
+        local score = group_score >= 0 and group_score or row_score
+        -- Keep every background match after every active group, regardless of
+        -- fuzzy score magnitude, while retaining relative scores within each.
+        score = score / (1 + score)
+        return group_fields._background and (1 + score) or score
     end
     return sorter
 end

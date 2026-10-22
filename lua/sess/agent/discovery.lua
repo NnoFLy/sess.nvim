@@ -779,7 +779,7 @@ function M.new(probes)
             options = options or {}
             local result = {}
             for _, bufnr in ipairs(session_buffers(session_id)) do
-                if valid_terminal(bufnr) then
+                if valid_terminal(bufnr) and not require("sess.terminal.view").identity(bufnr) then
                     local agent, identity = discover(
                         bufnr,
                         options.cache == true,

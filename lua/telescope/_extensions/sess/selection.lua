@@ -2,7 +2,7 @@ local M = {}
 local path = require("sess.path")
 
 local function row_value(row)
-    return row and (row.value or row)
+    return row and (row.kind and row or row.value or row)
 end
 
 function M.key(value)
@@ -16,6 +16,7 @@ function M.key(value)
             id = id,
             kind = value.kind,
             agent_id = value.agent_id,
+            parent_key = value.parent_key,
         }
     end
     if value.directory and value.path then
@@ -36,6 +37,17 @@ local function same_key(left, right)
         and left.agent_id == right.agent_id
         and left.directory == right.directory
         and left.path == right.path
+end
+
+local function is_parent(value, key)
+    if not value then
+        return false
+    end
+    if key.kind == "terminal" then
+        return vim.tbl_contains(value.terminal_ids or {}, key.id)
+    end
+    return (key.parent_key and value.key == key.parent_key)
+        or (not key.parent_key and value.session_id == key.id and value.kind == "session")
 end
 
 local function select_manager_entry(picker, index)
@@ -68,7 +80,7 @@ local function restore_from_manager(picker, key, opts)
             if same_key(M.key(value), key) then
                 return select_manager_entry(picker, index)
             end
-            if match_parent and value and value.session_id == key.id and value.kind == "session" then
+            if match_parent and is_parent(value, key) then
                 return select_manager_entry(picker, index)
             end
         end
@@ -127,7 +139,7 @@ function M.restore(picker, finder, key, opts)
     if opts and opts.parent then
         for index, row in ipairs(rows) do
             local value = row_value(row)
-            if value and value.session_id == key.id and value.kind == "session" then
+            if is_parent(value, key) then
                 pcall(picker.set_selection, picker, index)
                 return true
             end

@@ -241,6 +241,7 @@ end
 local function initial_expansion(snapshot)
     local result = {}
     local mode = state.options.active_expand
+    result[rows.key("background_terminals", "")] = mode == "all"
     for _, session in ipairs(snapshot.sessions or {}) do
         local key = rows.session_key(session.id)
         result[key] = mode == "all" or (mode == "current" and snapshot.current_id == session.id)
@@ -271,6 +272,13 @@ local function choose_selection(candidate)
         for current, row in ipairs(state.rows) do
             if row.key == old then
                 old_index, parent = current, row.parent_key
+                if row.kind == "terminal" then
+                    for _, header in ipairs(candidate) do
+                        if vim.tbl_contains(header.terminal_ids or {}, row.terminal_id) then
+                            return header.key
+                        end
+                    end
+                end
                 break
             end
         end
@@ -478,7 +486,7 @@ local function commit(snapshot, candidate)
     state.snapshot = vim.deepcopy(snapshot)
     state.rows = vim.deepcopy(candidate)
     for _, row in ipairs(candidate) do
-        if row.kind == "session" then
+        if row.expandable then
             state.expanded[row.key] = row.expanded
         end
     end
@@ -720,7 +728,7 @@ local function selected_row()
     local line = vim.api.nvim_win_get_cursor(state.win)[1]
     for index, row_line in ipairs(state.row_lines) do
         local row = state.rows[index]
-        if row_line == line and (row.kind == "session" or row.kind == "agent") then
+        if row_line == line and row.kind ~= "placeholder" then
             return row
         end
     end
@@ -798,7 +806,7 @@ end
 
 local function session_action(callback)
     local row = selected_row()
-    if not row then
+    if not row or (row.kind ~= "session" and row.kind ~= "agent") then
         return false
     end
     return run_action(function(finish, alive)
@@ -837,7 +845,32 @@ local function resize_sidebar()
     return false, size_err
 end
 
+local toggle_selected
+
 local function accept()
+    local row = selected_row()
+    if row and row.kind == "background_terminals" then
+        return not state.expanded[row.key] and toggle_selected()
+    elseif row and row.kind == "terminal" then
+        return run_action(function(finish, alive)
+            finish(function()
+                local win = content_window()
+                if not valid_window(win) or editor.is_transient_window(win) then
+                    return false, "no content window available for terminal focus"
+                end
+                vim.api.nvim_set_current_win(win)
+                -- WinEnter callbacks can close/reopen this sidebar or redirect
+                -- focus. Never continue an old acceptance in the replacement UI.
+                if not alive() then
+                    return nil
+                end
+                if vim.api.nvim_get_current_win() ~= win or editor.is_transient_window(win) then
+                    return false, "content window changed before terminal focus"
+                end
+                return api.terminal.focus(row.terminal_id)
+            end)
+        end)
+    end
     return session_action(function(session, row)
         local diagnostics = {}
         local agent_id = row.kind == "agent" and row.agent_id or nil
@@ -880,7 +913,7 @@ end
 
 local function prompt_action(kind)
     local row = selected_row()
-    if not row then
+    if not row or (row.kind ~= "session" and row.kind ~= "agent") then
         return false
     end
     return run_action(function(finish, alive)
@@ -971,7 +1004,7 @@ local function redraw_view()
     return committed
 end
 
-local function toggle_selected()
+toggle_selected = function()
     if busy() then
         return false
     end
@@ -979,7 +1012,10 @@ local function toggle_selected()
     if not row then
         return false
     end
-    local key = rows.session_key(row.session_id)
+    local key = row.expandable and row.key or row.parent_key
+    if not key then
+        return false
+    end
     local previous = state.expanded[key]
     state.expanded[key] = not previous
     if redraw_view() then
@@ -996,13 +1032,13 @@ local function expand_all()
     local previous = vim.deepcopy(state.expanded)
     local any_expanded = false
     for _, row in ipairs(state.rows) do
-        if row.kind == "session" and state.expanded[row.key] then
+        if row.expandable and state.expanded[row.key] then
             any_expanded = true
             break
         end
     end
     for _, row in ipairs(state.rows) do
-        if row.kind == "session" then
+        if row.expandable then
             state.expanded[row.key] = not any_expanded
         end
     end
@@ -1034,14 +1070,14 @@ local function move_header(direction)
     local target
     if direction > 0 then
         for index = current + 1, #state.rows do
-            if state.rows[index].kind == "session" then
+            if state.rows[index].expandable then
                 target = index
                 break
             end
         end
         if not target then
             for index, row in ipairs(state.rows) do
-                if row.kind == "session" then
+                if row.expandable then
                     target = index
                     break
                 end
@@ -1049,14 +1085,14 @@ local function move_header(direction)
         end
     else
         for index = current - 1, 1, -1 do
-            if state.rows[index].kind == "session" then
+            if state.rows[index].expandable then
                 target = index
                 break
             end
         end
         if not target then
             for index = #state.rows, 1, -1 do
-                if state.rows[index].kind == "session" then
+                if state.rows[index].expandable then
                     target = index
                     break
                 end
@@ -1136,10 +1172,17 @@ local function install_mappings()
         local row = selected_row()
         local current = api.state.current()
         local reason = not row and "cursor is not on a session/agent row" or nil
-        if row and not live_session(row.session_id) then
+        if row and row.kind ~= "session" and row.kind ~= "agent" then
+            reason = "select a session/agent row"
+        elseif row and not live_session(row.session_id) then
             reason = "session is no longer active"
         end
+        local accept_reason = reason
+        if row and (row.kind == "terminal" or row.kind == "background_terminals") then
+            accept_reason = false
+        end
         help.show({
+            accept_reason = accept_reason,
             row_reason = reason,
             clear_reason = reason
                 or (not (state.snapshot.marks_by_id or {})[row.session_id] and "session has no mark")

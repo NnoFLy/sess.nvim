@@ -438,7 +438,61 @@ local function active_agent_row(
     return row
 end
 
---- Build active session headers and conditional agent children.
+local function terminal_fields(terminal)
+    return {
+        name = text(terminal.name),
+        info = table.concat(
+            { text(terminal.id), text(terminal.owner_id), text(terminal.owner_name) },
+            " "
+        ),
+        status = text(terminal.execution_state)
+            .. (terminal.available and " available" or " unavailable"),
+    }
+end
+
+local function terminal_display_text(value)
+    return (text(value):gsub("[%c]", " "))
+end
+
+local function terminal_row(terminal, parent, index, count, options)
+    local fields =
+        vim.tbl_extend("force", copy(parent.search_fields or {}), terminal_fields(terminal))
+    local owner = parent.kind == "background_terminals"
+            and (terminal.owner_name or terminal.owner_id or "unassigned")
+        or nil
+    local parts = display.fit_parts({
+        {
+            text = "  "
+                .. (index == count and options.symbols.tree.last_branch or options.symbols.tree.branch)
+                .. " ",
+        },
+        { text = terminal_display_text(terminal.name), shrink_priority = 3, min_width = 1 },
+        { text = "  " .. terminal_display_text(fields.status) },
+        {
+            text = owner and ("  " .. terminal_display_text(owner)) or "",
+            shrink_priority = 1,
+            truncate = "end",
+            min_width = 0,
+            expendable = true,
+        },
+    }, options.available_width)
+    local row = row_base("terminal", terminal, {
+        key = M.key("terminal", terminal.id),
+        parent_key = parent.key,
+        depth = 1,
+        actions = { focus = true },
+    })
+    row.terminal_id, row.value.terminal_id = terminal.id, terminal.id
+    row.session_id = terminal.owner_id
+    row.value.parent_key = parent.key
+    row.display_parts, row.display = parts, parts_text(parts)
+    row.search_fields, row.ordinal = fields, search.ordinal(fields)
+    row.active_group_fields, row.active_group_ordinal =
+        parent.active_group_fields, parent.active_group_ordinal
+    return row
+end
+
+--- Build active sessions with agent/terminal children and a final background group.
 ---@param view table
 ---@param options table?
 ---@return table[], table
@@ -482,6 +536,25 @@ function M.build_active(view, options)
         end
     end
 
+    local owned, background, active, seen = {}, {}, {}, {}
+    for _, session in ipairs(sorted) do
+        active[session.id] = true
+    end
+    for _, terminal in ipairs(view.terminals or {}) do
+        if
+            type(terminal) == "table"
+            and type(terminal.id) == "string"
+            and not seen[terminal.id]
+        then
+            seen[terminal.id] = true
+            if terminal.owner_id and active[terminal.owner_id] then
+                owned[terminal.owner_id] = owned[terminal.owner_id] or {}
+                table.insert(owned[terminal.owner_id], terminal)
+            else
+                background[#background + 1] = terminal
+            end
+        end
+    end
     local rows = {}
     for _, session in ipairs(sorted) do
         local session_key = M.session_key(session.id)
@@ -495,6 +568,22 @@ function M.build_active(view, options)
                 show_metadata = options.show_metadata,
                 show_pinned = options.show_pinned,
             }, widths)
+        local terminals = owned[session.id] or {}
+        header.terminal_ids = {}
+        for _, terminal in ipairs(terminals) do
+            header.terminal_ids[#header.terminal_ids + 1] = terminal.id
+            local fields = terminal_fields(terminal)
+            group_fields.info = text(group_fields.info) .. " " .. search.ordinal(fields)
+        end
+        group_ordinal = search.ordinal(group_fields)
+        header.active_group_ordinal, header.ordinal = group_ordinal, group_ordinal
+        if #terminals > 0 then
+            header.display_parts[#header.display_parts + 1] = {
+                text = "  terminals: " .. #terminals .. (view.terminals_stale and " stale" or ""),
+            }
+            header.display_parts = display.fit_parts(header.display_parts, options.available_width)
+            header.display = parts_text(header.display_parts)
+        end
         rows[#rows + 1] = header
         if is_expanded then
             local valid_agents = {}
@@ -508,7 +597,7 @@ function M.build_active(view, options)
                     session,
                     agent,
                     index,
-                    #valid_agents,
+                    #valid_agents + #terminals,
                     header,
                     view,
                     options,
@@ -518,6 +607,44 @@ function M.build_active(view, options)
                     group_ordinal
                 )
             end
+            for index, terminal in ipairs(terminals) do
+                rows[#rows + 1] = terminal_row(terminal, header, index, #terminals, options)
+            end
+        end
+    end
+    if #background > 0 then
+        local key = M.key("background_terminals", "")
+        local is_expanded = expanded[key] == true
+        local header = row_base("background_terminals", {}, {
+            key = key,
+            expandable = true,
+            expanded = is_expanded,
+            actions = { expand = true },
+        })
+        local fields = { name = "Background terminals", info = "", _background = true }
+        header.terminal_ids = {}
+        for _, terminal in ipairs(background) do
+            header.terminal_ids[#header.terminal_ids + 1] = terminal.id
+            fields.info = fields.info .. " " .. search.ordinal(terminal_fields(terminal))
+        end
+        header.search_fields, header.ordinal = fields, search.ordinal(fields)
+        header.active_group_fields, header.active_group_ordinal = fields, header.ordinal
+        header.display_parts = display.fit_parts({
+            {
+                text = (
+                    is_expanded and options.symbols.tree.expanded
+                    or options.symbols.tree.collapsed
+                )
+                    .. "Background terminals ("
+                    .. #background
+                    .. ")"
+                    .. (view.terminals_stale and " stale" or ""),
+            },
+        }, options.available_width)
+        header.display = parts_text(header.display_parts)
+        rows[#rows + 1] = header
+        for index, terminal in ipairs(is_expanded and background or {}) do
+            rows[#rows + 1] = terminal_row(terminal, header, index, #background, options)
         end
     end
     return rows,

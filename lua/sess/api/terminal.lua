@@ -36,4 +36,26 @@ M.attach = invoke(terminal.attach, function(id)
     return true
 end)
 
+-- Focus returns {id, execution, bufnr, job_id?}; completed output is a
+-- read-only capture buffer without a job. attach() always opens a tmux client.
+M.focus = invoke(function(id)
+    return terminal.focus(id, { hooks = opts.get().hooks })
+end, function(id)
+    if not require("sess.terminal.storage").valid_id(id) then
+        return false, "invalid terminal execution id"
+    end
+    return true
+end)
+
+-- true, nil, entries, diagnostics; false, error, retained_entries, diagnostics.
+M.list = function(...)
+    if not opts.is_setup() then
+        return false, "sess.nvim is not initialized; call setup() first", {}, {}
+    end
+    if select("#", ...) > 0 then
+        return false, "terminal.list() takes no arguments", {}, {}
+    end
+    return scope.wrap(terminal.list, false)()
+end
+
 return M

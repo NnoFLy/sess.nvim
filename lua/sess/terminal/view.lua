@@ -3,6 +3,7 @@ local editor = require("sess.editor")
 local M = {}
 local views = {}
 local clients = {}
+local outputs = {}
 
 local function report(message)
     require("sess.log").warn(message)
@@ -210,6 +211,180 @@ function M.open(execution)
     view.accepted = true
     exited(view)
     return result
+end
+
+local function reusable(view, buf)
+    local channel = vim.api.nvim_get_chan_info(view.job_id)
+    return views[buf] == view
+        and view.accepted
+        and not view.closing
+        and view.exit_code == nil
+        and vim.api.nvim_buf_is_valid(buf)
+        and vim.bo[buf].buftype == "terminal"
+        and not vim.bo[buf].modified
+        and vim.api.nvim_buf_get_name(buf) == view.name
+        and channel.mode == "terminal"
+        and channel.buffer == buf
+        and vim.fn.jobwait({ view.job_id }, 0)[1] == -1
+end
+
+local function output_valid(output, buf)
+    return outputs[buf] == output
+        and vim.api.nvim_buf_is_valid(buf)
+        and vim.bo[buf].buftype == "nofile"
+        and vim.bo[buf].readonly
+        and not vim.bo[buf].modifiable
+        and not vim.bo[buf].modified
+        and vim.api.nvim_buf_get_name(buf) == output.name
+        and vim.api.nvim_buf_get_changedtick(buf) == output.tick
+end
+
+local function focus_output(execution)
+    local invoking_win, source = vim.api.nvim_get_current_win(), vim.api.nvim_get_current_buf()
+    local text, capture_err = backend.capture_completed(execution)
+    if not text then
+        return nil, capture_err
+    end
+    local buf, output
+    local candidates = vim.tbl_keys(outputs)
+    table.sort(candidates)
+    for _, candidate in ipairs(candidates) do
+        local existing = outputs[candidate]
+        if
+            vim.deep_equal(existing.execution, execution)
+            and existing.text == text
+            and output_valid(existing, candidate)
+        then
+            buf, output = candidate, existing
+            break
+        end
+    end
+    local win = invoking_win
+    if buf then
+        for _, candidate in ipairs(vim.api.nvim_list_wins()) do
+            if
+                vim.api.nvim_win_get_buf(candidate) == buf
+                and not editor.is_transient_window(candidate)
+            then
+                win = candidate
+                break
+            end
+        end
+    end
+    if editor.is_transient_window(win) then
+        return nil, "cannot focus terminal output in a transient UI window"
+    end
+    local ok, err = editor.protected(function()
+        if not buf then
+            if not selected(win, source) then
+                error("invoking window or buffer changed before terminal output")
+            end
+            buf = vim.api.nvim_create_buf(true, false)
+            if not empty(buf, vim.api.nvim_buf_get_changedtick(buf)) then
+                error("terminal output buffer was adopted by callbacks")
+            end
+            output = {
+                execution = vim.deepcopy(execution),
+                text = text,
+                name = "sess-terminal-output://" .. execution.id .. "/" .. buf,
+            }
+            vim.bo[buf].bufhidden = "hide"
+            vim.bo[buf].buftype = "nofile"
+            vim.bo[buf].swapfile = false
+            vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(text, "\n", { plain = true }))
+            vim.bo[buf].modified = false
+            vim.bo[buf].modifiable = false
+            vim.bo[buf].readonly = true
+            output.tick = vim.api.nvim_buf_get_changedtick(buf)
+            outputs[buf] = output
+            vim.api.nvim_create_autocmd("BufWipeout", {
+                buffer = buf,
+                once = true,
+                callback = function()
+                    outputs[buf] = nil
+                end,
+            })
+            vim.api.nvim_buf_set_name(buf, output.name)
+        end
+        if not output_valid(output, buf) then
+            error("terminal output buffer changed before focus")
+        end
+        vim.api.nvim_set_current_win(win)
+        vim.api.nvim_win_set_buf(win, buf)
+        if not selected(win, buf) or not output_valid(output, buf) then
+            error("terminal output buffer changed during focus")
+        end
+        return true
+    end)
+    if not ok then
+        return nil, err
+    end
+    if not selected(win, buf) or not output_valid(output, buf) then
+        return nil, "terminal output buffer changed during focus"
+    end
+    local checked, check_err, execution_state = backend.get(execution.id)
+    if not checked or not vim.deep_equal(checked, execution) or execution_state ~= "completed" then
+        return nil, check_err or "completed terminal association changed during focus"
+    end
+    return { id = execution.id, execution = execution, bufnr = buf }
+end
+
+function M.focus(execution, execution_state)
+    if execution_state == "completed" then
+        return focus_output(execution)
+    end
+    local candidates = vim.tbl_keys(views)
+    table.sort(candidates)
+    for _, buf in ipairs(candidates) do
+        local view = views[buf]
+        if view and view.id == execution.id and reusable(view, buf) then
+            local valid = backend.validate_attachment(view.attachment)
+            if valid then
+                local win
+                for _, candidate in ipairs(vim.api.nvim_list_wins()) do
+                    if
+                        vim.api.nvim_win_get_buf(candidate) == buf
+                        and not editor.is_transient_window(candidate)
+                    then
+                        win = candidate
+                        break
+                    end
+                end
+                win = win or vim.api.nvim_get_current_win()
+                if editor.is_transient_window(win) then
+                    return nil, "cannot focus a terminal attachment in a transient UI window"
+                end
+                local ok, err = editor.protected(function()
+                    vim.api.nvim_set_current_win(win)
+                    if not reusable(view, buf) then
+                        error("terminal view changed before focus")
+                    end
+                    vim.api.nvim_win_set_buf(win, buf)
+                    if not attached(view, win, buf) then
+                        error("terminal view changed during focus")
+                    end
+                    return true
+                end)
+                if not ok then
+                    return nil, err
+                end
+                if not attached(view, win, buf) or not reusable(view, buf) then
+                    return nil, "terminal view changed during focus"
+                end
+                local checked, check_err = backend.validate_attachment(view.attachment)
+                if not checked then
+                    return nil, check_err
+                end
+                return {
+                    id = execution.id,
+                    execution = execution,
+                    bufnr = buf,
+                    job_id = view.job_id,
+                }
+            end
+        end
+    end
+    return M.open(execution)
 end
 
 vim.api.nvim_create_autocmd("VimLeavePre", {

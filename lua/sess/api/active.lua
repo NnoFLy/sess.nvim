@@ -1,4 +1,5 @@
 local agents = require("sess.api.agent")
+local terminals = require("sess.api.terminal")
 local sessions = require("sess.api.session")
 local state = require("sess.api.state")
 
@@ -13,9 +14,11 @@ local MAX_AGENTS = 256
 local cached_snapshot
 
 local function append_diagnostic(result, value)
-    if #result.diagnostics >= MAX_DIAGNOSTICS then return end
+    if #result.diagnostics >= MAX_DIAGNOSTICS then
+        return
+    end
     if type(value) ~= "string" then
-        value = "agent status diagnostic is malformed"
+        value = "active query diagnostic is malformed"
     elseif #value > MAX_DIAGNOSTIC_LENGTH then
         value = value:sub(1, MAX_DIAGNOSTIC_LENGTH)
     end
@@ -32,6 +35,9 @@ local function new_snapshot()
     return {
         sessions = active,
         active_by_id = active_by_id,
+        terminals = {},
+        terminals_loaded = false,
+        terminals_stale = false,
         agents_by_id = {},
         focused_by_id = {},
         marks_by_id = {},
@@ -54,11 +60,10 @@ end
 -- status snapshots are small and the string is cheaper than deep equality on
 -- every refresh.
 local function snapshot_signature(result)
-    local parts = {
-        tostring(result.generation),
-        tostring(result.current_id or ""),
-        tostring(result.marks_loaded == true),
-    }
+    local parts = {}
+    append_signature(parts, result.generation)
+    append_signature(parts, result.current_id)
+    append_signature(parts, result.marks_loaded == true)
     for _, session in ipairs(result.sessions or {}) do
         append_signature(parts, session.id)
         append_signature(parts, session.metadata and session.metadata.name)
@@ -82,6 +87,22 @@ local function snapshot_signature(result)
             end
         end
     end
+    append_signature(parts, result.terminals_loaded)
+    append_signature(parts, result.terminals_stale)
+    append_signature(parts, #(result.terminals or {}))
+    for _, terminal in ipairs(result.terminals or {}) do
+        for _, field in ipairs({
+            "id",
+            "owner_id",
+            "owner_name",
+            "name",
+            "execution_state",
+            "available",
+        }) do
+            append_signature(parts, terminal[field])
+        end
+    end
+    append_signature(parts, #(result.diagnostics or {}))
     for _, diagnostic in ipairs(result.diagnostics or {}) do
         append_signature(parts, diagnostic)
     end
@@ -93,8 +114,8 @@ local function complete_snapshot(result)
     return result
 end
 
--- Build the inexpensive part used to open the picker immediately. Agent and
--- mark discovery is deferred to snapshot_async(), unless the previous active
+-- Build the inexpensive part used to open the picker immediately. Agent,
+-- terminal and mark discovery is deferred to snapshot_async(), unless the previous active
 -- picker has a completed probe to reuse.
 function M.initial_snapshot()
     local result = new_snapshot()
@@ -103,13 +124,16 @@ function M.initial_snapshot()
         -- expensive probe results; marks are shown immediately and reloaded lazily.
         result.marks_by_id = vim.deepcopy(cached_snapshot.marks_by_id or {})
         result.marks_loaded = false
+        result.terminals = vim.deepcopy(cached_snapshot.terminals or {})
+        result.terminals_loaded = cached_snapshot.terminals_loaded == true
+        result.terminals_stale = result.terminals_loaded
+        result.diagnostics = vim.deepcopy(cached_snapshot.diagnostics or {})
         local loaded_agents = cached_snapshot.agents_loaded_by_id or {}
         for _, session in ipairs(result.sessions) do
             local session_id = session.id
             if loaded_agents[session_id] then
-                result.agents_by_id[session_id] = vim.deepcopy(
-                    cached_snapshot.agents_by_id[session_id] or {}
-                )
+                result.agents_by_id[session_id] =
+                    vim.deepcopy(cached_snapshot.agents_by_id[session_id] or {})
                 result.focused_by_id[session_id] = cached_snapshot.focused_by_id[session_id]
                 result.agents_loaded_by_id[session_id] = true
                 -- Cached rows are useful immediately but remain visibly stale
@@ -121,9 +145,55 @@ function M.initial_snapshot()
     return complete_snapshot(result)
 end
 
+-- A failed inventory is not evidence of closure. Keep identities visible, but
+-- never present last-known availability or execution state as a live result.
+-- Successful per-entry backend observations remain authoritative on partial failure.
+local function add_terminals(result, previous)
+    local called, ok, err, entries, diagnostics = pcall(terminals.list)
+    local failed = not called or not ok
+    if not called then
+        append_diagnostic(result, "terminal inventory failed: " .. tostring(ok))
+    elseif not ok and err then
+        append_diagnostic(result, err)
+    end
+    if type(diagnostics) == "table" then
+        for _, diagnostic in ipairs(diagnostics) do
+            append_diagnostic(result, diagnostic)
+        end
+    elseif diagnostics ~= nil then
+        append_diagnostic(result, "terminal inventory diagnostics were malformed")
+        failed = true
+    end
+    if entries ~= nil and type(entries) ~= "table" then
+        append_diagnostic(result, "terminal inventory result was malformed")
+        entries, failed = nil, true
+    end
+    local inventory, seen = {}, {}
+    local function retain(values, unavailable)
+        for _, entry in ipairs(values or {}) do
+            if type(entry) == "table" and type(entry.id) == "string" and not seen[entry.id] then
+                local value = vim.deepcopy(entry)
+                if unavailable then
+                    value.execution_state, value.available = "unknown", false
+                end
+                inventory[#inventory + 1], seen[entry.id] = value, true
+            end
+        end
+    end
+    retain(entries)
+    if failed then
+        retain(previous and previous.terminals, true)
+    end
+    result.terminals = inventory
+    result.terminals_loaded = true
+    result.terminals_stale = failed
+end
+
 local function add_marks(result)
     local ok, err, entries, diagnostics = sessions.list_marks()
-    if not ok and err then result.diagnostics[#result.diagnostics + 1] = err end
+    if not ok and err then
+        result.diagnostics[#result.diagnostics + 1] = err
+    end
     for _, diagnostic in ipairs(diagnostics or {}) do
         result.diagnostics[#result.diagnostics + 1] = diagnostic
     end
@@ -136,8 +206,7 @@ local function add_marks(result)
     for _, entry in ipairs(entries or {}) do
         if not entry.stale then
             local mark = result.marks_by_id[entry.id]
-            result.marks_by_id[entry.id] = mark
-                and (mark .. " @" .. entry.mark)
+            result.marks_by_id[entry.id] = mark and (mark .. " @" .. entry.mark)
                 or ("@" .. entry.mark)
         end
     end
@@ -146,17 +215,14 @@ local function add_marks(result)
 end
 
 local function add_agents(result, session, previous)
-    local called, listed, list_err, found, focused_id, diagnostics = pcall(
-        agents.snapshot_active,
-        session.id
-    )
+    local called, listed, list_err, found, focused_id, diagnostics =
+        pcall(agents.snapshot_active, session.id)
     local stale = false
     if not called then
-        append_diagnostic(result, string.format(
-            "agent status probe failed for %s: %s",
-            session.id,
-            tostring(listed)
-        ))
+        append_diagnostic(
+            result,
+            string.format("agent status probe failed for %s: %s", session.id, tostring(listed))
+        )
         stale = true
     elseif not listed then
         append_diagnostic(result, list_err)
@@ -189,9 +255,8 @@ local function add_agents(result, session, previous)
     stale = stale or probe_failed
     result.stale_by_id[session.id] = stale or nil
     if stale and previous then
-        result.agents_by_id[session.id] = vim.deepcopy(
-            (previous.agents_by_id or {})[session.id] or {}
-        )
+        result.agents_by_id[session.id] =
+            vim.deepcopy((previous.agents_by_id or {})[session.id] or {})
         result.focused_by_id[session.id] = (previous.focused_by_id or {})[session.id]
     else
         result.agents_by_id[session.id] = found or {}
@@ -214,13 +279,17 @@ function M.snapshot(options)
         add_marks(result)
     end
     for _, session in ipairs(result.sessions) do
-        add_agents(result, session)
+        add_agents(result, session, previous)
     end
+    add_terminals(result, previous)
     local completed = complete_snapshot(result)
+    cached_snapshot = cached_snapshot or {}
+    for _, field in ipairs({ "terminals", "terminals_loaded", "terminals_stale", "diagnostics" }) do
+        cached_snapshot[field] = vim.deepcopy(completed[field])
+    end
     if options.marks ~= false then
-        cached_snapshot = cached_snapshot or {}
         cached_snapshot.marks_by_id = vim.deepcopy(completed.marks_by_id)
-        cached_snapshot.marks_loaded = completed.marks_loaded == true
+        cached_snapshot.marks_loaded = completed.marks_loaded
     end
     return completed
 end
@@ -230,6 +299,7 @@ end
 function M.snapshot_async(callback, options)
     options = options or {}
     local include_marks = options.marks ~= false
+    local previous = options.previous_snapshot or cached_snapshot
     local result = new_snapshot()
     if options.previous_snapshot then
         result.marks_by_id = vim.deepcopy(options.previous_snapshot.marks_by_id or {})
@@ -280,7 +350,7 @@ function M.snapshot_async(callback, options)
                 if cancelled or async.is_closing() then
                     return
                 end
-                local ok, err = pcall(add_agents, result, session, options.previous_snapshot)
+                local ok, err = pcall(add_agents, result, session, previous)
                 if not ok then
                     report_error(err)
                     return
@@ -288,6 +358,7 @@ function M.snapshot_async(callback, options)
                 async.sleep(0)
             end
             if not cancelled and not async.is_closing() then
+                add_terminals(result, previous)
                 complete()
             end
         end)
@@ -309,11 +380,12 @@ function M.snapshot_async(callback, options)
         index = index + 1
         local session = result.sessions[index]
         if not session then
+            add_terminals(result, previous)
             complete()
             return
         end
 
-        local ok, err = pcall(add_agents, result, session, options.previous_snapshot)
+        local ok, err = pcall(add_agents, result, session, previous)
         if not ok then
             report_error(err)
             return

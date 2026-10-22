@@ -274,9 +274,17 @@ COMMANDS                                                     *sess-commands*
     for a mark on the selected session. Marks appear on active session headers and
     regular picker rows. Known agent commands
     running in terminal buffers (including pi, codex, claude, and opencode) are
-    detected; integrations may also register agents explicitly. Enter loads
-    the parent and focuses the selected agent's existing visible buffer. Status
-    refresh is best-effort: a failed probe leaves the last rows usable and emits
+    detected (excluding managed persistent-terminal attachment views);
+    integrations may still register those buffers explicitly. Enter loads
+    the parent and focuses the selected agent's existing visible buffer.
+    Persistent terminals appear beneath active owners, without duplicate execution
+    identities. A final expandable Background terminals group contains inactive
+    owners' and unassigned terminals and shows owner names (or owner IDs if the
+    name is unavailable). Inventory alone never activates a session. Terminal
+    running/completed/unknown state is not agent working/idle/blocked/done status.
+    Enter on a terminal calls |sess-api.terminal.focus|; Enter on the background
+    header only expands (no-op if already expanded). Session mutations are
+    unavailable on both. Status refresh is best-effort: a failed probe leaves the last rows usable and emits
     a diagnostic, while a selected agent that disappears falls back to its
     parent session. The last completed snapshot is cached in memory, so reopening
     the picker shows known agents immediately. A lazy refresh reconciles live data
@@ -286,12 +294,12 @@ COMMANDS                                                     *sess-commands*
     when unclaimed by another active mapping; configure `active.refresh_key` with
     another key
     or `false` to disable it. With `active.header_navigation` enabled (default),
-    `<C-j>` and `<C-k>` move to the next and previous session headers. Configure
+    `<C-j>` and `<C-k>` move to the next and previous group headers. Configure
     `next_header_key` and `previous_header_key`, or set header navigation to
     false. Existing active mappings always win. Refresh preserves prompt,
     selection, expansion, and the last usable snapshot; failed probes expose a
-    textual warning. This picker is runtime-only; it never starts processes,
-    creates windows, or persists agent state.
+    textual warning. Opening/refreshing the picker never launches commands or
+    persists agent state; accepting a terminal may reconnect an attachment view.
 
 :Sess sidebar                                               *:Sess-sidebar*
     Toggle the optional native active-session sidebar. It polls only while
@@ -301,23 +309,28 @@ COMMANDS                                                     *sess-commands*
     Session actions require the cursor on a real session or agent row, never
     a remembered selection on title/separator/footer lines. Agent
     rows target their parent for session operations. Confirmations identify
-    the target. View-wide actions work anywhere.
+    the target. Session-only actions cannot target terminals or the background
+    header. View-wide actions work anywhere.
 
     sidebar.enabled enables the command; sidebar.start_open opens it after
     setup. position is left or right; width is clamped to min_width, max_width,
     and available editor space. active_expand is all (default), current, or none.
     The selected expansion policy also applies to sessions added while open;
     refresh preserves manual expansion choices.
-    Expanded sessions without agents show only their session header.
+    Expanded sessions without agents or terminals show only their session header.
+    Terminals are grouped as in :Sess active, with Background terminals last.
+    all expands the background group too; current/none leave it collapsed.
     toggle_key is false or an unclaimed normal-mode key, and refresh_interval
     is a positive integer in milliseconds.
 
     Fixed buffer-local normal-mode mappings (no keymap configuration):
       <CR>            Load session, then focus selected agent; on a header,
-                      focus its remembered agent if present.
-      <Tab>           Toggle parent expansion (session or agent row).
+                      focus its remembered agent if present. On a terminal,
+                      safely focus/reconnect it; on Background terminals, expand
+                      only (already expanded is a no-op).
+      <Tab>           Toggle containing group expansion (including terminals).
       <S-Tab>         Collapse all if ANY expanded; otherwise expand all.
-      <C-j>/<C-k>     Next/previous session header, wrapping.
+      <C-j>/<C-k>     Next/previous group header, wrapping.
       r / <C-r>       Refresh (r waits briefly because it also prefixes rr).
       rr              Rename selected session/parent; blank input cancels.
       uu              Safely unload selected session/parent using shared
@@ -454,7 +467,9 @@ are reported and skipped.
 Agents are detected from live terminal jobs or registered through api.agent and
 belong to active sessions only. Detection uses the terminal job command and,
 where available, its process tree; it is best-effort and never starts or stops
-processes. Known terminal agents also inspect recent visible terminal output and
+processes. Managed persistent-terminal attachment views are excluded from automatic
+agent detection; explicit buffer registrations remain valid. Known terminal agents
+also inspect recent visible terminal output and
 report idle, working, blocked, or unknown. The active picker polls and redraws
 changed statuses while it is open. This screen detection is a fallback: an
 explicit status supplied by an integration remains authoritative. The API
@@ -760,11 +775,18 @@ State getters:                                            *sess-api.state*
 
 Active query:                                             *sess-api.active*
     api.active.snapshot() returns one read-only application view containing
-    sessions, agents_by_id, focused_by_id, marks_by_id, current_id, and
-    diagnostics. Telescope and other UIs should format this snapshot rather
-    than repeatedly querying session, mark, and agent APIs. Pass a prior view
-    as { previous_snapshot = snapshot } to retain its marks when mark probing
-    fails; the failure remains in diagnostics.
+    sessions, active_by_id, agents_by_id, focused_by_id, marks_by_id, current_id,
+    terminals, terminals_loaded, terminals_stale, agents_loaded_by_id,
+    stale_by_id, marks_loaded, generation, signature, and diagnostics.
+    terminals is the |sess-api.terminal.list| inventory, queried once per snapshot
+    even with no active sessions. Telescope/sidebar format this view rather than
+    probing storage/processes or repeatedly querying component APIs. Pass a prior view
+    as { previous_snapshot = snapshot } to retain marks, agents and terminal
+    identities on probe failures; failures remain in diagnostics. Failed terminal
+    inventories merge retained entries, set terminals_stale, and expose unknown
+    execution_state / available=false, never inferred closure. A successful query
+    replaces the displayed inventory with the returned entries. Terminal staleness is
+    separate from per-session agent stale_by_id.
     api.active.snapshot_async(callback, options) builds the same view
     incrementally, yielding between active sessions. It returns a cancellation
     function; the callback receives the completed snapshot unless the operation
@@ -776,7 +798,12 @@ Active query:                                             *sess-api.active*
     failures are reported in diagnostics and stale_by_id; the prior agent data
     is preserved when previous_snapshot is supplied, and completion still runs.
     api.active.initial_snapshot() returns the inexpensive session-header view
-    used while a UI hydrates data.
+    used while a UI hydrates data. It defensively copies the last completed
+    expensive probes, including background terminals, marking them stale until
+    reconciliation. Cancelled/partial async snapshots never replace the cache;
+    active-generation changes restart reconciliation before callback publication.
+    signature length-prefixes full identities, labels, owner/state/availability,
+    loaded/stale fields and diagnostics so adapters detect inventory-only changes.
 
 api.session.preview(target) returns read-only metadata and
 { session, snapshot_status, snapshot_available, snapshot_error }. It never
@@ -818,7 +845,47 @@ api.terminal.attach(id)                          *sess-api.terminal.attach*
     buffer number, session name, tmux target, or synthetic buffer filename.
     Attach does not load an owner, change ownership, or activate a session.
 
-Both operations require setup(), take at most one argument, and accept no
+api.terminal.list()                              *sess-api.terminal.list*
+    Discover surviving executions created by launch, independently of runtime
+    agent registrations or a prior Neovim instance. Validate the registry, server
+    identity and associations; reused/unverified tmux targets are not adopted.
+    This read-only query never launches stored commands or activates owners.
+    Takes no arguments and requires setup(). Returns: >
+        true, nil, entries, diagnostics
+        false, error, retained_entries, diagnostics
+<
+    Each entry contains { id, owner_id?, owner_name?, name, execution_state,
+    available }, with execution_state running, completed, or unknown.
+    available is a boolean backend observation, not a promise focus will succeed.
+    Missing/corrupt owners produce diagnostics; an owner ID remains actionable
+    only through focus's ordinary owner validation. Backend failures preserve
+    uncertain entries as unknown/unavailable, including entries from the last
+    usable inventory. Successful per-entry backend observations remain intact on
+    partial failure. Never treat a failed query as proof of closure/deletion.
+    Inventory does not repair/delete the registry. Errors and nonfatal diagnostics
+    remain separate.
+
+api.terminal.focus(id)                           *sess-api.terminal.focus*
+    Focus/reconnect one existing verified full execution ID, without launching
+    its command. If owned, load the owner through the ordinary session lifecycle,
+    including configured hooks, snapshot validation, safety and cancellation.
+    Inactive owners are not bypassed, missing owners fail, and ownerless work
+    opens without creating/activating a session or changing ownership. Revalidate
+    identity after the load; reused/changed targets cannot redirect the view.
+    Reuse a verified existing view, or reconnect when no usable view remains.
+    Completed work opens read-only captured output with no terminal job.
+    Captures over 64 KiB return an error without opening output; output is not
+    truncated. Returns: >
+        true, nil, { id, execution, bufnr, job_id? }, diagnostics
+        false, error
+<
+    An owner load may already have committed before a later attachment or
+    revalidation failure; failure never relaunches work or rolls back that load.
+    Invalid IDs, unavailable/changed backend identity, missing/corrupt owners,
+    cancelled/failed loads and view failures are errors. Successful owner-load
+    diagnostics are included. It accepts no options or hook overrides.
+
+Launch and attach require setup(), take at most one argument, and accept no
 options or hook overrides. They return: >
     true, nil, { id, execution, bufnr, job_id }, diagnostics
     false, error
@@ -832,9 +899,11 @@ attach calls create independent buffers/jobs for the same execution ID. Each
 launch creates a new execution ID even for identical command text.
 
 Terminal operations share the lifecycle mutation guard, including during
-session hooks and event subscribers. They do not run before_transition or
-after_operation, emit new User events, or publish session runtime state.
-Existing session hook/event ordering remains unchanged. Commands report API
+session hooks and event subscribers. Launch/attach/list do not run
+before_transition or after_operation, emit new User events, or publish session
+runtime state. Focus uses ordinary owner-load hooks/events and commits session
+state before observers; after-observer failures remain diagnostics. Existing
+session hook/event ordering remains unchanged. Commands report API
 errors and diagnostics through the usual UI adapter. A client that has already
 exited during attachment startup produces an attachment error. Later unexpected
 client failures and helper-cleanup failures are asynchronous warnings; they do
@@ -865,9 +934,10 @@ Lifetime and layouts
     Snapshots contain inert sess-terminal:// references, never automatically
     replayable launch or attachment commands, even when sessionoptions
     includes terminal. Restoring a layout does not reconnect views yet:
-    explicitly call attach(id). Automatic view restoration, inventory
-    reconciliation, remote collection and full stop/delete controls are
-    deferred. Until those controls exist, owner deletion is refused for
+    select a terminal in the sidebar/active picker or call focus(id) explicitly.
+    attach(id) remains available without owner loading. Automatic view
+    restoration, adoption of remote-created windows, remote collection and full
+    stop/delete controls are deferred. Until those controls exist, owner deletion is refused for
     surviving work, including completed terminals and pending associations; it
     never silently orphans or stops work. Unassigned terminals do not block
     unrelated owner deletion. Ordinary terminal jobs retain their existing
@@ -1146,7 +1216,8 @@ corrupt/incompatible snapshots are shown as invalid,
 deleted records show their deletion time
 and restore key, and active agents show loading or stale when data is not ready.
 The active picker uses
-tree-style session/agent rows and a footer showing <Tab> expand/collapse, <S-Tab>
+tree-style session/agent/terminal rows and a final Background terminals group,
+with a footer showing <Tab> expand/collapse, <S-Tab>
 expand/collapse all. <Enter> switches and focuses. Its title and session headers
 show stable compact counts; current headers, focused agents, blocked/unknown
 statuses, and stale/loading data are visually distinct. Each session header ends
@@ -1155,8 +1226,12 @@ show only their session header. Manual expansion and selection are
 preserved while the picker is open and across status refreshes. A selected agent
 that disappears falls back to its parent session. Failed best-effort probes keep
 the last rows usable and report a diagnostic. It shows session headers
-immediately, then asynchronously hydrates agents and marks. It reuses terminal
-identity and output when they are unchanged between probes. Session-header
+immediately (including cached background work), then asynchronously hydrates
+agents, marks and terminal inventory. Managed execution identity is the full
+execution ID, stable when it moves between background and active owners.
+Collapsed/moving selections fall back to the containing group; manual expansion
+persists. Background stays after active sessions under every sort/filter.
+Agent detection reuses identity and output when unchanged between probes. Session-header
 agent counts are right-aligned within the result row.
 
 Enter loads/creates. Ctrl-d (insert)/dd (normal) deletes with confirmation.

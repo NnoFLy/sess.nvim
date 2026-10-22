@@ -186,7 +186,7 @@ local function owner_valid(paths, data, key, owner)
     return true
 end
 
-local function verified(paths, data, record)
+local function verified(paths, data, record, inventory)
     if not record then
         return nil, "terminal execution does not exist"
     end
@@ -203,7 +203,8 @@ local function verified(paths, data, record)
         "-p",
         "-t",
         record.session_id .. ":" .. record.window_id .. "." .. record.pane_id,
-        "#{session_id}\t#{window_id}\t#{pane_id}\t#{window_panes}\t#{@sess_execution}\t#{@sess_window_token}\t#{@sess_pane_token}",
+        "#{session_id}\t#{window_id}\t#{pane_id}\t#{window_panes}\t#{@sess_execution}\t#{@sess_window_token}\t#{@sess_pane_token}"
+            .. (inventory and "\t#{pane_dead}" or ""),
     })
     if not output then
         return nil, lookup_err
@@ -217,10 +218,19 @@ local function verified(paths, data, record)
         record.token,
         record.token,
     }, "\t")
-    if output:gsub("\n$", "") ~= expected then
+    local actual = output:gsub("\n$", "")
+    local execution_state
+    if inventory then
+        local dead = actual:match("\t([01])$")
+        if dead then
+            actual = actual:sub(1, -3)
+            execution_state = dead == "1" and "completed" or "running"
+        end
+    end
+    if actual ~= expected or (inventory and not execution_state) then
         return nil, "terminal execution identity mismatch (stale or reused target)"
     end
-    return vim.deepcopy(record)
+    return vim.deepcopy(record), nil, execution_state
 end
 
 local function input(opts)
@@ -379,7 +389,7 @@ function M.create(opts)
 end
 
 ---@param id string
----@return Sess.TerminalExecution?, string?
+---@return Sess.TerminalExecution?, string?, string? execution_state
 function M.get(id)
     if not store.valid_id(id) then
         return nil, "invalid terminal execution id"
@@ -396,7 +406,91 @@ function M.get(id)
     if not ready then
         return nil, server_err
     end
-    return verified(paths, data, record)
+    return verified(paths, data, record, true)
+end
+
+-- Capture only verified completed work. The same identity must survive the
+-- bounded read; no command is replayed and no tmux view/state is changed.
+function M.capture_completed(execution)
+    local data, err, paths = store.read()
+    if not data then
+        return nil, err or "terminal registry is unavailable"
+    end
+    local ready, server_err = server(paths, data, false)
+    if not ready then
+        return nil, server_err
+    end
+    local checked, check_err, execution_state =
+        verified(paths, data, data.executions[execution.id], true)
+    if not checked or not vim.deep_equal(checked, execution) or execution_state ~= "completed" then
+        return nil, check_err or "completed terminal association changed"
+    end
+    local output, capture_err = run(paths, {
+        "capture-pane",
+        "-p",
+        "-S",
+        "-",
+        "-t",
+        execution.session_id .. ":" .. execution.window_id .. "." .. execution.pane_id,
+    })
+    if not output then
+        return nil, capture_err
+    end
+    local current, current_err, paths_after = store.read()
+    if not current then
+        return nil, current_err or "terminal registry disappeared during capture"
+    end
+    ready, server_err = server(paths_after, current, false)
+    if not ready then
+        return nil, server_err
+    end
+    checked, check_err, execution_state =
+        verified(paths_after, current, current.executions[execution.id], true)
+    if not checked or not vim.deep_equal(checked, execution) or execution_state ~= "completed" then
+        return nil, check_err or "completed terminal association changed during capture"
+    end
+    return output
+end
+
+---@class Sess.TerminalEntry
+---@field id string
+---@field owner_id? string
+---@field owner_name? string
+---@field name string Safe display label, never a command or target.
+---@field execution_state "running"|"completed"|"unknown"
+---@field available boolean
+
+-- Inventory is discovery only: no server startup, adoption, or metadata writes.
+---@return Sess.TerminalEntry[], string?, string[], boolean? missing
+function M.list()
+    local data, err, paths = store.read()
+    if not data then
+        return {}, err, err and { err } or {}, err == nil
+    end
+    local ready, server_err = server(paths, data, false)
+    local entries, diagnostics = {}, server_err and { server_err } or {}
+    for _, id in ipairs(vim.tbl_keys(data.executions)) do
+        local record = data.executions[id]
+        local execution, check_err, execution_state
+        if ready then
+            execution, check_err, execution_state = verified(paths, data, record, true)
+        end
+        entries[#entries + 1] = {
+            id = id,
+            owner_id = record.owner_id,
+            name = "Terminal " .. id,
+            execution_state = execution_state or "unknown",
+            available = execution ~= nil,
+        }
+        if check_err then
+            diagnostics[#diagnostics + 1] = "terminal " .. id .. ": " .. check_err
+        end
+    end
+    table.sort(entries, function(a, b)
+        return a.id < b.id
+    end)
+    table.sort(diagnostics)
+    return entries, server_err or (#diagnostics > 0 and diagnostics[1] or nil), diagnostics
 end
 
 -- Conservative deletion gate: missing/stale references and unregistered work
@@ -501,6 +595,25 @@ local function helper_valid(paths, data, attachment)
         return nil, err or "terminal helper identity mismatch"
     end
     return true
+end
+
+-- Local view registrations are not proof that their tmux helper still points
+-- at the original work. Revalidate it before selecting an existing client.
+function M.validate_attachment(attachment)
+    local data, err, paths = store.read()
+    if not data then
+        return false, err or "terminal registry is unavailable"
+    end
+    local ready, server_err = server(paths, data, false)
+    if not ready then
+        return false, server_err
+    end
+    local valid, validation_err = helper_valid(paths, data, attachment)
+    if not valid then
+        return false, validation_err
+    end
+    local execution, execution_err = verified(paths, data, data.executions[attachment.execution_id])
+    return execution ~= nil, execution_err
 end
 
 -- Returns Attachment?, error?. Pass argv and env to jobstart/termopen; only

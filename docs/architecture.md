@@ -80,7 +80,7 @@ The editor layer translates between session operations and Neovim state. It capt
 
 ### Runtime agents
 
-The agent API validates registrations and delegates focus to the editor adapter. Detection is composed from injectable adapters: `agent/process_probe.lua` reads process/job trees and identifies commands, `agent/terminal_probe.lua` reads terminal jobs/names/output, `agent/status.lua` performs pure output classification, and `agent/discovery.lua` combines probes with runtime views. The active picker performs best-effort discovery of known agent commands in live terminal buffers. Detected terminal agents classify recent visible output as idle, working, blocked, or unknown. This screen classifier is deliberately conservative and only supplies a fallback; an explicit integration status wins. Discovery is derived runtime state: it never starts/stops processes or writes records merely by opening the picker. Focus is explicitly limited to the current session. Unload and delete remove registered agent records only after destructive editor/storage work and runtime state have committed, before observers run. Failed or cancelled operations preserve them. The active picker reads only active runtime sessions, loads through the lifecycle API, and optionally focuses an existing target as a follow-up action.
+The agent API validates registrations and delegates focus to the editor adapter. Detection is composed from injectable adapters: `agent/process_probe.lua` reads process/job trees and identifies commands, `agent/terminal_probe.lua` reads terminal jobs/names/output, `agent/status.lua` performs pure output classification, and `agent/discovery.lua` combines probes with runtime views. The active picker performs best-effort discovery of known agent commands in live terminal buffers. Detected terminal agents classify recent visible output as idle, working, blocked, or unknown. This screen classifier is deliberately conservative and only supplies a fallback; an explicit integration status wins. Discovery is derived runtime state: it never starts/stops processes or writes records merely by opening the picker. Focus is explicitly limited to the current session. Unload and delete remove registered agent records only after destructive editor/storage work and runtime state have committed, before observers run. Failed or cancelled operations preserve them. The active picker uses runtime sessions for session headers, and independent persistent-terminal inventory for terminal children/background work. Managed attachment views are excluded from automatic agent derivation; explicit buffer registrations remain runtime-only and supported.
 
 ### Storage
 
@@ -107,7 +107,7 @@ The row model at `lua/sess/ui/rows.lua` bridges read-only queries and picker
 adapters. It owns stable semantic keys, hierarchy, expansion, display segments,
 search fields, ordinals, and row actions. Telescope converts those rows into
 finder entries; other pickers can consume them without rebuilding parent
-relationships or lifecycle behavior. The UI load-or-create helper validates a directory, then delegates to `api.session.load()` or `api.session.create()` without changing the low-level API contract. The active picker shows headers from `api.active.initial_snapshot()`, then hydrates through `api.active.snapshot_async()` and formats rows. It does not compose marks, agents, focus, or diagnostics. Status-only refreshes reuse loaded marks and cached terminal probes. Dashboard counts and status labels are pure formatting over the snapshot; stable agent IDs reconcile refresh selection. Loading/stale states are explicit, and a failed best-effort probe logs a diagnostic without closing the picker. Session row formatting is pure presentation: state, tree, mark, name, cwd, and metadata are separate logical columns measured in display cells. A truncated cwd is never used as an ordinal or an action value; full searchable fields remain in each finder ordinal. The search adapter builds one normalized field record per entry, parses only fixed filter prefixes, and scores name matches ahead of path-only matches; exact names and marks
+relationships or lifecycle behavior. The UI load-or-create helper validates a directory, then delegates to `api.session.load()` or `api.session.create()` without changing the low-level API contract. The active picker shows headers from `api.active.initial_snapshot()`, then hydrates through `api.active.snapshot_async()` and formats rows. It does not compose marks, agents, focus, or diagnostics. Status-only refreshes reuse loaded marks and cached agent probes. Terminal inventory is queried once per shared snapshot even with no active sessions. Failed inventory retains identities with unknown/unavailable state and diagnostics, separate from agent staleness. Cached initial snapshots include inactive/ownerless work; only completed async results seed full probe caches. Length-prefixed signatures include terminal identity, owner labels, state, availability, loaded/stale fields and diagnostics. Dashboard counts and status labels are pure formatting over the snapshot; stable semantic keys reconcile refresh selection. Terminal keys contain only the full execution ID; ownership/group placement never changes identity. Shared semantic rows deduplicate execution IDs, place active-owned work beneath runtime session headers, and append an expandable Background terminals group for inactive owners and unassigned work. Session sorting never manufactures/activates owners. Both adapters delegate terminal selection to terminal.focus(id); the sidebar first moves to a non-transient content window under its pending guard and rechecks the action instance after focus callbacks. Terminal display controls are replaced with spaces without changing searchable fields or action values. Pending/late/reentrant guards and parent fallback cover expansion and moving rows. Background Enter only expands (Tab toggles expansion); session mutations remain restricted to session/agent rows. Loading/stale states are explicit, and a failed best-effort probe logs a diagnostic without closing the picker. Session row formatting is pure presentation: state, tree, mark, name, cwd, and metadata are separate logical columns measured in display cells. A truncated cwd is never used as an ordinal or an action value; full searchable fields remain in each finder ordinal. The search adapter builds one normalized field record per entry, parses only fixed filter prefixes, and scores name matches ahead of path-only matches; exact names and marks
 rank highest. Active session ordinals include all agent fields, so filtering an agent retains its parent header. Optional recent, pinned, activity, and name ordering is applied before finder construction; default order and lifecycle selection are untouched. Command completion and Telescope share read-only directory enumeration.
 
 The optional Telescope preview pane formats a defensive selected-entry value and
@@ -226,6 +226,8 @@ Observers receive defensive payloads containing the operation, affected session,
 [Issue #15](https://github.com/nnofly/sess.nvim/issues/15) implements explicit
 launch and independent Neovim views from the broader
 [issue #14](https://github.com/nnofly/sess.nvim/issues/14) contract.
+[Issue #16](https://github.com/nnofly/sess.nvim/issues/16) adds verified inventory
+and desktop discovery/reconnection through shared active queries/semantic rows.
 [ADR 0001](adr/0001-separate-terminal-execution-from-editor-views.md) records
 why execution and editor-view lifetimes are separate. Ordinary Neovim terminal
 jobs and buffer-based runtime agents retain their existing behavior.
@@ -235,7 +237,13 @@ the shared mutation scope. `lifecycle/terminal.lua` resolves the current owner
 through the catalog, captures the invoking window's effective cwd, coordinates
 backend creation/lookup and view opening, and returns errors separately from
 diagnostics. These operations do not change session runtime membership, accept
-options/hooks, or emit new events. The command adapter preserves the raw shell
+options/hooks, or emit new events. `list()` queries verified backend inventory and
+resolves owner labels with diagnostics, retaining unknown/unavailable identities
+on failures. `focus(id)` enters the mutation scope, loads an owner through the
+ordinary lifecycle with configured hooks/safety (ownerless work loads no session),
+revalidates the association after callbacks, then delegates view reuse/reconnection.
+A committed owner load is not rolled back if subsequent attachment fails.
+The command adapter preserves the raw shell
 command tail rather than reconstructing it from tokenized arguments.
 
 `terminal/backend.lua` owns the isolated tmux server, verified execution/owner
@@ -259,7 +267,10 @@ The private socket path is limited to 100 bytes for portable tmux operation.
 identity/cleanup. Buffer names and variables are not teardown authority. Closing
 a view window or switching can hide its client; wiping a view, unloading, or
 normal editor exit detaches it. Execution remains with tmux. Completed
-windows/output are retained. Attachment startup failures are returned; later
+windows/output are retained. Focus reuses verified views; completed executions
+open a read-only output capture without a job. Captures over 64 KiB fail with an
+error without opening output, rather than truncating it. Attachment startup
+failures are returned; later
 unexpected client exits and helper-cleanup failures are asynchronous warnings.
 Unload excludes verified managed clients from ordinary-job Stop consent, without
 weakening modified/non-file-buffer or unrelated ordinary-job safety. Deletion
@@ -269,9 +280,10 @@ protect unrelated owners.
 
 Managed view buffers use inert synthetic snapshot references, including when
 Neovim's terminal session option is enabled. Loading a snapshot neither replays
-launch text nor automatically attaches. Explicit `api.terminal.attach(id)`
-reconnects verified work. Execution can survive editor exit, not host reboot or
-backend loss, and makes no progress during host sleep.
+launch text nor automatically attaches. Explicit `api.terminal.focus(id)` or
+selection from either desktop list safely reconnects verified work; `attach(id)`
+still opens an independent attachment without loading an owner. Execution can
+survive editor exit, not host reboot or backend loss, and makes no progress during host sleep.
 
 Only explicit launch runs supplied shell text. Backend operations use structured
 argv with validated targets and literal cwd paths, including tmux format-like
@@ -283,14 +295,13 @@ No network listener is added.
 
 ### Deferred terminal work
 
-Verified inventory reconciliation, automatic view restoration, remote collection
-and full destructive controls remain follow-up work. The accepted broader design
-reconciles remote-created/closed windows without treating backend unavailability
-as deletion, preserves remembered active-session ordering, and reconnects views
-without replaying commands. Sidebar/Telescope will consume shared queries and
-semantic rows rather than manage processes. Future Stop owned terminals and
-delete must report irreversible process termination honestly if later deletion
-fails. None of those planned controls is implemented by this launch/view slice.
+Automatic view restoration, adoption of remote-created windows, remote collection
+and full destructive controls remain follow-up work. Inventory reconciles launched
+executions without treating backend unavailability as deletion or altering
+remembered active-session ordering. Desktop adapters consume shared
+queries and semantic rows, never processes or filesystem records directly. Future
+Stop owned terminals and delete must report irreversible process termination
+honestly if later deletion fails.
 
 ## Design rules for future changes
 

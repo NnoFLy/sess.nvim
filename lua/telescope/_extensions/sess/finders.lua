@@ -93,16 +93,14 @@ function M.active_dashboard_summary(snapshot)
         session_count = #sessions,
         agent_count = total,
         status_counts = status_counts,
-        loading = snapshot ~= nil
-            and #sessions > 0
-            and (function()
-                for _, session in ipairs(sessions) do
-                    if not (snapshot.agents_loaded_by_id or {})[session.id] then
-                        return true
-                    end
+        loading = snapshot ~= nil and #sessions > 0 and (function()
+            for _, session in ipairs(sessions) do
+                if not (snapshot.agents_loaded_by_id or {})[session.id] then
+                    return true
                 end
-                return false
-            end)(),
+            end
+            return false
+        end)(),
     }
 end
 
@@ -263,6 +261,8 @@ end
 ---@param display_opts table?
 ---@param agents_loaded_by_id table<string, boolean>?
 ---@param stale_by_id table<string, boolean>?
+---@param search_options table?
+---@param terminal_snapshot table?
 ---@return table[]
 function M.build_active_entries(
     sessions,
@@ -275,26 +275,27 @@ function M.build_active_entries(
     display_opts,
     agents_loaded_by_id,
     stale_by_id,
-    search_options
+    search_options,
+    terminal_snapshot
 )
     search_options = search_options or configured_search_options()
     local display = display_options(
         vim.tbl_deep_extend("force", configured_display_options(), display_opts or {})
     )
-    return rows.build_active(
-        {
-            sessions = sessions,
-            agents_by_id = agents_by_id or {},
-            expanded = expanded_by_id or {},
-            current_id = current_id,
-            focused_by_id = focused_by_id or {},
-            marks_by_id = marks_by_id or {},
-            previous_id = previous_id,
-            agents_loaded_by_id = agents_loaded_by_id,
-            stale_by_id = stale_by_id,
-        },
-        vim.tbl_deep_extend("force", display, { sort = search_options.sort })
-    )
+    return rows.build_active({
+        sessions = sessions,
+        agents_by_id = agents_by_id or {},
+        expanded = expanded_by_id or {},
+        current_id = current_id,
+        focused_by_id = focused_by_id or {},
+        marks_by_id = marks_by_id or {},
+        previous_id = previous_id,
+        agents_loaded_by_id = agents_loaded_by_id,
+        stale_by_id = stale_by_id,
+        terminals = terminal_snapshot and terminal_snapshot.terminals,
+        terminals_loaded = terminal_snapshot and terminal_snapshot.terminals_loaded,
+        terminals_stale = terminal_snapshot and terminal_snapshot.terminals_stale,
+    }, vim.tbl_deep_extend("force", display, { sort = search_options.sort }))
 end
 
 local function active_finder_from_snapshot(
@@ -308,14 +309,17 @@ local function active_finder_from_snapshot(
     local sessions = snapshot.sessions
     for _, session in ipairs(sessions) do
         if expanded_by_id[session.id] == nil then
-            expanded_by_id[session.id] = default_expanded(
-                session.id,
-                snapshot.current_id,
-                active_expand
-            )
+            expanded_by_id[session.id] =
+                default_expanded(session.id, snapshot.current_id, active_expand)
         end
     end
-    for _, diagnostic in ipairs(snapshot.diagnostics or {}) do log.warn(diagnostic) end
+    local background_key = rows.key("background_terminals", "")
+    if expanded_by_id[background_key] == nil then
+        expanded_by_id[background_key] = active_expand == "all"
+    end
+    for _, diagnostic in ipairs(snapshot.diagnostics or {}) do
+        log.warn(diagnostic)
+    end
 
     -- Status-only snapshots reuse the last complete mark map to avoid rereading
     -- the persistent mark registry.
@@ -336,7 +340,8 @@ local function active_finder_from_snapshot(
         display_opts,
         snapshot.agents_loaded_by_id,
         snapshot.stale_by_id,
-        search_options
+        search_options,
+        snapshot
     )
     local finder = finders.new_table({
         results = results,
@@ -354,16 +359,36 @@ local function active_finder_from_snapshot(
     return finder, results, snapshot
 end
 
-function M.generate_active_finder_from_snapshot(snapshot, expanded_by_id, active_expand, display_opts, search_options)
+function M.generate_active_finder_from_snapshot(
+    snapshot,
+    expanded_by_id,
+    active_expand,
+    display_opts,
+    search_options
+)
     expanded_by_id = expanded_by_id or {}
     active_expand = active_expand or "current"
-    return active_finder_from_snapshot(snapshot, expanded_by_id, active_expand, nil, display_opts, search_options)
+    return active_finder_from_snapshot(
+        snapshot,
+        expanded_by_id,
+        active_expand,
+        nil,
+        display_opts,
+        search_options
+    )
 end
 
 function M.generate_active_finder(expanded_by_id, active_expand, search_options)
     expanded_by_id = expanded_by_id or {}
     active_expand = active_expand or "current"
-    return active_finder_from_snapshot(api.active.snapshot(), expanded_by_id, active_expand, nil, nil, search_options)
+    return active_finder_from_snapshot(
+        api.active.snapshot(),
+        expanded_by_id,
+        active_expand,
+        nil,
+        nil,
+        search_options
+    )
 end
 
 function M.generate_active_finder_async(
@@ -379,7 +404,8 @@ function M.generate_active_finder_async(
     active_expand = active_expand or "current"
     local load_marks = not (previous_snapshot and previous_snapshot.marks_loaded)
     return api.active.snapshot_async(function(snapshot)
-        if previous_snapshot
+        if
+            previous_snapshot
             and previous_snapshot.signature
             and snapshot.signature == previous_snapshot.signature
         then
@@ -490,7 +516,14 @@ function M.directory_context()
 end
 
 ---@return table
-local function build_directory_finder(prompt, display_opts, agents_by_id, cached_candidates, search_options, context)
+local function build_directory_finder(
+    prompt,
+    display_opts,
+    agents_by_id,
+    cached_candidates,
+    search_options,
+    context
+)
     local candidates, err = cached_candidates, nil
     if not candidates then
         candidates, err = path.enumerate(prompt, { fuzzy = true })
@@ -524,13 +557,14 @@ local function build_directory_finder(prompt, display_opts, agents_by_id, cached
     for _, candidate in ipairs(candidates) do
         local candidate_path = path_utils.identity(candidate.path) or candidate.path
         local session = by_path[candidate_path]
-        local metadata = session and session.metadata or {
-            name = candidate.name,
-            cwd = candidate.path,
-            pinned = false,
-            last_used_at = 0,
-            created_at = 0,
-        }
+        local metadata = session and session.metadata
+            or {
+                name = candidate.name,
+                cwd = candidate.path,
+                pinned = false,
+                last_used_at = 0,
+                created_at = 0,
+            }
         local display_session = {
             id = session and session.id,
             metadata = metadata,
@@ -595,23 +629,45 @@ local function build_directory_finder(prompt, display_opts, agents_by_id, cached
     })
 end
 
-function M.generate_directory_finder(prompt, display_opts, callback, previous_snapshot, search_options, context)
+function M.generate_directory_finder(
+    prompt,
+    display_opts,
+    callback,
+    previous_snapshot,
+    search_options,
+    context
+)
     local candidates, err = path.enumerate(prompt, { fuzzy = true })
     if err then
         log.error(err)
     end
-    local finder = build_directory_finder(prompt, display_opts, {}, candidates, search_options, context)
+    local finder =
+        build_directory_finder(prompt, display_opts, {}, candidates, search_options, context)
     if not callback then
         return finder
     end
 
     local cancel = hydrate_search_finder(callback, previous_snapshot, function(agents_by_id)
-        return build_directory_finder(prompt, display_opts, agents_by_id, candidates, search_options, context)
+        return build_directory_finder(
+            prompt,
+            display_opts,
+            agents_by_id,
+            candidates,
+            search_options,
+            context
+        )
     end)
     return finder, cancel
 end
 
-function M.generate_directory_finder_async(prompt, display_opts, callback, previous_snapshot, search_options, context)
+function M.generate_directory_finder_async(
+    prompt,
+    display_opts,
+    callback,
+    previous_snapshot,
+    search_options,
+    context
+)
     local _, cancel = M.generate_directory_finder(
         prompt,
         display_opts,
@@ -691,18 +747,15 @@ local function build_new_finder(
             semantic_sessions[#semantic_sessions + 1] = entry
         end
     end
-    local semantic_rows = rows.build(
-        {
-            sessions = semantic_sessions,
-            marks_by_id = mark_by_id,
-            active_by_id = active_by_id,
-            agents_by_id = agents_by_id,
-            current_id = current and current.id,
-            previous_id = previous and previous.id,
-            exclude_current = true,
-        },
-        vim.tbl_deep_extend("force", display, { sort = search_options.sort, now = now })
-    )
+    local semantic_rows = rows.build({
+        sessions = semantic_sessions,
+        marks_by_id = mark_by_id,
+        active_by_id = active_by_id,
+        agents_by_id = agents_by_id,
+        current_id = current and current.id,
+        previous_id = previous and previous.id,
+        exclude_current = true,
+    }, vim.tbl_deep_extend("force", display, { sort = search_options.sort, now = now }))
     for _, row in ipairs(semantic_rows) do
         row_by_id[row.session_id] = row
     end
@@ -817,7 +870,8 @@ function M.generate_new_finder(display_opts, callback, previous_snapshot, search
 end
 
 function M.generate_new_finder_async(display_opts, callback, previous_snapshot, search_options)
-    local _, cancel = M.generate_new_finder(display_opts, callback, previous_snapshot, search_options)
+    local _, cancel =
+        M.generate_new_finder(display_opts, callback, previous_snapshot, search_options)
     return cancel
 end
 

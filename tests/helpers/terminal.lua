@@ -2,8 +2,12 @@ local M = {}
 local tmux = vim.fn.exepath("tmux")
 assert(tmux ~= "", "real tmux is required for persistent-terminal public tests")
 
-function M.run(test)
-    fixture.setup()
+function M.run(test, options)
+    assert(require("sess").setup(vim.tbl_extend("force", {
+        store_path = fixture.root .. "/store",
+        smart_auto_load = "none",
+        auto_save = false,
+    }, options or {})))
     vim.o.shell = "/bin/sh"
     -- Register the one private socket before any launch, including failed ones.
     local dir = fixture.root .. "/store/terminal"
