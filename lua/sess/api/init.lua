@@ -1,5 +1,6 @@
 return {
     session = require("sess.api.session"),
+    terminal = require("sess.api.terminal"),
     state = require("sess.api.state"),
     items = require("sess.api.items"),
     opts = require("sess.api.opts"),

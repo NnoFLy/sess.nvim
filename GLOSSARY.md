@@ -25,7 +25,7 @@ The saved editor state of one session. It does not promise to preserve live proc
 The remembered active-session set, its order, and the current-session selection from a previous editor instance. It describes which contexts to resume, rather than containing their editor state.
 _Avoid_: All saved sessions, whole-editor snapshot
 
-## Persistent terminals (planned)
+## Persistent terminals
 
 **Persistent terminal**:
 A managed terminal execution that remains available independently of its editor views. It may contain an interactive shell, an agent, or another command.

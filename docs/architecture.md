@@ -221,45 +221,76 @@ Pre-transition hooks run before a mutating lifecycle operation and may abort it.
 
 Observers receive defensive payloads containing the operation, affected session, and current session. Recursive lifecycle mutations are rejected while an operation is in progress. Agent register/update/unregister/focus are independent runtime operations but are explicitly rejected while a lifecycle operation is scoped; focus therefore cannot mutate editor state from a transition hook.
 
-## Planned persistent-terminal boundary
+## Persistent-terminal boundary
 
-[Issue #14](https://github.com/nnofly/sess.nvim/issues/14) specifies the agreed,
-not-yet-implemented persistent-terminal feature.
+[Issue #15](https://github.com/nnofly/sess.nvim/issues/15) implements explicit
+launch and independent Neovim views from the broader
+[issue #14](https://github.com/nnofly/sess.nvim/issues/14) contract.
 [ADR 0001](adr/0001-separate-terminal-execution-from-editor-views.md) records
-why terminal execution and editor-view lifetimes must be separate. The current
-runtime-agent and ordinary-terminal behavior described above remains unchanged.
+why execution and editor-view lifetimes are separate. Ordinary Neovim terminal
+jobs and buffer-based runtime agents retain their existing behavior.
 
-The planned backend owns terminal launch, identity, inventory, attachment, and
-explicit termination through an isolated tmux server. Session lifecycle code
-coordinates ownership, restoration, unload, deletion, and error/diagnostic
-handling; the editor adapter owns Neovim views. Buffer-based agent registrations
-remain runtime observations of views, not persistent execution identities.
-Sidebar and Telescope consume shared queries and semantic rows rather than
-managing processes or persistence themselves.
+`api.terminal.launch(command?)` and `attach(id)` validate setup/input and enter
+the shared mutation scope. `lifecycle/terminal.lua` resolves the current owner
+through the catalog, captures the invoking window's effective cwd, coordinates
+backend creation/lookup and view opening, and returns errors separately from
+diagnostics. These operations do not change session runtime membership, accept
+options/hooks, or emit new events. The command adapter preserves the raw shell
+command tail rather than reconstructing it from tokenized arguments.
 
-A verified backend inventory reconciles remote-created and closed windows,
-including changes made while Neovim was closed. Failed inventory queries retain
-unavailable state instead of implying deletion. Snapshot restoration reconnects
-views without executing launch commands, and preserves the existing remembered
-active-session set and ordering. New backend terminals appear in lists without
-forcing new windows into restored layouts. Ownership never follows layout
-membership: an unassigned terminal can appear in a session snapshot without
-becoming owned by it.
+`terminal/backend.lua` owns the isolated tmux server, verified execution/owner
+associations, and one-window helper attachments. Each optional owner has a tmux
+session with one window/pane per execution. Helpers link the original windows,
+so a remote owner selection cannot retarget another Neovim view. Unassigned
+work never invents an editing context. Owner IDs survive rename; viewing work
+in another layout never transfers ownership. tmux is an external requirement;
+missing tmux is an error, not permission to start a nonpersistent local job.
 
-Owned terminals appear beneath active sessions; inactive owners' terminals and
-unassigned terminals appear in the final Background terminals group. Selecting
-an inactive owner's terminal first uses the normal session-load lifecycle.
-Closing views or unloading detaches without stopping work. Deleting an owner
-offers Stop owned terminals and delete / Cancel, without affecting unassigned
-terminals. Process termination is irreversible even if subsequent deletion
-fails; operation results must describe that partial progress honestly.
+`terminal/storage.lua` owns the versioned data-only registry, private
+configuration/socket paths, random identities, exclusive registry lock and atomic
+publication. It validates associations before external targeting and preserves
+corrupt/incompatible data and pending/uncertain creation records. A publication
+failure can follow successful external launch; errors describe that partial
+progress rather than silently stopping work or retrying the command. Existing
+unsafe paths/permissions and abandoned locks are not automatically repaired.
+The private socket path is limited to 100 bytes for portable tmux operation.
 
-The new trust boundary includes tmux metadata, backend identities, and remote
-inventory. Validate these inputs before targeting processes. Only explicit
-launch/restart may execute a user-supplied shell command; restore and discovery
-must not execute stored commands. Use private socket permissions and the user's
-existing authenticated remote transport, not a new network listener. Direct
-external tmux termination is outside sess's confirmation UI.
+`terminal/view.lua` owns ordinary Neovim terminal clients and process-local view
+identity/cleanup. Buffer names and variables are not teardown authority. Closing
+a view window or switching can hide its client; wiping a view, unloading, or
+normal editor exit detaches it. Execution remains with tmux. Completed
+windows/output are retained. Attachment startup failures are returned; later
+unexpected client exits and helper-cleanup failures are asynchronous warnings.
+Unload excludes verified managed clients from ordinary-job Stop consent, without
+weakening modified/non-file-buffer or unrelated ordinary-job safety. Deletion
+conservatively refuses owners with surviving work or incomplete associations
+until explicit stop/delete controls exist. Unassigned work alone does not
+protect unrelated owners.
+
+Managed view buffers use inert synthetic snapshot references, including when
+Neovim's terminal session option is enabled. Loading a snapshot neither replays
+launch text nor automatically attaches. Explicit `api.terminal.attach(id)`
+reconnects verified work. Execution can survive editor exit, not host reboot or
+backend loss, and makes no progress during host sleep.
+
+Only explicit launch runs supplied shell text. Backend operations use structured
+argv with validated targets and literal cwd paths, including tmux format-like
+text. Shell/input sizes, metadata/config sizes, subprocess waits and output are
+bounded. These limits do not sandbox supplied shell text; the shell command
+and private session store remain trust boundaries. Same-user socket access
+controls the processes; metadata validation is not a sandbox against that user.
+No network listener is added.
+
+### Deferred terminal work
+
+Verified inventory reconciliation, automatic view restoration, remote collection
+and full destructive controls remain follow-up work. The accepted broader design
+reconciles remote-created/closed windows without treating backend unavailability
+as deletion, preserves remembered active-session ordering, and reconnects views
+without replaying commands. Sidebar/Telescope will consume shared queries and
+semantic rows rather than manage processes. Future Stop owned terminals and
+delete must report irreversible process termination honestly if later deletion
+fails. None of those planned controls is implemented by this launch/view slice.
 
 ## Design rules for future changes
 

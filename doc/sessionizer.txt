@@ -213,6 +213,13 @@ COMMANDS                                                     *sess-commands*
 :Sess save                                                   *:Sess-save*
     Snapshot only the current session. No arguments; no implicit creation.
 
+:Sess term [command]                                         *:Sess-term*
+    Launch a persistent interactive shell (no arguments), or execute the raw
+    command text through 'shell' with -c. Quoting, pipes and redirects are
+    preserved. Use the invoking window's effective cwd, including lcd/tcd.
+    The current session is the optional owner; without one, create unassigned
+    work, not a session. Requires external tmux. See |sess-terminal|.
+
 :Sess last                                                   *:Sess-last*
     Load the previous session. When no in-memory previous session exists,
     such as after a fresh start, load the most recently used session other
@@ -220,8 +227,10 @@ COMMANDS                                                     *sess-commands*
 
 :Sess unload [target]                                        *:Sess-unload*
     Unload by id/name/path; default current. Close exclusive buffers and their
-    terminal jobs, forget the live view, and remove from active sessions.
-    Ask Save/Discard/Cancel for unsaved buffers, then Stop/Cancel for live jobs.
+    ordinary terminal jobs, forget the live view, and remove from active
+    sessions. Managed terminal attachments detach without stopping execution.
+    Ask Save/Discard/Cancel for unsaved buffers, then Stop/Cancel for ordinary
+    live jobs.
     Cancel either prompt to abort before writes or teardown. Shared buffers and
     unrelated jobs stay alive. Retain the snapshot. Inactive targets are a no-op.
 
@@ -233,7 +242,8 @@ COMMANDS                                                     *sess-commands*
 
 :Sess delete [target]                                        *:Sess-delete*
     Move the target (default current) to private trash. Buffers/jobs are never
-    deleted/stopped.
+    deleted/stopped. Refuse owners with persistent terminals or incomplete
+    associations until explicit stop/delete controls are available.
 
 :Sess restore [target]                                       *:Sess-restore*
     Restore a deleted session by name, id, or trash key. Without a target,
@@ -563,9 +573,9 @@ The API is prompt-free and does not notify. UI adapters own prompts/logging. >
     local api = require("sess.api")
     local ok, err, item, diagnostics = api.session.load("project")
 <
-Mutation results: (ok, err, session, diagnostics). On success err is nil and
-diagnostics is a list of strings. Restoration, metadata and observer failures are
-diagnostics. A post-operation failure does not undo success.
+Session mutation results: (ok, err, session, diagnostics). On success err is nil
+and diagnostics is a list of strings. Restoration, metadata and observer
+failures are diagnostics. A post-operation failure does not undo success.
 Initialization and validation failures return false and an error, not exceptions.
 Targets may be an id, name, path, or a record with id and metadata. Caller
 metadata is never trusted as authoritative; records are reloaded from storage.
@@ -611,11 +621,16 @@ api.session.unload(target?, opts?)               *sess-api.session.unload*
     buffers request precedes the jobs request. Both precede file writes.
     Commands and Telescope inject this callback; the core never prompts itself.
     Cancelling returns false, "unload cancelled". Write failures abort teardown.
+    Managed terminal clients are attachments, not jobs requiring Stop consent;
+    their execution survives teardown. Ordinary terminal consent is unchanged.
 
 api.session.delete(target?, opts?)               *sess-api.session.delete*
     Default: current. opts: { hooks? }. Move persisted files to trash. Current
     deletion hides buffers and emits unload then delete. Non-current deletion
-    does not perform an unload. No API confirmation prompt.
+    does not perform an unload. No API confirmation prompt. Refuse deletion
+    before hooks when persistent work/incomplete associations belong to this
+    owner, or terminal registry safety cannot be established. Unassigned work
+    alone does not protect unrelated owners.
 
 api.session.list_deleted()                       *sess-api.session.list_deleted*
     Read-only query returning deleted records and diagnostics. Invalid or
@@ -779,6 +794,116 @@ Configuration:                                             *sess-api.opts*
     api.opts.get() returns a defensive copy. api.opts.is_setup() returns boolean.
 
 ==============================================================================
+PERSISTENT TERMINALS                                          *sess-terminal*
+
+Install tmux separately and put its executable on PATH. Other session
+operations and ordinary Neovim terminals do not require tmux. There is no
+nonpersistent fallback if launch fails. 'shell' must name one executable, not
+an executable plus shell arguments.
+
+api.terminal.launch(command?)                    *sess-api.terminal.launch*
+    Explicitly start one new execution and open its view in the current window.
+    nil/omitted command starts an interactive shell (-i); a string runs through
+    'shell' with -c. An empty string is an explicit empty command, not a shell.
+    The command must be NUL-free and at most 32768 bytes. It is trusted shell
+    input: only pass text you intend to execute. Use the invoking window's
+    effective cwd, with window/tab/global scope. Resolve the current session as
+    optional owner by stable ID. With no current session, launch unassigned
+    work without creating or activating a session.
+
+api.terminal.attach(id)                          *sess-api.terminal.attach*
+    Open another view of an existing verified execution, including retained
+    completed output. Never launch/restart the original command. id is the
+    32-character lowercase hexadecimal execution ID returned by launch, not a
+    buffer number, session name, tmux target, or synthetic buffer filename.
+    Attach does not load an owner, change ownership, or activate a session.
+
+Both operations require setup(), take at most one argument, and accept no
+options or hook overrides. They return: >
+    true, nil, { id, execution, bufnr, job_id }, diagnostics
+    false, error
+<
+The success diagnostics result is a list of strings (possibly empty).
+execution is a verified backend association with stable id, backend_id and
+optional owner_id, plus backend identity/target fields. Treat those target
+fields as observations, not authority to perform external destructive actions.
+bufnr and job_id identify this editor's attachment, not the execution. Repeated
+attach calls create independent buffers/jobs for the same execution ID. Each
+launch creates a new execution ID even for identical command text.
+
+Terminal operations share the lifecycle mutation guard, including during
+session hooks and event subscribers. They do not run before_transition or
+after_operation, emit new User events, or publish session runtime state.
+Existing session hook/event ordering remains unchanged. Commands report API
+errors and diagnostics through the usual UI adapter. A client that has already
+exited during attachment startup produces an attachment error. Later unexpected
+client failures and helper-cleanup failures are asynchronous warnings; they do
+not change an earlier API result or mean execution completed. Intentional
+wipe, unload and editor-exit detachment do not produce client-failure warnings.
+
+Lifetime and layouts
+    The plugin uses an isolated private tmux server/config/socket under the
+    configured store's terminal directory, ignoring inherited TMUX/TMUX_PANE.
+    Each owner has a tmux session with one window/pane per terminal;
+    unassigned work has a separate owner group. One-window helper attachments
+    link the original windows so changing the owner's selected window remotely
+    cannot retarget another Neovim view. Views are ordinary terminal buffers,
+    not tmux control-mode output; tmux status, prefix and mouse UI are
+    disabled.
+
+    Closing a view window, wiping its attachment buffer, switching/unloading
+    sessions or exiting Neovim does not stop execution. An attachment's exit
+    is separate from execution exit. Completed windows retain output for
+    explicit attach. Rename preserves owner identity. Merely displaying an
+    unassigned terminal in a session does not adopt it.
+
+    Persistence means surviving editor exit while the backend and host remain
+    alive. It does not promise reboot/backend-loss survival, and execution
+    does not advance during host sleep. Direct external tmux termination is
+    outside sess.nvim's confirmation UI.
+
+    Snapshots contain inert sess-terminal:// references, never automatically
+    replayable launch or attachment commands, even when sessionoptions
+    includes terminal. Restoring a layout does not reconnect views yet:
+    explicitly call attach(id). Automatic view restoration, inventory
+    reconciliation, remote collection and full stop/delete controls are
+    deferred. Until those controls exist, owner deletion is refused for
+    surviving work, including completed terminals and pending associations; it
+    never silently orphans or stops work. Unassigned terminals do not block
+    unrelated owner deletion. Ordinary terminal jobs retain their existing
+    snapshot behavior and Stop confirmation on unload.
+
+Failures and trust
+    Missing tmux, invalid input, unsafe storage/config/socket, stale or reused
+    backend targets, corrupt/incompatible registry data, backend creation and
+    persistence failures return false and an error. No local-job fallback or
+    implicit relaunch occurs. Existing live editor resources must be
+    preserved. If execution committed but attachment fails, the error names
+    the surviving execution ID: retry explicit attach(id), not
+    launch(command).
+
+    A failed/ambiguous creation or publication may leave a live execution and
+    a pending association which cannot yet be attached. Pending records,
+    failed publication temporaries, corrupt data and uncertain associations
+    are preserved, never silently repaired, overwritten, deleted or retried to
+    make launch succeed. These failures can also block owner deletion. A
+    terminal registry lock is never automatically stolen. Persistence failures
+    are errors even if external work already started; they do not imply
+    rollback.
+
+    Only explicit launch executes supplied shell text. Backend operations use
+    structured argv and validated IDs/targets; discovered names, paths and
+    metadata are not shell/tmux programs. Subprocess waits and captured
+    output, command/registry/config sizes are bounded. Paths are handled
+    literally, including tmux format-like text, but the store must remain
+    private to the current user. Existing unsafe permissions/symlinks are
+    rejected, not fixed. The private socket path must fit the portable
+    100-byte tmux limit; choose a shorter store_path if necessary. Same-user
+    access to this socket controls these processes; metadata validation is not
+    a sandbox against that user. No network listener is added. These checks do
+    not make arbitrary shell input safe or promise recovery after backend loss.
+
+==============================================================================
 HOOKS AND EVENTS                                               *sess-hooks*
 
 Supported hooks: >
@@ -839,7 +964,10 @@ PERSISTENCE, TRUST AND FAILURES                            *sess-persistence*
 Session files execute trusted Vimscript. Never load a store writable by
 untrusted users. Session directories have private 0700 permissions. IDs are
 validated before path construction; editor file commands disable filename
-expansion and command-bar parsing. Core operations do not construct shell calls.
+expansion and command-bar parsing. Session file operations do not construct
+shell commands. Explicit terminal launch runs user-supplied text through the
+configured shell; tmux control operations use structured argv and validated
+targets. See |sess-terminal| for that separate trust boundary.
 
 Snapshots use unique sibling temporary files and atomic rename after mksession
 succeeds. Generation/rename failure preserves the old snapshot and cleans up
@@ -1050,7 +1178,9 @@ DEVELOPMENT                                                *sess-development*
 Run `sh tests/run.sh`. Set NVIM_BIN=/path/to/nvim to select a binary. Each case
 uses a fresh process, temporary HOME/XDG/storage/fixtures and no user config,
 plugins, ShaDa or swap. Temporary data is removed on exit. Telescope is not
-required. CI runs latest stable only.
+required. Real tmux is required for terminal tests; absence is an explicit
+failure, not a passing skip. Tests clean up only their own private servers,
+including assertion failures. CI runs latest stable only.
 
 Format changed Lua files with `stylua path/to/file.lua`; .stylua.toml defines
 our style. Add --check to validate formatting without modifying files.

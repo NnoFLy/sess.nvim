@@ -4,6 +4,7 @@ local state = require("sess.state")
 local observer = require("sess.lifecycle.observer")
 local target = require("sess.lifecycle.target")
 local rollback = require("sess.lifecycle.editor_rollback")
+local terminal_backend = require("sess.terminal.backend")
 
 local M = {}
 
@@ -53,6 +54,11 @@ function M.delete(destination, options, context)
         return false, err
     end
 
+    local allowed, terminal_err = terminal_backend.can_delete_owner(item.id)
+    if not allowed then
+        return false, terminal_err
+    end
+
     local current = state.get_current_session()
     local is_current = current and current.id == item.id
     if is_current then
@@ -67,10 +73,21 @@ function M.delete(destination, options, context)
         end
     end
 
+    -- Hooks may change backend associations even though recursive public
+    -- mutations are guarded. Refuse before touching live editor state.
+    allowed, terminal_err = terminal_backend.can_delete_owner(item.id)
+    if not allowed then
+        return false, terminal_err
+    end
+
     local changed, change_err
     if is_current then
         changed, change_err = rollback.change(function()
             editor.empty(vim.fn.getcwd())
+            local safe, safety_err = terminal_backend.can_delete_owner(item.id)
+            if not safe then
+                error(safety_err)
+            end
             local ok, delete_err = catalog.delete(item.id)
             if not ok then
                 error(delete_err)

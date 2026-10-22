@@ -193,6 +193,7 @@ for your own autocommands.
 | `:Sess create [path]` | Create or load the session for a path. |
 | `:Sess load [name/id/path/@mark]` | Load a session. Defaults to the current directory. |
 | `:Sess save` | Save the current session. |
+| `:Sess term [command]` | Launch a persistent shell or shell command in a terminal view. |
 | `:Sess last` | Return to the previous or most recently used session. |
 | `:Sess unload [target]` | Close resources owned exclusively by a session. |
 | `:Sess pin [target]` | Toggle a session's pinned state. |
@@ -223,6 +224,38 @@ Marks are single lowercase letters or digits. The default mappings are:
 
 You can also manage marks with `:Sess mark`, `:Sess unmark`, or the Lua API.
 
+## Persistent terminals
+
+Install `tmux` separately and make it available on `PATH` to use `:Sess term`.
+No tmux is needed for ordinary session operations. Missing tmux is an error;
+Sess.nvim never substitutes a nonpersistent local job.
+
+```vim
+:Sess term
+:Sess term printf '%s\n' "hello world" | tee output.txt
+```
+
+With no command, open an interactive shell using Neovim's `shell` option. With
+a command, pass the original shell text, including quoting, pipes and redirects,
+to that shell. Both use the invoking window's effective cwd (`lcd`, then `tcd`,
+then global cwd). The current session is the optional terminal owner. Without
+one, the terminal is unassigned; launching never creates a session.
+
+Each launch creates a distinct execution. Each view is an ordinary Neovim
+terminal attachment to the plugin's private tmux server, independent of your
+usual tmux server. Closing a view, wiping its buffer, switching or unloading
+sessions, and exiting Neovim leave the execution alive. Completed output stays
+available for inspection. This is not reboot or backend-loss recovery; work
+does not advance while the host sleeps.
+
+Keep the ID returned by `api.terminal.launch()` and explicitly reconnect with
+`api.terminal.attach(id)`. Saved layouts contain inert synthetic references,
+not commands to replay. Automatic view restoration, inventory/reconciliation,
+remote collection, and stop/delete controls are deferred. Until those controls
+exist, deleting an owner with surviving terminals or incomplete associations is
+refused. Ordinary terminal jobs still need the usual Stop confirmation on
+unload. See `:help sess-terminal` for results, failures and trust limits.
+
 ## Safe switching
 
 When switching, Sess.nvim saves the outgoing session and hides its buffers.
@@ -240,7 +273,7 @@ Run `:checkhealth sess` to check setup, storage access, metadata, and snapshots.
 
 ## Lua API
 
-The API is split into session and state operations:
+The API provides session, state, agent and terminal operations:
 
 ```lua
 local api = require("sess.api")
@@ -263,6 +296,18 @@ Mutating operations return `ok`, an error when they fail, the operation result,
 and diagnostic strings. Successful operations may include warnings from
 metadata updates, restoration, hooks, or events. State getters return
 defensive copies.
+
+Persistent-terminal operations take no options or hooks and emit no new events:
+
+```lua
+local ok, err, item, diagnostics = api.terminal.launch("make test")
+if ok then
+    -- Save item.id if you want to attach after closing this view or editor.
+    api.terminal.attach(item.id)
+end
+-- Success: true, nil, { id, execution, bufnr, job_id }, diagnostics
+-- Failure: false, error (a committed execution may still survive).
+```
 
 Agent state is runtime-only and is never stored in session snapshots. Detected
 and registered agents are shown by `:Sess active`. See [`:help sess-api`](doc/sessionizer.txt)
@@ -332,5 +377,7 @@ stylua path/to/file.lua
 stylua --check path/to/file.lua
 ```
 
-The tests run Neovim in isolated temporary environments. Telescope is not
-required.
+The tests run Neovim in isolated temporary environments. Real `tmux` is
+required for terminal regressions; a missing executable fails those tests. Each
+terminal test cleans up only its private server, even after assertions fail.
+Telescope is not required.

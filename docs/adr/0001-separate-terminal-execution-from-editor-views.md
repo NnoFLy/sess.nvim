@@ -4,7 +4,7 @@ status: accepted
 
 # Separate persistent terminal execution from editor views
 
-Implementation is pending; [issue #14](https://github.com/nnofly/sess.nvim/issues/14) records the agreed feature contract.
+Explicit launch and independent editor views are implemented by [issue #15](https://github.com/nnofly/sess.nvim/issues/15). Inventory reconciliation, automatic view restoration, remote collection, and full destructive controls remain deferred; [issue #14](https://github.com/nnofly/sess.nvim/issues/14) records the agreed feature contract.
 
 Use an isolated tmux server to own persistent shells, agents, and commands. Neovim owns their attachment views, not their process lifetime. Unlike ordinary Neovim terminal jobs, these executions survive closing views, unloading sessions, and quitting Neovim. Keeping direct terminal-job ownership would preserve simpler teardown but would not support continued remote interaction with the same work after editor exit.
 
