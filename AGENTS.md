@@ -71,3 +71,13 @@ Document user-facing commands and configuration in the README. Document API cont
 - Are hooks and events run in the documented order?
 - Is the behavior covered by an isolated test?
 - Are public documentation and examples still accurate?
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs live in GitHub Issues for `nnofly/sess.nvim`. See `docs/agents/issue-tracker.md`.
+
+### Domain docs
+
+Single-context: root `GLOSSARY.md` and `docs/adr/`. See `docs/agents/domain.md`.

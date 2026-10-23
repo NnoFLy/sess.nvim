@@ -201,7 +201,10 @@ local function session_parts(session, options)
     end
 
     local parts = { { text = tree } }
-    if options.show_metadata ~= false and options.show_pinned ~= false then
+    if
+        options.show_pinned == true
+        or (options.show_metadata ~= false and options.show_pinned ~= false)
+    then
         local pinned = metadata.pinned == true
         parts[#parts + 1] = {
             text = pinned and (symbols.metadata.pinned .. " ") or "  ",
@@ -296,7 +299,10 @@ local function active_session_row(session, view, options, widths)
     local current = view.current_id == session.id
     local stale = type(view.stale_by_id) == "table" and view.stale_by_id[session.id] == true
     local loaded = view.agents_loaded_by_id == nil
-        or (type(view.agents_loaded_by_id) == "table" and view.agents_loaded_by_id[session.id] == true)
+        or (
+            type(view.agents_loaded_by_id) == "table"
+            and view.agents_loaded_by_id[session.id] == true
+        )
     local fields = safe_fields(session, {
         mark = mark,
         current = current,
@@ -314,7 +320,7 @@ local function active_session_row(session, view, options, widths)
         mark = mark,
         mark_width = widths.mark,
         name_width = widths.session_name,
-        show_pinned = false,
+        show_pinned = options.show_pinned == true,
         name_highlight = current and (options.highlights.current or options.highlights.name)
             or options.highlights.active,
         status_highlight = stale and options.highlights.stale or nil,
@@ -347,23 +353,51 @@ local function active_session_row(session, view, options, widths)
     return row, agents, mark, fields, group_ordinal
 end
 
-local function active_agent_row(session, agent, index, count, parent, view, options, widths, mark, group_fields, group_ordinal)
+local function active_agent_row(
+    session,
+    agent,
+    index,
+    count,
+    parent,
+    view,
+    options,
+    widths,
+    mark,
+    group_fields,
+    group_ordinal
+)
     agent = type(agent) == "table" and agent or {}
     local state = status(agent.status)
-    local branch = index == count and options.symbols.tree.last_branch or options.symbols.tree.branch
-    local focused = type(view.focused_by_id) == "table" and view.focused_by_id[session.id] == agent.id
+    local branch = index == count and options.symbols.tree.last_branch
+        or options.symbols.tree.branch
+    local focused = type(view.focused_by_id) == "table"
+        and view.focused_by_id[session.id] == agent.id
     local focus_marker = focused and options.symbols.focus or " "
     local indent = options.available_width and options.available_width < 40 and "" or "  "
     local info = agent.info and text(agent.info) ~= "" and "  " .. text(agent.info) or ""
     local parts = display.fit_parts({
         {
-            text = indent .. branch .. " " .. focus_marker .. " " .. options.symbols.status[state] .. " ",
+            text = indent
+                .. branch
+                .. " "
+                .. focus_marker
+                .. " "
+                .. options.symbols.status[state]
+                .. " ",
             highlight = focused and (options.highlights.focused or options.highlights.agent)
                 or options.highlights.agent,
         },
-        { text = pad(agent.name, widths.agent_name), highlight = options.highlights.agent, shrink_priority = 3, min_width = 1 },
+        {
+            text = pad(agent.name, widths.agent_name),
+            highlight = options.highlights.agent,
+            shrink_priority = 3,
+            min_width = 1,
+        },
         { text = "  " },
-        { text = pad(state, widths.status), highlight = options.highlights[state] or options.highlights.agent },
+        {
+            text = pad(state, widths.status),
+            highlight = options.highlights[state] or options.highlights.agent,
+        },
         {
             text = info,
             highlight = options.highlights.agent,
@@ -404,7 +438,61 @@ local function active_agent_row(session, agent, index, count, parent, view, opti
     return row
 end
 
---- Build active session headers and conditional agent children.
+local function terminal_fields(terminal)
+    return {
+        name = text(terminal.name),
+        info = table.concat(
+            { text(terminal.id), text(terminal.owner_id), text(terminal.owner_name) },
+            " "
+        ),
+        status = text(terminal.execution_state)
+            .. (terminal.available and " available" or " unavailable"),
+    }
+end
+
+local function terminal_display_text(value)
+    return (text(value):gsub("[%c]", " "))
+end
+
+local function terminal_row(terminal, parent, index, count, options)
+    local fields =
+        vim.tbl_extend("force", copy(parent.search_fields or {}), terminal_fields(terminal))
+    local owner = parent.kind == "background_terminals"
+            and (terminal.owner_name or terminal.owner_id or "unassigned")
+        or nil
+    local parts = display.fit_parts({
+        {
+            text = "  "
+                .. (index == count and options.symbols.tree.last_branch or options.symbols.tree.branch)
+                .. " ",
+        },
+        { text = terminal_display_text(terminal.name), shrink_priority = 3, min_width = 1 },
+        { text = "  " .. terminal_display_text(fields.status) },
+        {
+            text = owner and ("  " .. terminal_display_text(owner)) or "",
+            shrink_priority = 1,
+            truncate = "end",
+            min_width = 0,
+            expendable = true,
+        },
+    }, options.available_width)
+    local row = row_base("terminal", terminal, {
+        key = M.key("terminal", terminal.id),
+        parent_key = parent.key,
+        depth = 1,
+        actions = { focus = true },
+    })
+    row.terminal_id, row.value.terminal_id = terminal.id, terminal.id
+    row.session_id = terminal.owner_id
+    row.value.parent_key = parent.key
+    row.display_parts, row.display = parts, parts_text(parts)
+    row.search_fields, row.ordinal = fields, search.ordinal(fields)
+    row.active_group_fields, row.active_group_ordinal =
+        parent.active_group_fields, parent.active_group_ordinal
+    return row
+end
+
+--- Build active sessions with agent/terminal children and a final background group.
 ---@param view table
 ---@param options table?
 ---@return table[], table
@@ -434,27 +522,68 @@ function M.build_active(view, options)
     end
     for _, session in ipairs(sorted) do
         local metadata = type(session.metadata) == "table" and session.metadata or {}
-        widths.session_name = math.max(widths.session_name, display.display_width(text(metadata.name)))
-        local session_agents = type(agents_by_id[session.id]) == "table" and agents_by_id[session.id] or {}
+        widths.session_name =
+            math.max(widths.session_name, display.display_width(text(metadata.name)))
+        local session_agents = type(agents_by_id[session.id]) == "table"
+                and agents_by_id[session.id]
+            or {}
         for _, agent in ipairs(session_agents) do
             if type(agent) == "table" then
-                widths.agent_name = math.max(widths.agent_name, display.display_width(text(agent.name)))
+                widths.agent_name =
+                    math.max(widths.agent_name, display.display_width(text(agent.name)))
                 widths.status = math.max(widths.status, display.display_width(status(agent.status)))
             end
         end
     end
 
+    local owned, background, active, seen = {}, {}, {}, {}
+    for _, session in ipairs(sorted) do
+        active[session.id] = true
+    end
+    for _, terminal in ipairs(view.terminals or {}) do
+        if
+            type(terminal) == "table"
+            and type(terminal.id) == "string"
+            and not seen[terminal.id]
+        then
+            seen[terminal.id] = true
+            if terminal.owner_id and active[terminal.owner_id] then
+                owned[terminal.owner_id] = owned[terminal.owner_id] or {}
+                table.insert(owned[terminal.owner_id], terminal)
+            else
+                background[#background + 1] = terminal
+            end
+        end
+    end
     local rows = {}
     for _, session in ipairs(sorted) do
         local session_key = M.session_key(session.id)
         local is_expanded = expanded[session_key] == true or expanded[session.id] == true
-        local header, agents, mark, group_fields, group_ordinal = active_session_row(session, view, {
-            expanded = is_expanded,
-            available_width = options.available_width,
-            symbols = options.symbols,
-            highlights = options.highlights,
-            show_metadata = options.show_metadata,
-        }, widths)
+        local header, agents, mark, group_fields, group_ordinal =
+            active_session_row(session, view, {
+                expanded = is_expanded,
+                available_width = options.available_width,
+                symbols = options.symbols,
+                highlights = options.highlights,
+                show_metadata = options.show_metadata,
+                show_pinned = options.show_pinned,
+            }, widths)
+        local terminals = owned[session.id] or {}
+        header.terminal_ids = {}
+        for _, terminal in ipairs(terminals) do
+            header.terminal_ids[#header.terminal_ids + 1] = terminal.id
+            local fields = terminal_fields(terminal)
+            group_fields.info = text(group_fields.info) .. " " .. search.ordinal(fields)
+        end
+        group_ordinal = search.ordinal(group_fields)
+        header.active_group_ordinal, header.ordinal = group_ordinal, group_ordinal
+        if #terminals > 0 then
+            header.display_parts[#header.display_parts + 1] = {
+                text = "  terminals: " .. #terminals .. (view.terminals_stale and " stale" or ""),
+            }
+            header.display_parts = display.fit_parts(header.display_parts, options.available_width)
+            header.display = parts_text(header.display_parts)
+        end
         rows[#rows + 1] = header
         if is_expanded then
             local valid_agents = {}
@@ -463,53 +592,68 @@ function M.build_active(view, options)
                     valid_agents[#valid_agents + 1] = agent
                 end
             end
-            if #valid_agents == 0 then
-                local parts = display.fit_parts({
-                    { text = options.available_width and options.available_width < 40 and options.symbols.tree.empty or "  " .. options.symbols.tree.empty },
-                    { text = "no agents", shrink_priority = 1, min_width = 1 },
-                }, options.available_width)
-                local row = row_base("placeholder", { session_id = session.id }, {
-                    key = M.key("placeholder", session.id),
-                    parent_key = header.key,
-                    depth = 1,
-                    actions = {},
-                })
-                row.session_id = session.id
-                row.session = session
-                row.value.session_id = session.id
-                row.display_parts = parts
-                row.display = parts_text(parts)
-                row.search_fields = safe_fields(session, { agents = {}, active = true })
-                row.search_fields.info = (row.search_fields.info or "") .. " no agents"
-                row.ordinal = search.ordinal(row.search_fields)
-                row.active_group_fields = group_fields
-                row.active_group_ordinal = group_ordinal
-                rows[#rows + 1] = row
-            else
-                for index, agent in ipairs(valid_agents) do
-                    rows[#rows + 1] = active_agent_row(
-                        session,
-                        agent,
-                        index,
-                        #valid_agents,
-                        header,
-                        view,
-                        options,
-                        widths,
-                        mark,
-                        group_fields,
-                        group_ordinal
-                    )
-                end
+            for index, agent in ipairs(valid_agents) do
+                rows[#rows + 1] = active_agent_row(
+                    session,
+                    agent,
+                    index,
+                    #valid_agents + #terminals,
+                    header,
+                    view,
+                    options,
+                    widths,
+                    mark,
+                    group_fields,
+                    group_ordinal
+                )
+            end
+            for index, terminal in ipairs(terminals) do
+                rows[#rows + 1] = terminal_row(terminal, header, index, #terminals, options)
             end
         end
     end
-    return rows, {
-        count = #rows,
-        session_count = #sorted,
-        generation = view.generation or view.snapshot_generation,
-        diagnostics = copy(view.diagnostics or {}),
-    }
+    if #background > 0 then
+        local key = M.key("background_terminals", "")
+        local is_expanded = expanded[key] == true
+        local header = row_base("background_terminals", {}, {
+            key = key,
+            expandable = true,
+            expanded = is_expanded,
+            actions = { expand = true },
+        })
+        local fields = { name = "Background terminals", info = "", _background = true }
+        header.terminal_ids = {}
+        for _, terminal in ipairs(background) do
+            header.terminal_ids[#header.terminal_ids + 1] = terminal.id
+            fields.info = fields.info .. " " .. search.ordinal(terminal_fields(terminal))
+        end
+        header.search_fields, header.ordinal = fields, search.ordinal(fields)
+        header.active_group_fields, header.active_group_ordinal = fields, header.ordinal
+        header.display_parts = display.fit_parts({
+            {
+                text = (
+                    is_expanded and options.symbols.tree.expanded
+                    or options.symbols.tree.collapsed
+                )
+                    .. "Background terminals ("
+                    .. #background
+                    .. ")"
+                    .. (view.terminals_stale and " stale" or ""),
+            },
+        }, options.available_width)
+        header.display = parts_text(header.display_parts)
+        rows[#rows + 1] = header
+        for index, terminal in ipairs(is_expanded and background or {}) do
+            rows[#rows + 1] = terminal_row(terminal, header, index, #background, options)
+        end
+    end
+    return rows,
+        {
+            count = #rows,
+            session_count = #sorted,
+            generation = view.generation or view.snapshot_generation,
+            diagnostics = copy(view.diagnostics or {}),
+        }
 end
 
 local function regular_session_row(session, view, options, widths)
@@ -532,8 +676,11 @@ local function regular_session_row(session, view, options, widths)
         mark = view.marks_by_id and view.marks_by_id[session.id],
         mark_width = widths.mark,
         name_width = widths.name,
-        session_metadata = session.id and options.mode ~= "compact" and options.show_metadata ~= false
-            and M.format_session_metadata(metadata, options.now, options.symbols.separator) or nil,
+        session_metadata = session.id
+                and options.mode ~= "compact"
+                and options.show_metadata ~= false
+                and M.format_session_metadata(metadata, options.now, options.symbols.separator)
+            or nil,
         available_width = options.available_width,
         path_style = options.path_style,
         show_metadata = options.show_metadata,
@@ -576,43 +723,70 @@ function M.build(view, options, expansion)
                 local deleted_at = tonumber(entry.deleted_at)
                 local deleted = deleted_at and os.date("%Y-%m-%d %H:%M", deleted_at) or "unknown"
                 local parts = display.fit_parts({
-                    { text = text(metadata.name or entry.name), shrink_priority = 3, min_width = 1 },
+                    {
+                        text = text(metadata.name or entry.name),
+                        shrink_priority = 3,
+                        min_width = 1,
+                    },
                     { text = "  " },
-                    { text = text(metadata.cwd or entry.path), truncate = "middle", ellipsis = options.symbols.ellipsis, shrink_priority = 1, min_width = 1, expendable = true },
+                    {
+                        text = text(metadata.cwd or entry.path),
+                        truncate = "middle",
+                        ellipsis = options.symbols.ellipsis,
+                        shrink_priority = 1,
+                        min_width = 1,
+                        expendable = true,
+                    },
                     { text = "  " .. deleted, omit_priority = 5 },
                 }, options.available_width)
-                local row = row_base("deleted_session", entry, { key = M.deleted_key(entry.id or entry.key), actions = { restore = true } })
+                local row = row_base(
+                    "deleted_session",
+                    entry,
+                    { key = M.deleted_key(entry.id or entry.key), actions = { restore = true } }
+                )
                 row.deleted = entry
                 row.display_parts, row.display = parts, parts_text(parts)
-                row.search_fields, row.ordinal = fields, search.ordinal(fields) .. " " .. text(entry.id) .. " " .. text(entry.key) .. " " .. deleted
+                row.search_fields = fields
+                row.ordinal = table.concat({
+                    search.ordinal(fields),
+                    text(entry.id),
+                    text(entry.key),
+                    deleted,
+                }, " ")
                 rows[#rows + 1] = row
             end
         end
-        return search.sort_results(rows, options.sort), {
-            count = #rows,
-            generation = view.generation or view.snapshot_generation,
-            diagnostics = copy(view.diagnostics or {}),
-        }
+        return search.sort_results(rows, options.sort),
+            {
+                count = #rows,
+                generation = view.generation or view.snapshot_generation,
+                diagnostics = copy(view.diagnostics or {}),
+            }
     end
 
     if options.mode == "directory" then
         local rows = {}
         for _, entry in ipairs(view.directories or view.entries or {}) do
             if type(entry) == "table" then
-                local row = row_base("directory", entry, { key = M.directory_key(entry.path or entry.cwd), actions = { load = true, create = true } })
+                local row = row_base("directory", entry, {
+                    key = M.directory_key(entry.path or entry.cwd),
+                    actions = { load = true, create = true },
+                })
                 row.path, row.prompt, row.directory = entry.path, entry.prompt, true
-                row.display_parts = entry.display_parts or { { text = text(entry.name or entry.path) } }
+                row.display_parts = entry.display_parts
+                    or { { text = text(entry.name or entry.path) } }
                 row.display = parts_text(row.display_parts)
                 row.search_fields = entry.search_fields or safe_fields(entry)
                 row.ordinal = search.ordinal(row.search_fields)
                 rows[#rows + 1] = row
             end
         end
-        return search.sort_results(rows, options.sort), {
-            count = #rows,
-            generation = view.generation or view.snapshot_generation,
-            diagnostics = copy(view.diagnostics or {}),
-        }
+        return search.sort_results(rows, options.sort),
+            {
+                count = #rows,
+                generation = view.generation or view.snapshot_generation,
+                diagnostics = copy(view.diagnostics or {}),
+            }
     end
 
     local sessions = view.sessions or view.entries or {}
@@ -620,22 +794,27 @@ function M.build(view, options, expansion)
     for _, session in ipairs(sessions) do
         if type(session) == "table" then
             local metadata = type(session.metadata) == "table" and session.metadata or {}
-            widths.name = math.max(widths.name, display.display_width(text(metadata.name or session.name)))
+            widths.name =
+                math.max(widths.name, display.display_width(text(metadata.name or session.name)))
             local mark = view.marks_by_id and view.marks_by_id[session.id]
             widths.mark = math.max(widths.mark, display.display_width(text(mark)))
         end
     end
     for _, session in ipairs(sessions) do
-        if type(session) == "table" and not (view.exclude_current and view.current_id == session.id) then
+        if
+            type(session) == "table"
+            and not (view.exclude_current and view.current_id == session.id)
+        then
             rows[#rows + 1] = regular_session_row(session, view, options, widths)
         end
     end
     rows = search.sort_results(rows, options.sort)
-    return rows, {
-        count = #rows,
-        generation = view.generation or view.snapshot_generation,
-        diagnostics = copy(view.diagnostics or {}),
-    }
+    return rows,
+        {
+            count = #rows,
+            generation = view.generation or view.snapshot_generation,
+            diagnostics = copy(view.diagnostics or {}),
+        }
 end
 
 M.build_rows = M.build

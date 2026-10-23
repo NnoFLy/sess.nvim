@@ -10,6 +10,8 @@ return {
     rename = require("sess.ui.commands.rename"),
     restore = require("sess.ui.commands.restore"),
     save = require("sess.ui.commands.save"),
+    term = require("sess.ui.commands.term"),
     unload = require("sess.ui.commands.unload"),
     unmark = require("sess.ui.commands.unmark"),
+    sidebar = require("sess.ui.commands.sidebar"),
 }

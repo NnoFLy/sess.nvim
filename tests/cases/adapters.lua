@@ -37,10 +37,10 @@ vim.api.nvim_create_autocmd("User", {
     end,
 })
 
-require("sess.autocmd").setup({ auto_save = true, smart_auto_load = false, exclude_filetypes = {} })
+require("sess.autocmd").setup({ auto_save = true, smart_auto_load = "none", exclude_filetypes = {} })
 vim.api.nvim_exec_autocmds("VimLeavePre", {})
 fixture.equal(1, saves)
-require("sess.autocmd").setup({ auto_save = false, smart_auto_load = false })
+require("sess.autocmd").setup({ auto_save = false, smart_auto_load = "none" })
 
 -- Deleting the current session changes the editor layout. Close the picker
 -- first and do not refresh it after its windows have been removed.

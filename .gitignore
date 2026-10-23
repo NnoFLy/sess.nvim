@@ -1,0 +1,17 @@
+# Neovim swap, backup, and undo files
+*.swp
+*.swo
+*.swn
+*~
+*.un~
+
+# Local Neovim sessions
+/Session.vim
+/Session.vim.vim
+
+# Generated Neovim help tags
+/doc/tags
+
+# OS metadata
+.DS_Store
+Thumbs.db

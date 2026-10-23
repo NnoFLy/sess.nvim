@@ -61,12 +61,12 @@ function M.run(destination, options, context)
     -- Saving the outgoing session can trigger observers that modify storage.
     item, err = catalog.resolve(item)
     if not item then
-        return false, err
+        return false, err, nil, diagnostics
     end
 
     valid, validation_err = M.validate(item)
     if not valid then
-        return false, validation_err
+        return false, validation_err, nil, diagnostics
     end
 
     local changed, change_err, restore_diagnostics = rollback.change(function()
@@ -91,7 +91,7 @@ function M.run(destination, options, context)
         return {}
     end)
     if not changed then
-        return false, change_err
+        return false, change_err, nil, diagnostics
     end
 
     vim.list_extend(diagnostics, restore_diagnostics or {})

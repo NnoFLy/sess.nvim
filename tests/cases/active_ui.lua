@@ -131,7 +131,8 @@ assert(
     finders.format_session_metadata({ last_used_at = 7200, created_at = 0 }, 10800)
         == "last used 1h ago · age unknown"
 )
-assert(all_finder.results[2].kind == "placeholder")
+assert(#all_finder.results == 2)
+assert(all_finder.results[2].kind == "session")
 
 local current_finder = finders.generate_active_finder({}, "current")
 local current_headers = session_headers(current_finder.results)

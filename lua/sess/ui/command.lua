@@ -6,26 +6,77 @@ local commands = require("sess.ui.commands")
 local M = {}
 
 local specs = {
-    active = { handler = commands.active, max_args = 0 },
-    create = { handler = commands.create, max_args = 1, completion = "path" },
-    delete = { handler = commands.delete, max_args = 1, completion = "session" },
-    last = { handler = commands.last, max_args = 0 },
-    list = { handler = commands.list, max_args = 0 },
-    load = { handler = commands.load, max_args = 1, completion = { kind = "session-or-path", arg = 1 } },
-    mark = { handler = commands.mark, max_args = 2, completion = { kind = "mark-target", arg = 1 } },
-    pin = { handler = commands.pin, max_args = 1, completion = "session" },
-    rename = { handler = commands.rename, max_args = 2, completion = { kind = "session", arg = 1 } },
-    restore = { handler = commands.restore, max_args = 1, completion = "deleted-session" },
-    save = { handler = commands.save, max_args = 0 },
-    unload = { handler = commands.unload, max_args = 1, completion = "session" },
-    unmark = { handler = commands.unmark, max_args = 1, completion = "mark" },
+    active = { handler = commands.active, max_args = 0, reports_failure = true },
+    create = {
+        handler = commands.create,
+        max_args = 1,
+        completion = "path",
+        reports_failure = true,
+    },
+    delete = {
+        handler = commands.delete,
+        max_args = 1,
+        completion = "session",
+        reports_failure = true,
+    },
+    last = { handler = commands.last, max_args = 0, reports_failure = true },
+    list = { handler = commands.list, max_args = 0, reports_failure = true },
+    load = {
+        handler = commands.load,
+        max_args = 1,
+        completion = { kind = "session-or-path", arg = 1 },
+        reports_failure = true,
+    },
+    mark = {
+        handler = commands.mark,
+        max_args = 2,
+        completion = { kind = "mark-target", arg = 1 },
+        reports_failure = true,
+    },
+    pin = { handler = commands.pin, max_args = 1, completion = "session", reports_failure = true },
+    rename = {
+        handler = commands.rename,
+        max_args = 2,
+        completion = { kind = "session", arg = 1 },
+        reports_failure = true,
+    },
+    restore = {
+        handler = commands.restore,
+        max_args = 1,
+        completion = "deleted-session",
+        reports_failure = true,
+    },
+    save = { handler = commands.save, max_args = 0, reports_failure = true },
+    sidebar = { handler = commands.sidebar, max_args = 0 },
+    term = { handler = commands.term, reports_failure = true },
+    unload = {
+        handler = commands.unload,
+        max_args = 1,
+        completion = "session",
+        reports_failure = true,
+    },
+    unmark = {
+        handler = commands.unmark,
+        max_args = 1,
+        completion = "mark",
+        reports_failure = true,
+    },
 }
+
+local function command_available(name)
+    if name ~= "sidebar" then
+        return true
+    end
+    return api.opts.is_setup() and api.opts.get().sidebar.enabled
+end
 
 local function keys(t)
     local result = {}
 
     for key in pairs(t) do
-        result[#result + 1] = key
+        if command_available(key) then
+            result[#result + 1] = key
+        end
     end
 
     table.sort(result)
@@ -174,7 +225,7 @@ local function complete(arg_lead, cmdline, cursorpos)
     end
 
     local spec = specs[command]
-    if not spec then
+    if not spec or not command_available(command) then
         return {}
     end
 
@@ -201,7 +252,10 @@ local function complete(arg_lead, cmdline, cursorpos)
         if completed_args > 0 then
             return {}
         end
-        return filter_by_pattern(completion_kind == "mark" and mark_names() or valid_mark_names(), arg_lead)
+        return filter_by_pattern(
+            completion_kind == "mark" and mark_names() or valid_mark_names(),
+            arg_lead
+        )
     end
 
     if completion_kind == "session-or-path" then
@@ -243,6 +297,7 @@ end
 
 ---@class Sess.CommandContext
 ---@field args string[]
+---@field raw_tail? string
 ---@field bang boolean
 ---@field range_start integer
 ---@field range_end integer
@@ -252,6 +307,8 @@ end
 local function context(args)
     return {
         args = vim.list_slice(args.fargs, 2),
+        -- Only remove the subcommand and its separator, not shell syntax.
+        raw_tail = args.args and args.args:match("^%s*%S+%s(.*)$"),
         bang = args.bang,
         range_start = args.line1,
         range_end = args.line2,
@@ -279,7 +336,7 @@ function M.execute(args)
     end
 
     local command_args = vim.list_slice(args.fargs, 2)
-    if #command_args > spec.max_args then
+    if spec.max_args and #command_args > spec.max_args then
         log.error(
             ("Too many arguments for %s: expected at most %d argument%s"):format(
                 command,
@@ -297,7 +354,22 @@ function M.execute(args)
         return false
     end
 
-    return spec.handler(context(args)) ~= false
+    if not command_available(command) then
+        log.error(command .. " is disabled")
+        return false
+    end
+
+    local result, err = spec.handler(context(args))
+    if result == false then
+        -- Most UI handlers already emit a domain-specific diagnostic. Only
+        -- add the generic fallback for handlers that explicitly leave errors
+        -- to the command dispatcher.
+        if not spec.reports_failure then
+            log.error(err or (command .. " failed"))
+        end
+        return false
+    end
+    return true
 end
 
 function M.setup()

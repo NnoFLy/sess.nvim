@@ -1225,6 +1225,123 @@ function M.root()
     return root_path
 end
 
+local function validate_resume(record)
+    if type(record) ~= "table" or record.version ~= 1 then
+        return false, "unsupported resume record version"
+    end
+    for field in pairs(record) do
+        if field ~= "version" and field ~= "active_ids" and field ~= "current_id" then
+            return false, "invalid resume record: unexpected field " .. tostring(field)
+        end
+    end
+    if type(record.active_ids) ~= "table" or not vim.islist(record.active_ids) then
+        return false, "invalid resume record: active_ids must be a list"
+    end
+    local seen = {}
+    for _, id in ipairs(record.active_ids) do
+        local valid, err = validate_id(id)
+        if not valid then
+            return false, "invalid resume record: " .. err
+        end
+        if seen[id] then
+            return false, "invalid resume record: duplicate session id " .. id
+        end
+        seen[id] = true
+    end
+    if record.current_id ~= nil then
+        local valid, err = validate_id(record.current_id)
+        if not valid then
+            return false, "invalid resume record: " .. err
+        end
+        if not seen[record.current_id] then
+            return false, "invalid resume record: current_id must be active"
+        end
+    end
+    return true
+end
+
+-- Resume publication replaces the whole selection, never session snapshots.
+---@return boolean, string?, Sess.ResumeRecord?
+function M.read_resume()
+    assert_initialized()
+    local trusted, trust_err = trusted_dir(root_path, "storage directory")
+    if not trusted then
+        return false, trust_err
+    end
+    local path = join(root_path, "resume.json")
+    local stat, stat_err, code = vim.uv.fs_lstat(path)
+    if not stat then
+        if code == "ENOENT" then
+            return true, nil, nil
+        end
+        return false, "failed to access resume record: " .. tostring(stat_err)
+    end
+    if stat.type ~= "file" then
+        return false, "untrusted resume record path (expected a regular file): " .. path
+    end
+    local record, read_err = read_json(path)
+    if not record then
+        return false, read_err
+    end
+    local valid, validation_err = validate_resume(record)
+    if not valid then
+        return false, validation_err
+    end
+    return true, nil, record
+end
+
+local function write_resume_atomic(content)
+    local path = join(root_path, "resume.json")
+    if not descriptor_mode then
+        return write_file_atomic_path(path, content)
+    end
+
+    -- The retained root descriptor needs no fallible post-rename close. Every
+    -- failure therefore precedes publication and leaves the old record intact.
+    local destination = descriptor_path(root_fd, "resume.json")
+    local fd, temporary = make_temporary(descriptor_path(root_fd, ".resume.json.tmp-XXXXXX"))
+    if not fd then
+        return false, temporary
+    end
+    local written, write_err = write_all(fd, content)
+    local synced, sync_err
+    if written then
+        synced, sync_err = vim.uv.fs_fsync(fd)
+    end
+    local closed, close_err = close_descriptor(fd, "temporary resume record")
+    if not written or not synced or not closed then
+        local err = write_err or sync_err or (not synced and "failed to sync resume record")
+        err = append_error(err, closed and nil or close_err)
+        return false, unlink_with_error(temporary, err)
+    end
+    local renamed, rename_err = vim.uv.fs_rename(temporary, destination)
+    if not renamed then
+        return false, unlink_with_error(temporary, rename_err)
+    end
+    return true
+end
+
+---@param record Sess.ResumeRecord
+---@return boolean, string?
+function M.write_resume(record)
+    assert_initialized()
+    local valid, validation_err = validate_resume(record)
+    if not valid then
+        return false, validation_err
+    end
+    -- Inspect an existing document before publication; malformed history is
+    -- evidence to report, not permission to silently repair it.
+    local ok, err = M.read_resume()
+    if not ok then
+        return false, err
+    end
+    local encoded, content = pcall(vim.json.encode, record)
+    if not encoded then
+        return false, "failed to encode resume record: " .. tostring(content)
+    end
+    return write_resume_atomic(content)
+end
+
 -- Marks are a separate registry: reassignment never rewrites session records.
 
 local function validate_marks(data)

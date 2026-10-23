@@ -17,6 +17,16 @@
 ---@field id Sess.SessionId
 ---@field metadata Sess.SessionMetadata
 
+---@class Sess.ResumeRecord
+---@field version integer Currently 1.
+---@field active_ids Sess.SessionId[] Recorded active order, not all saved sessions.
+---@field current_id Sess.SessionId?
+
+---@class Sess.ResumeResult
+---@field restored_ids Sess.SessionId[] Committed restores in recorded order.
+---@field current_id Sess.SessionId?
+---@field failed_id Sess.SessionId? Execution-time failure, if any.
+
 ---@alias Sess.Mark string One lowercase ASCII letter or digit.
 
 ---@class Sess.MarkEntry
@@ -117,13 +127,26 @@
 ---@field win_options { cursorline: boolean, winblend: integer, winhighlight: string }
 ---@field keymap Sess.MarkWindowKeymap
 
+---@class Sess.SidebarOptions
+---@field enabled boolean
+---@field start_open boolean
+---@field position "left" | "right"
+---@field width integer
+---@field min_width integer
+---@field max_width integer
+---@field active_expand "all" | "current" | "none"
+---@field toggle_key string | false
+---@field refresh_interval integer Milliseconds.
+---@field mouse boolean
+
 ---@class Sess.Opts
 ---@field paths string[]
 ---@field log_level Sess.log_level
----@field smart_auto_load boolean
+---@field smart_auto_load "none" | "current" | "all"
 ---@field auto_save boolean
 ---@field exclude_filetypes string[]
 ---@field hooks Sess.Hooks
 ---@field store_path Sess.DBPath
 ---@field keymap Sess.Keymap
 ---@field mark_window Sess.MarkWindowOptions
+---@field sidebar Sess.SidebarOptions

@@ -570,9 +570,11 @@ function M.observe(input)
         end
     end
 
-    diagnostic(diagnostics, "no screen rule matched; manifest default selected")
-    local result = result_base(manifest.default, "fallback", manifest_id, manifest, diagnostics)
-    return result
+    -- A complete screen with no matching rule is an expected fallback, not a
+    -- probe failure. The source and manifest fields still explain why the
+    -- default was selected without emitting a warning on every active-poller
+    -- refresh.
+    return result_base(manifest.default, "fallback", manifest_id, manifest, diagnostics)
 end
 
 -- Compatibility facade for the existing detector. New callers should pass a

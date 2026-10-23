@@ -47,7 +47,7 @@ function M.finish(operation, item, callbacks, diagnostics, details)
     -- VimLeavePre can run while plugin windows and buffers are already being
     -- dismantled. Persistence still completes, but UI observers must not run
     -- against that closing editor state.
-    if (tonumber(vim.v.exiting) or 0) ~= 0 then
+    if vim.v.exiting ~= vim.NIL then
         return true, nil, item, diagnostics
     end
 

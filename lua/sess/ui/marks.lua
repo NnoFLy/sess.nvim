@@ -23,7 +23,7 @@ function M.parse(value, require_prefix)
 end
 
 -- Confirmation belongs here, never in the prompt-free lifecycle.
-function M.assign(target, mark)
+function M.assign(target, mark, before_assign)
     local valid, validation_err = mark_rules.validate(mark)
     if not valid then
         return false, validation_err
@@ -45,6 +45,10 @@ function M.assign(target, mark)
             replace = true
             break
         end
+    end
+    -- Native UI owners may have closed while the replacement prompt ran.
+    if before_assign and not before_assign() then
+        return false, "mark cancelled"
     end
     local assigned, assign_err, item, result_diagnostics =
         api.session.set_mark(target, mark, { replace = replace })
@@ -421,11 +425,8 @@ local function install_mappings(popup)
         if not confirm(popup, "Clear mark @" .. mark .. " on " .. entry_owner(entry) .. "?") then
             return
         end
-        local ok, _, _, clear_diagnostics = run_logged_operation(
-            api.session.clear_mark,
-            mark,
-            { expected_id = entry.id }
-        )
+        local ok, _, _, clear_diagnostics =
+            run_logged_operation(api.session.clear_mark, mark, { expected_id = entry.id })
         if ok then
             popup.undo = {
                 changes = { { mark = mark, expected = nil, value = entry.id } },

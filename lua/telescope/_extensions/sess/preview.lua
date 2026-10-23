@@ -152,9 +152,7 @@ local function action_hint(value)
     if type(value) ~= "table" then
         return "unavailable"
     end
-    if value.deleted_at or value.key then
-        return "Enter restores this deleted session"
-    elseif value.kind == "agent" then
+    if value.kind == "agent" then
         return "Enter focuses this agent"
     elseif value.directory then
         return "Enter loads or creates a session for this path"
@@ -191,7 +189,6 @@ function M.format(value, context)
         add_field(lines, "State", "deleted")
         add_field(lines, "Deleted", date(value.deleted_at))
         add_field(lines, "Restore key", value.key or "unavailable")
-        add_action_hint(lines, value, context)
         if context.warning then
             lines[#lines + 1] = ""
             lines[#lines + 1] = "Warning: " .. context.warning

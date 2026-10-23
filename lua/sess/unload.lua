@@ -1,5 +1,6 @@
 local editor = require("sess.editor")
 local state = require("sess.state")
+local terminal_view = require("sess.terminal.view")
 
 local M = {}
 
@@ -32,7 +33,8 @@ local function describe(buf)
         end
 
         local terminal = vim.bo[buf].buftype == "terminal"
-        local job = terminal and vim.b[buf].terminal_job_id or nil
+        local managed_job = terminal and terminal_view.identity(buf) or nil
+        local job = managed_job or (terminal and vim.b[buf].terminal_job_id or nil)
         if job and vim.fn.jobwait({ job }, 0)[1] ~= -1 then
             job = nil
         end
@@ -44,6 +46,7 @@ local function describe(buf)
             changedtick = vim.api.nvim_buf_get_changedtick(buf),
             terminal = terminal,
             job = job,
+            managed_job = managed_job,
         }
     end)
 
@@ -79,7 +82,11 @@ local function collect(item)
 end
 
 local function unchanged(expected, actual)
-    if actual.terminal ~= expected.terminal or actual.name ~= expected.name then
+    if
+        actual.terminal ~= expected.terminal
+        or actual.name ~= expected.name
+        or actual.managed_job ~= expected.managed_job
+    then
         return false
     end
 
@@ -108,7 +115,7 @@ function M.prepare(item, confirm)
         if record.modified then
             table.insert(modified, record)
         end
-        if record.job then
+        if record.job and not record.managed_job then
             table.insert(jobs, record)
         end
     end
@@ -240,7 +247,8 @@ function M.close(plan)
                 end
 
                 -- Force is only for explicitly discarded edits or an approved
-                -- live terminal. Neovim stops the terminal job on buffer wipe.
+                -- live terminal, or a privately identified managed attachment.
+                -- Wiping the latter stops only its client, never its execution.
                 local force = (actual.modified and plan.decision == "discard") or actual.job ~= nil
                 local ok, err = pcall(vim.api.nvim_buf_delete, buf, { force = force })
                 if not ok then
