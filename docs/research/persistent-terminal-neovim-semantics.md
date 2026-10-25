@@ -3,6 +3,8 @@
 **Question:** [#36](https://github.com/NnoFLy/sess.nvim/issues/36).
 **Collected:** 2026-10-25 UTC. **Branch:** `research/persistent-terminal-neovim-semantics`.
 **Base:** `eee53cca450a1e1a64e47ebe43f507fe85669dd0`.
+**Immutable evidence commit:** [`c3ea886fdd6422c62b0847ed2082393d7efdc347`](https://github.com/NnoFLy/sess.nvim/tree/c3ea886fdd6422c62b0847ed2082393d7efdc347/docs/research).
+That commit contains the exact probes and ledger; this publication note alone was added afterward.
 
 Research only: no Sess command, API, storage, lifecycle, snapshot, or UI implementation.
 The executable on PATH is a development build and was **not used for qualification**.
