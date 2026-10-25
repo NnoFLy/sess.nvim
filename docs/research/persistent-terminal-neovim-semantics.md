@@ -3,8 +3,9 @@
 **Question:** [#36](https://github.com/NnoFLy/sess.nvim/issues/36).
 **Collected:** 2026-10-25 UTC. **Branch:** `research/persistent-terminal-neovim-semantics`.
 **Base:** `eee53cca450a1e1a64e47ebe43f507fe85669dd0`.
-**Immutable evidence commit:** [`c3ea886fdd6422c62b0847ed2082393d7efdc347`](https://github.com/NnoFLy/sess.nvim/tree/c3ea886fdd6422c62b0847ed2082393d7efdc347/docs/research).
-That commit contains the exact probes and ledger; this publication note alone was added afterward.
+**Original evidence commit:** [`c3ea886fdd6422c62b0847ed2082393d7efdc347`](https://github.com/NnoFLy/sess.nvim/tree/c3ea886fdd6422c62b0847ed2082393d7efdc347/docs/research).
+That commit contains the original probes and ledger. The inspection-oracle correction
+below supersedes its two negative-retention checks; it does not approve a full gate.
 
 Research only: no Sess command, API, storage, lifecycle, snapshot, or UI implementation.
 The executable on PATH is a development build and was **not used for qualification**.
@@ -108,8 +109,10 @@ Bounded positive candidates, **not chosen product architecture**:
 
 - Per-workload `-e NAME=value` with `env -u OLD_KEY -- executable` delivers a fresh
   synthetic override and removes an old server key, without putting values in
-  workload argv/`pane_start_command`. The probe checks the retained command only
-  for the synthetic value's absence. General environment-difference enumeration,
+  workload argv/`pane_start_command` in these fixtures. Both absence checks now require
+  successful `display-message` inspection and a positive marker containing the expected
+  GNU env invocation and exact synthetic fixture path before testing value absence.
+  General environment-difference enumeration,
   argv/environment size limits, logging policy and diagnostics redaction remain I/R.
 - GNU `env -C requested` fails in the child with exit 125 before fixture exec if
   the directory disappeared. Native tmux's client can nevertheless return 0:
@@ -146,6 +149,9 @@ Probe files (all disposable):
 - [`run.py`](probes/neovim-semantics/run.py): private temporary namespace, clean
   environment, exact stable executable guard, native/UI/tmux runs, bounded deadlines,
   normalized evidence, cleanup.
+- [`correction-outcomes.txt`](probes/neovim-semantics/correction-outcomes.txt): bounded
+  sanitized stdout from the corrected 81-case run (version/hash, expected/observed
+  outcomes, summary); no full retained commands, environment dumps or UI output.
 - [`native.lua`](probes/neovim-semantics/native.lua): only native Ex/job/window probes.
 - [`fixture.py`](probes/neovim-semantics/fixture.py): synthetic argv/cwd/PTY recorder;
   allowlisted synthetic env values only, atomic result-file publication and readiness.
@@ -153,10 +159,11 @@ Probe files (all disposable):
 ```sh
 python3 docs/research/probes/neovim-semantics/run.py
 stylua --check docs/research/probes/neovim-semantics/native.lua
-NVIM_BIN=/usr/bin/nvim sh tests/run.sh
 ```
 
-Final probe revision: **77 pass, 0 fail**, three independent runs: **231 checks**.
+Original probe revision: researcher-reported **77 pass, 0 fail**, three independent
+runs (**231 checks**). Those original counts are historical, not independent
+validation, and the two absence-only checks were insufficient until corrected below.
 Every run had a fresh 0700 mkdtemp root, private HOME/XDG/TMPDIR, socket/config,
 synthetic workloads, and `LANG=C.UTF-8`. All tmux commands use `-S <root>/server.sock`;
 non-startup commands additionally use `-N`. No default/user server was queried.
@@ -182,8 +189,12 @@ Terminal-Normal as `nt`, not `n`. An attempted bare `-e KEY` removal failed and 
 now retained as an explicit negative control, **not** reclassified as successful
 removal. These exploratory failures are not hidden as stable qualification passes.
 
-- **pass:** final 77-case probe, repeated three times; changed-Lua StyLua check;
-  Python AST parsing; `git diff --check`.
+- **pass (original report):** 77-case probe, repeated three times; changed-Lua
+  StyLua check; Python AST parsing; `git diff --check`. The original two
+  absence-only checks do not establish successful inspection.
+- **pass (correction):** corrected native/UI/tmux research probe, **81 pass, 0 fail**
+  in one run; retained per-case outcomes linked above. This is a tested subset,
+  not a full D/P/I/R gate result.
 - **fail (existing suite, not repaired):** stable repository suite ran all 100 cases:
   98 pass, `tabline_decorate.lua:52` (runner expected 110, got 42) and
   `tabline.lua:246` (assertion failed). Source/tests are unchanged from the base;
@@ -200,10 +211,38 @@ removal. These exploratory failures are not hidden as stable qualification passe
   executable nor required native PTY was missing. Any decision to depend on GNU env
   or adopt a launch/acknowledgement protocol remains with the human/main design owner.
 
+## Inspection-oracle correction (2026-10-25 UTC)
+
+The audit identified a false-pass possibility, not an observed leak: failed or
+empty `display-message` stdout satisfied the old absence-only assertions. The
+shared `command_inspection` oracle now records inspection success, expected-command
+presence and synthetic-value absence separately. Absence is **null / not exercised**
+unless exit status is zero and the command marker matches; it never automatically
+passes on missing output. No raw command inspection is published.
+
+Four injected `CompletedProcess` controls exercise failed inspection even with a
+matching marker, successful-but-empty inspection, a different command, and a retained
+synthetic value. The first three leave absence untested; the fourth reports absence
+false. These are oracle controls, not tmux failure-injection or redaction qualification.
+The existing real `env -i` pane-start-command assignment-retention counterexample
+remains unchanged and passed as a negative control.
+
+The first correction run reported **79 pass, 2 fail**: both stricter checks rejected
+an incorrectly backslash-escaped expected pathname. A disposable synthetic tmux-only
+format check showed that the pinned tmux prints that pathname in double quotes.
+After correcting the expected markers, the existing focused research probe ran once
+with **81 pass, 0 fail**; its entire bounded sanitized outcome record is retained.
+No plugin suite was rerun or repaired; its two previously reported tabline failures
+remain failures. No behavior contract, GNU env dependency/architecture, arbitrary
+environment strategy, fail-closed cwd strategy or startup acknowledgement protocol
+is approved by this correction. All untested/blocked gates above remain so.
+
 ## Per-case evidence ledger
 
-Final run, sanitized. Each row has an explicit status; for a pass, the displayed
-value is **both expected and observed** (the probe prints both independently).
+Original ledger with the two inspection rows replaced and four oracle controls added
+from the corrected run. The linked correction outcome file records all 81 current
+cases. Each row has an explicit status; for a pass, the displayed value is **both
+expected and observed** (the probe prints both independently).
 `<root>` replaces the fresh temporary pathname. Negative-control names deliberately
 assert the unsafe native behavior documented above. Synthetic booleans never expose
 real environment values, UI screen contents or full retained start commands.
@@ -279,9 +318,13 @@ real environment values, UI screen contents or full retained start commands.
 | `TMUX-env-i-single-executable-argv` | **pass** | `[]` |
 | `TMUX-env-i-retains-assignment-negative-control` | **pass** | `true` |
 | `TMUX-e-bare-key-does-not-unset-negative-control` | **pass** | `["old-server-only", "fresh-override", []]` |
-| `TMUX-e-not-in-workload-command` | **pass** | `false` |
+| `TMUX-e-not-in-workload-command` | **pass (corrected)** | `{"inspection_succeeded": true, "expected_command_present": true, "synthetic_value_absent": true}` |
 | `TMUX-e-plus-env-u-fresh-values-and-removal` | **pass** | `[null, "fresh-with-unset", []]` |
-| `TMUX-e-plus-env-u-no-assignment-in-command` | **pass** | `false` |
+| `TMUX-e-plus-env-u-no-assignment-in-command` | **pass (corrected)** | `{"inspection_succeeded": true, "expected_command_present": true, "synthetic_value_absent": true}` |
+| `TMUX-command-inspection-rejects-failed-negative-control` | **pass** | `{"inspection_succeeded": false, "expected_command_present": false, "synthetic_value_absent": null}` |
+| `TMUX-command-inspection-rejects-empty-negative-control` | **pass** | `{"inspection_succeeded": true, "expected_command_present": false, "synthetic_value_absent": null}` |
+| `TMUX-command-inspection-rejects-wrong-command-negative-control` | **pass** | `{"inspection_succeeded": true, "expected_command_present": false, "synthetic_value_absent": null}` |
+| `TMUX-command-inspection-rejects-retained-value-negative-control` | **pass** | `{"inspection_succeeded": true, "expected_command_present": true, "synthetic_value_absent": false}` |
 | `TMUX-env-i-second-invocation-fresh` | **pass** | `[0, {"PROBE_VALUE": "second-invoker"}]` |
 | `TMUX-real-shell-pipeline` | **pass** | `"synthetic-pipe"` |
 | `TMUX-empty-command-is-no-process-negative-control` | **pass** | `"&#124;0"` |

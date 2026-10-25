@@ -23,6 +23,14 @@ def check(case, got, expected):
                         got=got, expected=expected))
 
 
+def command_inspection(proc, expected_command, synthetic_value):
+    inspected = proc.returncode == 0
+    matched = inspected and expected_command in proc.stdout
+    # Absence is evidence only after a successful, positively identified query.
+    return dict(inspection_succeeded=inspected, expected_command_present=matched,
+                synthetic_value_absent=synthetic_value not in proc.stdout if matched else None)
+
+
 def wait_file(path):
     end = time.monotonic() + 4
     while time.monotonic() < end:
@@ -233,7 +241,11 @@ def main(root):
         private_data = json.loads(private_out.read_text())
         check("TMUX-e-bare-key-does-not-unset-negative-control", [private_data["env"].get("PROBE_DROP"), private_data["env"]["PROBE_VALUE"], private_data["argv"]], ["old-server-only", "fresh-override", []])
         retained = tmux("display-message", "-p", "-t", pane, "#{pane_start_command}")
-        check("TMUX-e-not-in-workload-command", "fresh-override" in retained.stdout, False)
+        expected_command = '/usr/bin/env -- "' + str(fixture) + '"'
+        inspected_absent = dict(inspection_succeeded=True, expected_command_present=True,
+                                synthetic_value_absent=True)
+        check("TMUX-e-not-in-workload-command",
+              command_inspection(retained, expected_command, "fresh-override"), inspected_absent)
         removed_out = root / "per-workload-remove.json"
         created = tmux("new-window", "-d", "-P", "-F", "#{pane_id}", "-t", anchor + ":",
                        "-e", "PROBE_OUT=" + str(removed_out), "-e", "PROBE_VALUE=fresh-with-unset",
@@ -244,7 +256,24 @@ def main(root):
         removed = json.loads(removed_out.read_text())
         check("TMUX-e-plus-env-u-fresh-values-and-removal", [removed["env"].get("PROBE_DROP"), removed["env"]["PROBE_VALUE"], removed["argv"]], [None, "fresh-with-unset", []])
         retained = tmux("display-message", "-p", "-t", pane, "#{pane_start_command}")
-        check("TMUX-e-plus-env-u-no-assignment-in-command", "fresh-with-unset" in retained.stdout, False)
+        expected_command = '/usr/bin/env -u PROBE_DROP -- "' + str(fixture) + '"'
+        check("TMUX-e-plus-env-u-no-assignment-in-command",
+              command_inspection(retained, expected_command, "fresh-with-unset"), inspected_absent)
+        # Inject bounded inspection outcomes: none may establish safe absence.
+        # A failed query with matching stdout separately exercises the exit check.
+        for name, code, stdout, expected in (
+                ("failed", 1, expected_command, dict(inspection_succeeded=False,
+                 expected_command_present=False, synthetic_value_absent=None)),
+                ("empty", 0, "", dict(inspection_succeeded=True,
+                 expected_command_present=False, synthetic_value_absent=None)),
+                ("wrong-command", 0, "/bin/sleep 60", dict(inspection_succeeded=True,
+                 expected_command_present=False, synthetic_value_absent=None)),
+                ("retained-value", 0, expected_command + " fresh-with-unset",
+                 dict(inspection_succeeded=True, expected_command_present=True,
+                      synthetic_value_absent=False))):
+            inspection = subprocess.CompletedProcess(["synthetic-display-message"], code, stdout, "")
+            check("TMUX-command-inspection-rejects-" + name + "-negative-control",
+                  command_inspection(inspection, expected_command, "fresh-with-unset"), expected)
         # A later invocation on the same old server must get its own fresh values.
         out2 = root / "env-second.json"
         proc = tmux("new-window", "-d", "-t", anchor + ":", "--", "/usr/bin/env", "-i",
