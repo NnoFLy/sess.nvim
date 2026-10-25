@@ -1,11 +1,13 @@
-# Crash-durable terminal recovery primitives: bounded qualification
+# Crash-durable terminal recovery primitives: bounded evidence
 
 **Outcome: BLOCKED for implementation handoff.** Linux file/directory fsync and
 kernel-lifetime cooperative locking are available on the tested local filesystem.
-The disposable protocol model preserves plans and fences stale writers under its
-stated assumptions. Neither result qualifies native exactly-once recovery or
-power-loss durability. In particular, tmux 3.8 **silently substitutes HOME for an
-invalid `-c` directory**; plain `new-window -c` fails the strict recovery contract.
+The disposable protocol model exercises plan preservation and selected stale-write
+refusals under its stated assumptions. Its deletion crash matrix checks surviving
+records and markers, not attempted recovery/restore refusal. Neither result
+qualifies native exactly-once recovery or power-loss durability. In particular,
+tmux 3.8 **silently substitutes HOME for an invalid `-c` directory**; plain
+`new-window -c` fails the strict recovery contract.
 No Sess storage, lifecycle, API or UI implementation is included.
 
 ## Authority, scope and publication
@@ -32,6 +34,12 @@ No Sess storage, lifecycle, API or UI implementation is included.
 `pass` below always names the tested subset. A model pass is **not a native P
 gate pass**, and no D/P result is an I/R implementation/release pass. Required
 blocked/failing cases keep #35 and the map unqualified pending review.
+
+Evidence-quality correction: DR-17 is a read-only fixture, DR-21 is surviving
+marker/state evidence with fencing only inferred, and test 10's `unknown:no-retry`
+is an assigned policy assertion. None exercises future API routing or native
+retry blocking. This documentation-only correction changes no probe oracle and
+claims no new execution or fully passed gate; the run counts below are historical.
 
 ## Exact runtime and filesystem assumptions
 
@@ -188,23 +196,27 @@ suffixes. **M** denotes the disposable protocol model, **N** real native calls.
 | DR-13 | Partial recovery leaves unattempted and dormant entries | **pass (M only)**: test 05 recovers first entry, refuses second synthetic cwd, leaves B dormant; no fallback erased. No editor was loaded; native strict-cwd failure is DR-19 |
 | DR-14 | Pending/dormant plans survive repeated server loss | **pass (M only)**: test 05 separately loses backend after an unrecorded effect/pending plan, recovers A at g2, loses again before B loads, then recovers A/B at g3 (4 exact entries); names/cwd preserved, fresh epochs. **blocked** pending native evidence |
 | DR-15 | Stop/exit suppression survives cleanup failure/loss | **pass (M stop only)**: test 05 preserves durable stopped status through g2/g3, recovers other 3 entries; test 06 retains unknown suppression. **untested**: actual native stop/exit confirmation, partial stop results and registry cleanup failure |
-| DR-16 | Ambiguous outcome must block duplicate retry | **pass (M policy only)**: test 06 detects two conflicting operation-index identities, marks first entry unknown, issues no further first-entry effect even across repeated loss, but recovers unattempted second. Native test 10 loses spawn output with no exact operation stamp: cannot reconcile by label/cwd. **blocked (native)**, not an exactly-once proof |
-| DR-17 | Live missing jobs stay absent; read-only/stale explicit open never creates | **pass (N subset)**: test 10 removes a synthetic live window and repeated live reads stay absent; this probe simply has no recovery path there. **untested**: future API routing, stale explicit opens, natural exits and authoritative observation completeness |
+| DR-16 | Ambiguous outcome must block duplicate retry | **pass (M policy only)**: test 06 detects two conflicting model operation-index identities, marks first entry unknown, issues no further first-entry effect even across repeated loss, but recovers unattempted second. Native test 10 discards spawn output, then assigns and asserts `unknown:no-retry`; this is a policy assertion, not detected native ambiguity or enforced retry blocking. **blocked (native)**, not an exactly-once proof |
+| DR-17 | Live missing jobs stay absent; read-only/stale explicit open never creates | **observed (N read-only fixture only)**: test 10 removes a synthetic live window and a subsequent list omits it; no recovery/create path is invoked by that read. This is not an API-routing test. **untested**: future API routing, stale explicit opens, natural exits and authoritative observation completeness |
 | DR-18 | Fresh shell uses saved name/cwd, new identities and current shell/env, never former recipe | **pass (N construction + M subset)**: test 10 makes `/bin/sh` in exact private cwd, verifies pane PID/start, cmdline and synthetic current-only env marker in memory; model contains no old command/env recipe and replaces epochs on loss. **untested**: real Neovim-configured shell/flags/env propagation and end-to-end recovery |
 | DR-19 | Invalid saved cwd must fail, never substitute | **fail (plain native candidate)**: test 10 submits a nonexistent directory; tmux exits 0, creates shell in private HOME. Negative control is asserted, so the test suite passing records a required behavior failure, not its acceptance. Source spawn.c confirms fallback before fork. Concurrent removal/replacement of cwd is **untested** |
 | DR-20 | Revisions/incarnations/tombstones reject stale writers, including after restore | **pass (M only)**: test 07 rejects old revision, deleting incarnation, old incarnation after i2 restore; restores editing context with no eligible stopped jobs. **untested**: all future Sess write paths, concurrent name-uniqueness/create/rename, actual trash integration |
-| DR-21 | Tombstone before stop; progress before trash; retain record on partial effects | **pass (M + N rename subset)**: test 12 injects 12 process exits around tombstone, stop effect, suppression and trash; exactly one owner record survives in original or trash location. After effects, deleting/unknown fences recovery or deleted record carries stopped set. This is not native exact-stop evidence |
+| DR-21 | Tombstone before stop; progress before trash; retain record on partial effects | **observed (M markers + N rename subset only)**: test 12 injects 12 process exits around tombstone, synthetic stop effect, suppression and trash; exactly one owner record survives in original or trash location. After a recorded stop effect, the tombstone is deleting/deleted; a deleted marker carries the stopped set. Recovery/restore is never attempted after these exits: fencing is **inferred, not exercised**. Neither recovery/restore refusal nor native exact-stop behavior is established |
 | DR-22 | Corrupt/incompatible/partial observations preserve last-good data | **pass (M corrupt JSON only)**: test 06 leaves corrupt bytes untouched and raises. **untested**: schema-invalid/incompatible manifests and actual partial backend queries; model has no incomplete-observation overwrite path, not a tested observer implementation |
 | DR-23 | Separate manifest then editor snapshot publication, precise partial outcomes | **untested**: no Sess snapshots/editor mutations or real multi-file transaction. Model's partial/unknown strings demonstrate only a policy oracle, not public result propagation |
 | DR-24 | Crash durability including filesystem/mount/hardware loss | **blocked**: successful real file/directory fsync calls + pinned kernel/filesystem sources support a conditional local-storage protocol, not a tested power-loss/reboot claim. No physical/VM power-failure or device fault injection. No filesystem beyond the recorded local btrfs tuple qualified |
 | DR-25 | Exhaustive irreversible-point and I/R fault coverage | **untested**: mkdir/rmdir crash persistence, failures of every fsync/close/trash/remove boundary, actual interrupted native stop/attach, hostile hooks, partial observation, real owner loading and future implementation/release suites. Required coverage must not be inferred from the finite model |
 
-## Crash matrix and exact finite-run evidence
+## Historical crash matrix and exact finite-run evidence
 
-Final executable evidence was run **three times**, each exit 0, with 12 unittest
-methods and the Lua native checks passing. Python method runtimes were 8.133s,
-8.230s, 8.262s. Formatting, shell syntax, Python AST parse and diff checks exited
-0. Earlier exploratory runs are not included in these counts.
+The original collection reported final executable evidence run **three times**,
+each exit 0, with 12 unittest methods and the Lua native checks passing. These
+counts describe finite checks, including assigned policy assertions and marker-only
+observations; they are not counts of qualified recovery guarantees or gate passes.
+The audit and this documentation-only correction did not independently rerun them.
+Recorded Python method runtimes were 8.133s, 8.230s, 8.262s. Formatting, shell
+syntax, Python AST parse and diff checks were reported to exit 0. Earlier
+exploratory runs are not included in these counts.
 
 Per run:
 
@@ -260,8 +272,12 @@ That finite model exposes ordering obligations and provides reproducible oracles
 it does not implement tmux atomic spawning, exact stopping, native epoch hooks,
 shape verification, arbitrary hook safety, real editor callbacks, schema
 validation, snapshot transactions, or the plugin's write paths. In particular,
-test 10's conservative `unknown:no-retry` decision is an explicit policy choice
-inside the probe, **not a detected native exact-operation marker**. A tmux shell
+test 10's `unknown:no-retry` variable is assigned a literal and asserted equal to
+that literal. This **policy assignment assertion detects no native ambiguity and
+enforces no native retry block**. Test 12 inspects surviving owner records and
+tombstones, but never invokes recovery or restore after a crash; fencing there is
+inferred from marker state, not exercised. Test 10's live-absence read similarly
+cannot prove future API routing because it invokes no recovery path. A tmux shell
 can start, naturally exit, or be externally removed before a client records IDs.
 Neither a missing window nor a matching name/cwd proves whether that particular
 operation executed. A query followed by retry is not a qualified fix.
@@ -290,10 +306,11 @@ persistence or host-reboot semantics.
    assumptions and actual fault/crash coverage, not a tmpfs/SIGKILL substitute.
    Complete publication/removal/partial-effect error cases before claiming P.
 4. **Integration later:** independently test every owner mutation against
-   incarnation/revision/tombstone state, last-good schema preservation, pending
-   plans across generations, stop suppression, trash restore and exact partial
-   outcomes. Select/qualify a usable Neovim lock binding rather than assuming uv
-   exposes flock. No implementation authorization follows from the FFI probe.
+   incarnation/revision/tombstone state, including attempted recovery/restore
+   refusals after deletion crashes, last-good schema preservation, pending plans
+   across generations, stop suppression, trash restore and exact partial outcomes.
+   Select/qualify a usable Neovim lock binding rather than assuming uv exposes
+   flock. No implementation authorization follows from the FFI probe.
 
 Main/review owns acceptance, tracker publication and any new design ticket. This
 research neither closes #35 nor weakens #30/#32. Only the throwaway evidence
