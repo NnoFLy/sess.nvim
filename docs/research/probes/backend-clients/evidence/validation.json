@@ -1,0 +1,94 @@
+{
+  "scope": "Corrected backend-clients research subset only; no full gate qualified.",
+  "prior_evidence": "Earlier five-run totals had no retained records and were not independently verified.",
+  "runtime": {
+    "kernel": "Linux 7.2.10-arch1-1 x86_64",
+    "tmux": "3.8",
+    "python": "3.14.8",
+    "stable_nvim": {
+      "path": "/usr/bin/nvim",
+      "version": "v0.12.6",
+      "scenario_exercised": false
+    },
+    "path_nvim_version": "v0.13.0-dev-d714648-dirty"
+  },
+  "probe_sha256": {
+    "system_isolation.py": "b5c80577e9e73c800b7705afd3da1ca060dc97fad1dda71e9fc7e64252e03928",
+    "probe.py": "73ca103cc55bcf4bb67bf64ae0c0f8cd73a249957b8efd5727a8dd2f088ed5c3"
+  },
+  "runs": [
+    {
+      "outcome_file": "generic-1.jsonl",
+      "command": "PYTHONDONTWRITEBYTECODE=1 python3 docs/research/probes/backend-clients/probe.py",
+      "exit_code": 0,
+      "completed_utc": "2026-10-25T00:57:12.803611+00:00",
+      "sha256": "6367bd00b048b541e117850f6aa7f35459500600ebe8c8cf03ed49590a332b08"
+    },
+    {
+      "outcome_file": "generic-2.jsonl",
+      "command": "PYTHONDONTWRITEBYTECODE=1 python3 docs/research/probes/backend-clients/probe.py",
+      "exit_code": 0,
+      "completed_utc": "2026-10-25T00:57:46.073529+00:00",
+      "sha256": "6367bd00b048b541e117850f6aa7f35459500600ebe8c8cf03ed49590a332b08"
+    },
+    {
+      "outcome_file": "generic-3.jsonl",
+      "command": "PYTHONDONTWRITEBYTECODE=1 python3 docs/research/probes/backend-clients/probe.py",
+      "exit_code": 0,
+      "completed_utc": "2026-10-25T00:57:50.089399+00:00",
+      "sha256": "6367bd00b048b541e117850f6aa7f35459500600ebe8c8cf03ed49590a332b08"
+    },
+    {
+      "outcome_file": "system-1.jsonl",
+      "command": "PYTHONDONTWRITEBYTECODE=1 python3 docs/research/probes/backend-clients/system_isolation.py",
+      "exit_code": 0,
+      "completed_utc": "2026-10-25T00:57:13.131600+00:00",
+      "sha256": "1f213fe0bfb83060bc67f6c18094af1acec8935d5e4ab8caf9cce0bb5b202f7e"
+    },
+    {
+      "outcome_file": "system-2.jsonl",
+      "command": "PYTHONDONTWRITEBYTECODE=1 python3 docs/research/probes/backend-clients/system_isolation.py",
+      "exit_code": 0,
+      "completed_utc": "2026-10-25T00:57:46.408518+00:00",
+      "sha256": "1f213fe0bfb83060bc67f6c18094af1acec8935d5e4ab8caf9cce0bb5b202f7e"
+    },
+    {
+      "outcome_file": "system-3.jsonl",
+      "command": "PYTHONDONTWRITEBYTECODE=1 python3 docs/research/probes/backend-clients/system_isolation.py",
+      "exit_code": 0,
+      "completed_utc": "2026-10-25T00:57:50.516385+00:00",
+      "sha256": "1f213fe0bfb83060bc67f6c18094af1acec8935d5e4ab8caf9cce0bb5b202f7e"
+    },
+    {
+      "outcome_file": "wait-and-detach-controls.jsonl",
+      "command": "PYTHONDONTWRITEBYTECODE=1 python3 - (disposable in-process control driver; method below)",
+      "exit_code": 0,
+      "completed_utc": "2026-10-25T00:57:55.568220+00:00",
+      "sha256": "058403385240368a61ec662909edabb5a1a1e616f354191f8a8d3958e867176e"
+    }
+  ],
+  "control_driver_method": [
+    "Load probe.py with importlib.util.spec_from_file_location; set umask 077. Each run uses tempfile.TemporaryDirectory and Lab.cleanup in finally.",
+    "Subclass Lab.wait: call super().wait(predicate, timeout) first. Inspect predicate.__code__.co_consts for output, z, or #{client_pid}:#{session_id}. Record the original true value and return False for exactly those three waits.",
+    "Subclass Lab.record to append sanitized case/status/observed rows without printing all rows. Call experiment(lab). Require exactly the three targeted rows fail and all other rows pass; print only the control result and targeted rows.",
+    "In a second private Lab, start new-session -d -P -F #{session_id} -s detach-control /bin/sleep 30 (startup=True), attach Client at 80x24 and await its exact client_pid.",
+    "Replace only that Client.send with lambda _data: None, dropping native detach input. Call close(); require termination in (pty-close, sigkill-fallback) and normal_detach_confirmed false. Print only that sanitized result."
+  ],
+  "validation": [
+    "Python AST parsing passed for both probes.",
+    "JSONL parsed; all three generic runs contain 33 passing cases and zero failures; all three system runs contain two passing rows.",
+    "Injected false waits yielded three expected failing target rows; other checks passed. Suppressed detach yielded PTY-close exit 1, not confirmed normal detach.",
+    "git diff --check passed. No Lua changed; StyLua not applicable. Plugin suite not run per task."
+  ],
+  "sanitization": "Only synthetic counters/input, bounds, return codes and boolean identity comparisons retained. No raw pane text, real environment, process command lines, secrets or private temporary paths.",
+  "remaining_gates": [
+    "Stable-Neovim plus external-client embedding untested despite available stable binary.",
+    "Native atomic safety, lifecycle integration, adversarial races, real-agent and release coverage remain open; see research asset."
+  ],
+  "executable_sha256": {
+    "/usr/bin/nvim": "d308f10e416aec90c8794a7a10174777b8262076fc9d5aa3db043fd86e260531",
+    "/usr/bin/tmux": "f4d25f698c2eae25b742ad8a6d4cb8c7c5309a6ebf586e4e541fc9655de10660",
+    "/bin/sh": "c14c8f498f3be96f076ceb07d65dba584a86dca3c86b5dce65ed0f6cae73358d",
+    "/usr/bin/python3": "375532f83be620283ab780c14ca6bcc5907dc379d2b621de0c5d0a112cf5458b"
+  }
+}

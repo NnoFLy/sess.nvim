@@ -112,6 +112,7 @@ class Client:
                 args.append("-r")
             os.execve(args[0], args, lab.env)
         os.set_blocking(self.fd, False)
+        self.close_result = None
         lab.clients.append(self)
 
     def send(self, data):
@@ -121,23 +122,42 @@ class Client:
         fcntl.ioctl(self.fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
         os.kill(self.pid, signal.SIGWINCH)
 
+    def wait_exit(self, timeout):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            pid, status = os.waitpid(self.pid, os.WNOHANG)
+            if pid:
+                return status
+            self.lab.pump(0.01)
+        return None
+
     def close(self, abrupt=False):
         if self.fd is None:
-            return
+            return self.close_result
+        method = "requested-sigkill" if abrupt else "native-detach"
         if abrupt:
             os.kill(self.pid, signal.SIGKILL)
         else:
-            self.send(b"\x02d")  # native detach, not pane/window destruction
-            self.lab.pump(0.15)
+            try:
+                self.send(b"\x02d")  # native detach, not pane/window destruction
+            except OSError:
+                method = "pty-close"
+        # Confirm normal exit BEFORE closing the PTY; hangup is not native detach.
+        status = self.wait_exit(1)
+        if status is None and not abrupt:
+            method = "pty-close"
         os.close(self.fd)
         self.fd = None
-        # Bound the wait even if terminal detach failed.
-        for _ in range(100):
-            if os.waitpid(self.pid, os.WNOHANG)[0]:
-                return
-            time.sleep(0.01)
-        os.kill(self.pid, signal.SIGKILL)
-        os.waitpid(self.pid, 0)
+        if status is None:
+            status = self.wait_exit(0.5)
+        if status is None:
+            method = "sigkill-fallback"
+            os.kill(self.pid, signal.SIGKILL)
+            _, status = os.waitpid(self.pid, 0)
+        self.close_result = {"termination": method, "exit_code": os.waitstatus_to_exitcode(status),
+                             "normal_detach_confirmed": method == "native-detach"
+                             and os.WIFEXITED(status) and os.WEXITSTATUS(status) == 0}
+        return self.close_result
 
 
 class Lab:
@@ -181,14 +201,15 @@ set-hook -g pane-created 'set-option -p @probe-created yes'
         return [self.tmux, "-S", socket or self.socket,
                 *([] if startup else ["-N"]), "-f", str(config or self.config), *args]
 
-    def run(self, *args, socket=None, startup=False, config=None, check=True, env=None):
+    def run(self, *args, socket=None, startup=False, config=None, check=True, env=None, strip=True):
         result = subprocess.run(self.args(*args, socket=socket, startup=startup, config=config),
                                 env=env or self.env, capture_output=True, timeout=5)
         if len(result.stdout) > 8192 or len(result.stderr) > 8192:
             raise RuntimeError("bounded command-output limit exceeded")
         if check and result.returncode:
             raise RuntimeError(f"tmux {args[0]} failed rc={result.returncode}")
-        return result.stdout.decode().strip(), result.returncode
+        output = result.stdout.decode()
+        return output.strip() if strip else output, result.returncode
 
     def out(self, *args, **kwargs):
         return self.run(*args, **kwargs)[0]
@@ -283,6 +304,18 @@ def observe(root, expected, limit=256, depth_limit=8):
         return "unknown", []
 
 
+def capture_facts(capture):
+    size = len(capture.encode())
+    lines = len(capture.splitlines())
+    return {"capture_bytes": size, "capture_lines": lines,
+            "synthetic_output_present": "SYNTHETIC_OUTPUT_ONLY" in capture,
+            "within_bounds": 0 < size <= 8192 and 1 <= lines <= 6}
+
+
+def capture_is_valid(facts):
+    return facts["synthetic_output_present"] and facts["within_bounds"]
+
+
 def experiment(lab):
     # Explicit disposable unrelated server, deliberately selected by TMUX env.
     unrelated = str(lab.root / "unrelated.sock")
@@ -298,8 +331,12 @@ def experiment(lab):
                and stat.S_IMODE(lab.root.stat().st_mode) == 0o700,
                {"directory_mode": "0700", "socket_mode": oct(stat.S_IMODE(endpoint.st_mode)),
                 "socket_bytes": len(lab.socket.encode()), "same_uid": endpoint.st_uid == os.getuid()})
-    lab.record("user-plugin-config-isolation", not lab.out("show-options", "-gqv", "@user_sentinel")
-               and not (lab.root / "plugin-ran").exists(), "HOME and XDG sentinel options/plugins absent with explicit -f")
+    user_sentinel, query_rc = lab.run("show-options", "-gqv", "@user_sentinel")
+    live_server = int(lab.out("display-message", "-p", "#{pid}")) == server_pid and identity(server_pid) == server_identity
+    lab.record("user-plugin-config-isolation", query_rc == 0 and live_server and not user_sentinel
+               and not (lab.root / "plugin-ran").exists(),
+               {"query_succeeded": query_rc == 0, "same_live_server": live_server,
+                "sentinel_and_plugin_absent": not user_sentinel and not (lab.root / "plugin-ran").exists()})
     # Positive control: explicit sentinel config executes sentinel plugin.
     lab.out("new-session", "-d", "-s", "sentinel", "/bin/sleep", "300", startup=True,
             socket=str(lab.root / "sentinel.sock"), config=lab.root / "home/.tmux.conf")
@@ -334,11 +371,12 @@ def experiment(lab):
     lab.select(p1, w1)
     lab.select(p2, w1)
     c1 = Client(lab, p1, 100, 30)
-    lab.wait(lambda: lab.out("list-clients", "-F", "#{session_id}").splitlines() == [p1])
+    first_attached = lab.wait(lambda: lab.out("list-clients", "-F", "#{session_id}").splitlines() == [p1])
     c2 = Client(lab, p2, 60, 20)
     attached = lab.wait(lambda: len(lab.out("list-clients", "-F", "#{client_pid}").splitlines()) == 2)
     attach_size = lab.wait(lambda: lab.size(w1) == "60x20")
-    lab.record("attach-latest-sizing", attach_size, {"after_second_attach": lab.size(w1)})
+    lab.record("attach-latest-sizing", first_attached and attached and attach_size,
+               {"first_attached": first_attached, "two_attached": attached, "after_second_attach": lab.size(w1)})
     c2.resize(70, 22)
     resized = lab.wait(lambda: lab.size(w1) == "70x22")
     c2.resize(60, 20)
@@ -356,37 +394,50 @@ def experiment(lab):
                {"input": lab.state(pane1).get("input"), "SIGINT_count": lab.state(pane1).get("interrupts"), "same_root": identity(root1) == original})
     lab.record("latest-keyboard-sizing", size1 and size2, {"after_first": "100x30" if size1 else "unexpected", "after_second": "60x20" if size2 else "unexpected"})
     c2.send(b"b")
-    lab.wait(lambda: lab.size(w1) == "60x20")
+    output_baseline = lab.wait(lambda: lab.size(w1) == "60x20")
     os.kill(root1, signal.SIGUSR1)
-    lab.wait(lambda: lab.state(pane1).get("output") == 1)
+    output_produced = lab.wait(lambda: lab.state(pane1).get("output") == 1)
     lab.pump(0.2)
-    lab.record("output-only-no-latest-change", lab.size(w1) == "60x20", {"size": lab.size(w1)})
+    lab.record("output-only-no-latest-change", output_baseline and output_produced and lab.size(w1) == "60x20",
+               {"baseline_size_confirmed": output_baseline, "output_produced": output_produced, "size": lab.size(w1)})
     lab.select(p2, w2)
     c1.send(b"a")
     viewer_only = lab.wait(lambda: lab.size(w1) == "100x30")
     c2.send(b"z")
-    lab.wait(lambda: "z" in lab.state(pane2).get("input", ""))
+    nonviewer_input = lab.wait(lambda: "z" in lab.state(pane2).get("input", ""))
     lab.pump(0.2)
     selections = [lab.out("display-message", "-p", "-t", p, "#{window_id}") for p in (p1, p2)]
-    lab.record("independent-navigation-nonviewer", selections == [w1, w2] and viewer_only and lab.size(w1) == "100x30",
-               {"selections_distinct": selections == [w1, w2], "nonviewer_activity_size": lab.size(w1)})
+    lab.record("independent-navigation-nonviewer", selections == [w1, w2] and viewer_only and nonviewer_input
+               and lab.size(w1) == "100x30",
+               {"selections_distinct": selections == [w1, w2], "nonviewer_input_received": nonviewer_input,
+                "nonviewer_activity_size": lab.size(w1)})
     lab.select(p2, w1)
     c2.send(b"b")
-    lab.wait(lambda: lab.size(w1) == "60x20")
-    c2.close(abrupt=True)
+    loss_baseline = lab.wait(lambda: lab.size(w1) == "60x20")
+    abrupt_close = c2.close(abrupt=True)
     loss_size = lab.wait(lambda: lab.size(w1) == "100x30")
-    c1.close()
+    normal_close = c1.close()
     zero = lab.wait(lambda: not lab.out("list-clients", "-F", "#{client_pid}"))
     lab.pump(0.2)
-    lab.record("normal-abrupt-loss-zero-clients", zero and loss_size and identity(root1) == original
-               and identity(shell_pid) == shell_identity,
+    lab.record("normal-abrupt-loss-zero-clients", zero and loss_baseline and loss_size
+               and abrupt_close["termination"] == "requested-sigkill" and normal_close["normal_detach_confirmed"]
+               and identity(root1) == original and identity(shell_pid) == shell_identity,
                {"same_pid_start": identity(root1) == original, "same_shell_pid_start": identity(shell_pid) == shell_identity,
+                "zero_clients": zero, "latest_before_loss": loss_baseline,
+                "abrupt_close": abrupt_close, "normal_close": normal_close,
                 "remaining_viewer_size_after_loss": loss_size})
     # External-only bounded process observations: no Neovim or tmux attachment PID as root.
     before_status, before_agents = observe(root1, original)
     _, attachment_agents = observe(c1.pid, (c1.pid, "deliberately-stale"))
     low_status, _ = observe(root1, original, limit=1)
-    capture = lab.out("capture-pane", "-p", "-t", pane1, "-S", "0", "-E", "5")
+    # Keep raw newlines for the six-line bound; never log the captured text.
+    capture, _ = lab.run("capture-pane", "-p", "-t", pane1, "-S", "0", "-E", "5", strip=False)
+    facts = capture_facts(capture)
+    capture_controls = {name: not capture_is_valid(capture_facts(text)) for name, text in (
+        ("empty_rejected", ""), ("missing_marker_rejected", "SYNTHETIC_OTHER\n"),
+        ("excess_lines_rejected", "SYNTHETIC_OUTPUT_ONLY\n" + "x\n" * 6),
+        ("excess_bytes_rejected", "SYNTHETIC_OUTPUT_ONLY" + "x" * 8192))}
+    lab.record("capture-oracle-negative-controls", all(capture_controls.values()), capture_controls)
     association_ok = identity(root1) == original and lab.out("display-message", "-p", "-t", pane1,
                          "#{pane_id}:#{pane_pid}") == pane1 + ":" + str(root1)
     wrong_capture = lab.out("capture-pane", "-p", "-t", pane2, "-S", "0", "-E", "5")
@@ -397,16 +448,17 @@ def experiment(lab):
     dedup_key = ("synthetic-generation", "owner-incarnation", w1, pane1, original)
     dedup_count = len({dedup_key, dedup_key})
     lab.record("external-only-bounded-observation", before_status == "known" and len(before_agents) == 1
-               and not attachment_agents and low_status == "unknown" and association_ok and dedup_count == 1,
+               and not attachment_agents and low_status == "unknown" and association_ok and dedup_count == 1
+               and capture_is_valid(facts),
                {"known_fixture_count": len(before_agents), "traversal_limit_control": low_status,
-                "stale_attachment_rejected": not attachment_agents, "dedup_rows": dedup_count,
-                "capture_bytes": len(capture.encode()), "capture_lines": len(capture.splitlines()),
-                "synthetic_output_present": "SYNTHETIC_OUTPUT_ONLY" in capture})
+                "stale_attachment_rejected": not attachment_agents, "dedup_rows": dedup_count, **facts})
     del capture  # never persist pane contents
     c1 = Client(lab, p1, 100, 30)
-    lab.wait(lambda: bool(lab.out("list-clients", "-F", "#{client_pid}")))
-    lab.record("reattach-identical-workload", identity(root1) == original and identity(shell_pid) == shell_identity,
-               "same command and interactive shell PID/start identities after new PTY")
+    reattached = lab.wait(lambda: lab.out("list-clients", "-F", "#{client_pid}:#{session_id}").splitlines()
+                         == [str(c1.pid) + ":" + p1])
+    lab.record("reattach-identical-workload", reattached and identity(root1) == original and identity(shell_pid) == shell_identity,
+               {"exact_client_session_reattached": reattached, "same_root": identity(root1) == original,
+                "same_shell": identity(shell_pid) == shell_identity})
     c1.send(b"r")
     replaced = lab.wait(lambda: tuple(lab.state(pane1).get("child") or ()) not in before_agents)
     after_status, after_agents = observe(root1, original)

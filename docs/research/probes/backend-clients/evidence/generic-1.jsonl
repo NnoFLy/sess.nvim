@@ -1,0 +1,34 @@
+{"case": "private-endpoint", "status": "pass", "observed": {"directory_mode": "0700", "socket_mode": "0o600", "socket_bytes": 32, "same_uid": true}}
+{"case": "user-plugin-config-isolation", "status": "pass", "observed": {"query_succeeded": true, "same_live_server": true, "sentinel_and_plugin_absent": true}}
+{"case": "config-sentinel-positive-control", "status": "pass", "observed": "explicit sentinel config detected"}
+{"case": "protected-options", "status": "pass", "observed": {"exit-empty": "off", "exit-unattached": "off", "destroy-unattached": "off", "window-size": "latest", "aggressive-resize": "on", "remain-on-exit": "off"}}
+{"case": "native-create-hook-capability", "status": "pass", "observed": "pane-created synthetic stamp visible; identity/epoch ordering NOT tested"}
+{"case": "group-presentation-no-extra-window", "status": "pass", "observed": {"canonical_window_count": 4, "server_direct_children": 4, "presentation_count": 2, "transient_shell_side_effect_count": 2}}
+{"case": "attach-latest-sizing", "status": "pass", "observed": {"first_attached": true, "two_attached": true, "after_second_attach": "60x20"}}
+{"case": "pty-resize-event", "status": "pass", "observed": "latest viewer resize 60x20 -> 70x22 -> 60x20"}
+{"case": "two-pty-shared-input-control", "status": "pass", "observed": {"input": "ab", "SIGINT_count": 1, "same_root": true}}
+{"case": "latest-keyboard-sizing", "status": "pass", "observed": {"after_first": "100x30", "after_second": "60x20"}}
+{"case": "output-only-no-latest-change", "status": "pass", "observed": {"baseline_size_confirmed": true, "output_produced": true, "size": "60x20"}}
+{"case": "independent-navigation-nonviewer", "status": "pass", "observed": {"selections_distinct": true, "nonviewer_input_received": true, "nonviewer_activity_size": "100x30"}}
+{"case": "normal-abrupt-loss-zero-clients", "status": "pass", "observed": {"same_pid_start": true, "same_shell_pid_start": true, "zero_clients": true, "latest_before_loss": true, "abrupt_close": {"termination": "requested-sigkill", "exit_code": -9, "normal_detach_confirmed": false}, "normal_close": {"termination": "native-detach", "exit_code": 0, "normal_detach_confirmed": true}, "remaining_viewer_size_after_loss": true}}
+{"case": "capture-oracle-negative-controls", "status": "pass", "observed": {"empty_rejected": true, "missing_marker_rejected": true, "excess_lines_rejected": true, "excess_bytes_rejected": true}}
+{"case": "wrong-pane-observation-control", "status": "pass", "observed": "different exact pane rejected by association; synthetic output marker absent"}
+{"case": "external-only-bounded-observation", "status": "pass", "observed": {"known_fixture_count": 1, "traversal_limit_control": "unknown", "stale_attachment_rejected": true, "dedup_rows": 1, "capture_bytes": 42, "capture_lines": 6, "synthetic_output_present": true, "within_bounds": true}}
+{"case": "reattach-identical-workload", "status": "pass", "observed": {"exact_client_session_reattached": true, "same_root": true, "same_shell": true}}
+{"case": "agent-replacement-invalidates", "status": "pass", "observed": "new child PID/start differs; surviving workload root unchanged"}
+{"case": "agent-child-exit-root-survives", "status": "pass", "observed": "child gone, root survives, no known-agent observation"}
+{"case": "readonly-ignore-size", "status": "pass", "observed": {"read_only_did_not_write": true, "only_ignore_size_client_geometry": "40x12", "with_writable_geometry": "100x30"}}
+{"case": "native-rename-duplicate-labels", "status": "pass", "observed": "duplicate labels visible with distinct exact IDs; root unchanged"}
+{"case": "unsupported-multipane-visible-preserved", "status": "pass", "observed": "two-pane shape visible; preserved until disposable server teardown"}
+{"case": "presentation-only-cleanup", "status": "pass", "observed": "one detached presentation removed; canonical windows/root and second presentation preserved (no concurrency claim)"}
+{"case": "natural-signaled-exit", "status": "pass", "observed": {"natural_pane_removed": true, "signaled_root_pane_removed": true, "root_process_identities_ended": true, "stale_root_observation": "unknown", "no_respawn": true}}
+{"case": "empty-server-survival", "status": "pass", "observed": "zero sessions/windows; same server PID/start and generation"}
+{"case": "empty-server-negative-control", "status": "pass", "observed": "default exit-empty server disappears after final session"}
+{"case": "explicit-routing-unrelated-protected", "status": "pass", "observed": "disposable unrelated server pane IDs/PIDs unchanged, including TMUX-env conflict at controlled startup"}
+{"case": "missing-read-only-no-start", "status": "pass", "observed": {"exit": 1, "socket_created": false}}
+{"case": "endpoint-negative-controls", "status": "pass", "observed": {"regular_file_exit": 1, "long_path_exit": 1, "native_follows_symlink": true, "requires_caller_lstat_boundary_validation": true}}
+{"case": "denied-is-not-absent", "status": "pass", "observed": {"exit": 1, "underlying_server_socket_preserved": true}}
+{"case": "protected-drift-detection", "status": "pass", "observed": "observable incompatible setting detected; no repair attempted; this is not a plugin refusal test"}
+{"case": "startup-only-executable-config", "status": "pass", "observed": "two controlled servers initialized once each; changed client -f did not reload live server or execute changed line"}
+{"case": "missing-protected-hook-observable", "status": "pass", "observed": "removed synthetic hook detected; no replacement/repair; not production identity-hook qualification"}
+{"summary": {"pass": 33, "fail": 0}}

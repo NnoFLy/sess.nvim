@@ -12,6 +12,20 @@ import tempfile
 import time
 
 
+def process_identity(pid):
+    with open(f"/proc/{pid}/stat") as file:
+        text = file.read(4097)
+    if len(text) > 4096:
+        raise ValueError("process stat exceeds bound")
+    return int(pid), text[text.rfind(")") + 2:].split()[19]
+
+
+def absence_is_verified(queries, before, after, plugins_absent):
+    # Failed queries and dead/replaced servers must never count as absence.
+    return (all(rc == 0 and not value for rc, value in queries)
+            and before is not None and before == after and plugins_absent)
+
+
 def inside(root, original_mount_namespace):
     root = Path(root)
     # Refuse an accidental direct privileged invocation in the host namespace.
@@ -34,6 +48,15 @@ def inside(root, original_mount_namespace):
             raise RuntimeError("bounded command-output limit exceeded")
         return proc.returncode, proc.stdout.decode().strip()
 
+    def server_identity(socket, controlled=False):
+        rc, pid = command(socket, "display-message", "-p", "#{pid}", controlled=controlled)
+        if rc:
+            return None
+        try:
+            return process_identity(int(pid))
+        except (OSError, ValueError, IndexError):
+            return None
+
     sockets = ("positive.sock", "controlled.sock")
     try:
         rc, _ = command(sockets[0], "new-session", "-d", "-s", "positive", "/bin/sleep", "30", startup=True)
@@ -41,27 +64,54 @@ def inside(root, original_mount_namespace):
         deadline = time.monotonic() + 3
         while not (root / "home/system-plugin").exists() and time.monotonic() < deadline:
             time.sleep(0.01)
-        _, system_positive = command(sockets[0], "show-options", "-gqv", "@system_sentinel")
-        _, user_positive = command(sockets[0], "show-options", "-gqv", "@user_sentinel")
-        positive = system_positive == "loaded" and user_positive == "loaded" and all(
-            (root / "home" / name).exists() for name in ("system-plugin", "user-plugin"))
+        positive_before = server_identity(sockets[0])
+        system_positive_rc, system_positive = command(sockets[0], "show-options", "-gqv", "@system_sentinel")
+        user_positive_rc, user_positive = command(sockets[0], "show-options", "-gqv", "@user_sentinel")
+        positive_live = positive_before is not None and positive_before == server_identity(sockets[0])
+        positive = (system_positive_rc == user_positive_rc == 0 and positive_live
+                    and system_positive == "loaded" and user_positive == "loaded" and all(
+                        (root / "home" / name).exists() for name in ("system-plugin", "user-plugin")))
         # Stop positive server before clearing marker; do not race a delayed plugin.
-        command(sockets[0], "kill-server")
+        assert command(sockets[0], "kill-server")[0] == 0
         for name in ("system-plugin", "user-plugin"):
             (root / "home" / name).unlink(missing_ok=True)
         rc, _ = command(sockets[1], "new-session", "-d", "-s", "controlled", "/bin/sleep", "30",
                         controlled=True, startup=True)
         assert rc == 0
-        _, system_controlled = command(sockets[1], "show-options", "-gqv", "@system_sentinel", controlled=True)
-        _, user_controlled = command(sockets[1], "show-options", "-gqv", "@user_sentinel", controlled=True)
-        isolated = not system_controlled and not user_controlled and not any(
-            (root / "home" / name).exists() for name in ("system-plugin", "user-plugin"))
+        before = server_identity(sockets[1], controlled=True)
+        queries = [command(sockets[1], "show-options", "-gqv", option, controlled=True)
+                   for option in ("@system_sentinel", "@user_sentinel")]
+        after = server_identity(sockets[1], controlled=True)
+        plugins_absent = not any((root / "home" / name).exists() for name in ("system-plugin", "user-plugin"))
+        isolated = absence_is_verified(queries, before, after, plugins_absent)
+        # Real missing-socket queries produce empty stdout too; that is NOT absence.
+        missing_before = server_identity("missing.sock", controlled=True)
+        missing_queries = [command("missing.sock", "show-options", "-gqv", option, controlled=True)
+                           for option in ("@system_sentinel", "@user_sentinel")]
+        missing_after = server_identity("missing.sock", controlled=True)
+        controls = {
+            "missing_server_rejected": all(rc != 0 for rc, _ in missing_queries)
+                and not (root / "missing.sock").exists()
+                and not absence_is_verified(missing_queries, missing_before, missing_after, True),
+            "failed_system_query_rejected": not absence_is_verified([(1, ""), (0, "")], before, after, True),
+            "failed_user_query_rejected": not absence_is_verified([(0, ""), (1, "")], before, after, True),
+            "missing_identity_rejected": not absence_is_verified([(0, ""), (0, "")], None, None, True),
+            "changed_identity_rejected": not absence_is_verified([(0, ""), (0, "")], (1, "a"), (1, "b"), True),
+            "sentinel_present_rejected": not absence_is_verified([(0, "loaded"), (0, "")], before, after, True),
+            "plugin_present_rejected": not absence_is_verified([(0, ""), (0, "")], before, after, False)}
         result = {"case": "system-user-plugin-config-isolation", "status": "pass" if positive and isolated else "fail",
                   "observed": {"private_mount_namespace": True, "system_sentinel_positive": system_positive == "loaded",
                                "user_sentinel_positive": user_positive == "loaded", "plugin_positive": positive,
+                               "positive_queries_succeeded": system_positive_rc == user_positive_rc == 0,
+                               "positive_same_live_server": positive_live,
+                               "controlled_queries_succeeded": all(rc == 0 for rc, _ in queries),
+                               "controlled_same_live_server": before is not None and before == after,
                                "explicit_f_omitted_all_sentinels_and_plugins": isolated}}
+        control_result = {"case": "config-isolation-oracle-negative-controls",
+                          "status": "pass" if all(controls.values()) else "fail", "observed": controls}
         print(json.dumps(result))
-        return 0 if result["status"] == "pass" else 1
+        print(json.dumps(control_result))
+        return 0 if result["status"] == control_result["status"] == "pass" else 1
     finally:
         for socket in sockets:
             command(socket, "kill-server")

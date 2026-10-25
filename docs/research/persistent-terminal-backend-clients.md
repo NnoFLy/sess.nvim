@@ -3,10 +3,14 @@
 ## Result and authority
 
 **Research evidence only; implementation handoff remains blocked.** On the pinned
-Linux/tmux tuple, the final generic probe passed **32 checks in each of five runs
-(160/160)**. The separate system/user/plugin configuration sentinel probe passed
-**five of five runs**. These are scoped primitive results, not a full #34 gate pass,
-Neovim compatibility, phone-app compatibility, or feature implementation approval.
+Linux/tmux tuple, the corrected generic probe passed **33 checks in each of three
+runs**; the separate system/user/plugin configuration probe passed its scenario
+and negative-control row in **three runs**. Sanitized per-run outcomes are retained
+[with the probes](probes/backend-clients/evidence/). Earlier five-run totals were
+researcher-reported without retained per-run records; they are not independently
+verified and are superseded here. These are scoped primitive results, not a full
+#34 gate pass, Neovim compatibility, phone-app compatibility, or feature
+implementation approval.
 Required untested/blocked cases are listed below rather than silently waived.
 
 - Ticket: [#34](https://github.com/NnoFLy/sess.nvim/issues/34).
@@ -18,7 +22,9 @@ Required untested/blocked cases are listed below rather than silently waived.
   base: `eee53cc`. The commit containing this document and its probes is the
   evidence revision (resolve with `git rev-parse HEAD`); the publication report
   supplies its immutable GitHub blob URL. No tracker mutation or PR is authorized.
-- Collected: **2026-10-25 UTC**, final generic run completed at 00:40:47Z.
+- Collected/corrected: **2026-10-25 UTC**. Corrected run timestamps, commands,
+  executable/probe hashes and exit outcomes are in the
+  [validation record](probes/backend-clients/evidence/validation.json).
 
 **Boundary:** #33 owns native identity/attachment/stop atomicity and epoch ordering;
 #35 owns coordinated initialization/recovery/storage crash durability; #36 owns
@@ -36,7 +42,8 @@ production identity guard. They must not be copied as a safe attachment recipe.
 | Shell | `/bin/sh`, GNU bash `5.3.20(1)-release`, Arch `bash 5.3.20-1`; SHA-256 `c14c8f498f3be96f076ceb07d65dba584a86dca3c86b5dce65ed0f6cae73358d` |
 | Probe interpreter | Python `3.14.8`, Arch `python 3.14.8-1`; `/usr/bin/python3` SHA-256 `375532f83be620283ab780c14ca6bcc5907dc379d2b621de0c5d0a112cf5458b` |
 | Official stable Neovim | GitHub `releases/latest`: **v0.12.6**, published 2026-10-09T15:43:25Z; annotated tag `022946c802832f938398dfae34b3f277ca9509d4` -> source `779c36969e31080503be2dfccbcc3f999e289606` |
-| Installed Neovim (not qualified) | `NVIM v0.13.0-dev-d714648-dirty`, RelWithDebInfo, LuaJIT `2.1.1792527110`; executable SHA-256 `557198ff1a62ba5c1d5dc6682f230ba600c83971a17eb5b150e0a7e1b5bce93f`; **not substituted for stable** |
+| Installed stable Neovim (not exercised) | `/usr/bin/nvim`: **NVIM v0.12.6**; SHA-256 `d308f10e416aec90c8794a7a10174777b8262076fc9d5aa3db043fd86e260531`. Already available; no stable-Neovim embedding scenario was run. |
+| PATH Neovim (not qualified) | `NVIM v0.13.0-dev-d714648-dirty`, RelWithDebInfo, LuaJIT `2.1.1792527110`; executable SHA-256 `557198ff1a62ba5c1d5dc6682f230ba600c83971a17eb5b150e0a7e1b5bce93f`; **not substituted for stable**. PATH selecting dev did not establish stable absence. |
 | Scratch/worktree | `/tmp`, `tmpfs`, `rw,nosuid,nodev,nr_inodes=1048576,inode64,huge=advise,usrquota`; all probe state/sockets under private `mkdtemp` directories, mode 0700, umask 077 |
 | Executables | Root mount btrfs, `rw,relatime,compress=zstd:3,ssd,discard=async,space_cache=v2`; no package installation or binary rebuild |
 | PTYs/procfs | `/dev/pts`: devpts, `rw,nosuid,noexec,relatime,gid=5,mode=600,ptmxmode=000`; `/proc`: proc, `rw,nosuid,nodev,noexec,relatime`; Yama ptrace scope 1; same-UID fixture reads permitted |
@@ -86,11 +93,30 @@ PYTHONDONTWRITEBYTECODE=1 python3 docs/research/probes/backend-clients/probe.py
 PYTHONDONTWRITEBYTECODE=1 python3 docs/research/probes/backend-clients/system_isolation.py
 ```
 
-Expected exit: 0. Generic final line: `{"summary": {"pass": 32, "fail": 0}}`.
-System probe prints one `system-user-plugin-config-isolation` row, `status: pass`.
-The recorded final validation repeated each command five times. Generic runs all
-reported 32/0; all five system rows passed. These are repeated scenario checks,
-**not race stress/atomicity evidence**.
+Expected exit: 0. Generic final line: `{"summary": {"pass": 33, "fail": 0}}`.
+System probe prints `system-user-plugin-config-isolation` and
+`config-isolation-oracle-negative-controls` rows, both `status: pass`.
+The correction repeated each command three times: see `generic-{1,2,3}.jsonl` and
+`system-{1,2,3}.jsonl` in the [evidence directory](probes/backend-clients/evidence/).
+These are repeated scenario checks, **not race stress/atomicity evidence**.
+
+The capture oracle rejects empty/missing-marker, over-six-line and over-8192-byte
+synthetic inputs. Configuration absence requires both successful option queries
+and a matching live server PID/start identity before/after them; a real missing
+socket and injected failed-query/missing-or-changed-identity/sentinel/plugin
+controls must be rejected. The generic user-config check also requires successful
+query and unchanged live identity. Normal detach requires client exit status 0
+before PTY closure; PTY-close and SIGKILL fallback are recorded separately and
+cannot satisfy that prerequisite.
+
+A focused disposable control run returned false *after successful real waits*
+for output production, nonviewer input and exact client/session reattachment.
+All three associated rows then failed while other rows passed. A second control
+dropped a native-detach request: PTY-close fallback was recorded, with normal
+detach unconfirmed. These are deliberate harness controls, not backend failures;
+see [their sanitized outcomes](probes/backend-clients/evidence/wait-and-detach-controls.jsonl)
+and the validation record for the injection method. No pane text or real environment
+is retained.
 
 Every server command, including cleanup, uses `-S <absolute disposable socket>`;
 non-starting commands use `-N`. No default server is queried. The only deliberately
@@ -120,14 +146,16 @@ client PID/name/command history. Stat and children reads cap at 4096 bytes; argv
 at 32768; traversal at depth 8, 256 visited processes and 256 children/task.
 Fixture-only capture is `capture-pane -p -t %EXACT -S 0 -E 5` (six **visible**
 lines, not `-S -5`, which includes history), width at most 100 here. Command output
-has an 8192-byte post-capture assertion and a 5-second timeout. This is not a
-production streaming memory cap for arbitrary Unicode/width/untrusted servers;
+has an 8192-byte post-capture assertion and a 5-second timeout. The positive
+oracle additionally requires the output marker, 1–6 raw lines (including blank
+lines) and 1–8192 bytes; stripping newlines must not hide a line-bound failure.
+This is not a production streaming memory cap for arbitrary Unicode/width/untrusted servers;
 no arbitrary pane output is collected. Captured text is transient, association is
 rechecked, and only synthetic marker presence/length/count is published.
 
 ## Observed matrix
 
-Each **pass** below means the stated narrow oracle passed in all five final runs.
+Each **pass** below means the stated narrow oracle passed in all three corrected runs.
 Checks are predicate-polled (3-second deadline), not a fixed sleep substituted for
 an oracle. Brief 0.15–0.2-second settle/observation intervals cannot prove indefinite
 lifetime or absence of all races.
@@ -136,17 +164,17 @@ lifetime or absence of all races.
 | --- | --- | --- |
 | `private-endpoint` | pass | Own private directory 0700, own socket type/UID -> socket 0600, 32-byte pathname, same UID. |
 | `user-plugin-config-isolation`, `config-sentinel-positive-control` | pass | Explicit `-f` skips private user/plugin sentinels; explicit sentinel file must trigger them -> both oracles held. |
-| `system-user-plugin-config-isolation` (separate probe) | pass | Default startup sees synthetic `/etc` and user sentinel/plugin; controlled `-f` sees none -> all booleans true, five runs. Complete tmux config-search isolation for this binary; not arbitrary same-UID attacker isolation. |
+| `system-user-plugin-config-isolation` (separate probe) | pass | Default startup sees synthetic `/etc` and user sentinel/plugin; controlled `-f` sees none -> successful queries and same live identity, all booleans true, three runs. Complete tmux config-search isolation for this binary; not arbitrary same-UID attacker isolation. |
 | `protected-options` | pass | Observe off/off/off/latest/on/off -> exact matches for exit-empty/exit-unattached/destroy-unattached/window-size/aggressive-resize/remain-on-exit. |
 | `native-create-hook-capability` | pass | Native single-pane new-window gets hook stamp with no creation helper -> `@probe-created=yes`. No admission/identity/epoch-ordering claim. |
 | `group-presentation-no-extra-window` | pass | Two grouped presentations share four existing windows, leave no extra root -> four canonical windows/four server direct children; **two** accepted transient shell startup writes per run. This is a live post-creation check, not an arbitrary-hook orphan-process proof. |
 | `attach-latest-sizing`, `pty-resize-event` | pass | Latest second attach supplies 60x20; resize -> 70x22 -> 60x20. |
 | `two-pty-shared-input-control` | pass | Writable clients append `a`, `b` to one root and deliver Ctrl-C -> `ab`, one SIGINT, same root PID/start. |
 | `latest-keyboard-sizing` | pass | First client's key -> 100x30; second client's key -> 60x20. Geometry is shared, not independent. |
-| `output-only-no-latest-change` | pass | SIGUSR1 causes pane output without client input -> stays 60x20. |
-| `independent-navigation-nonviewer` | pass | Presentations select distinct exact windows; non-viewer's activity does not size first window -> selection stays independent; first window 100x30 after its suitable viewer's activity. |
-| `normal-abrupt-loss-zero-clients` | pass | SIGKILL latest client, native-detach remaining client -> remaining viewer 100x30; zero clients; same command **and interactive shell** PID/start identities. |
-| `reattach-identical-workload` | pass | New PTY attaches surviving presentation -> same command and shell identities, no replay. |
+| `output-only-no-latest-change` | pass | SIGUSR1 causes pane output without client input -> output-produced wait required and true; stays 60x20 from confirmed baseline. |
+| `independent-navigation-nonviewer` | pass | Presentations select distinct exact windows; nonviewer-input wait required and true -> selection stays independent; first window remains 100x30 after its suitable viewer's activity. |
+| `normal-abrupt-loss-zero-clients` | pass | SIGKILL latest client, native-detach remaining client -> requested SIGKILL exit -9; confirmed native-detach exit 0 before PTY close, no fallback; remaining viewer 100x30; zero clients; same command **and interactive shell** PID/start identities. |
+| `reattach-identical-workload` | pass | New PTY attaches surviving presentation -> exact client PID/session wait required and true; same command and shell identities, no replay. |
 | `readonly-ignore-size` | pass | `-r` blocks fixture writes and ignores size alongside writable client -> no `j`/`k` input, 100x30 with writable; **40x12 with only read-only client**. Thus ignore-size is not an unconditional size lock. |
 | `native-rename-duplicate-labels` | pass | Native rename two exact windows to same label -> both rows visible with distinct IDs, unchanged process identity. No name-uniqueness adapter implemented. |
 | `unsupported-multipane-visible-preserved` | pass | Native split produces unsupported shape -> two panes visible, preserved until scratch-server teardown. No adoption or safe-mutation qualification. |
@@ -160,7 +188,9 @@ lifetime or absence of all races.
 | `denied-is-not-absent` | pass | No-search-permission private directory -> query exit 1, underlying owned server socket preserved. Exit status alone does not classify absence versus denial. |
 | `protected-drift-detection`, `missing-protected-hook-observable` | pass | Deliberately change option/remove synthetic hook -> observable drift/missing controlled command; no repair attempted. Not an implemented safety refusal. |
 | `startup-only-executable-config` | pass | Two controlled scratch servers each execute synthetic startup line once; changed `-f` on live client does not execute desired config -> count `xx`, original digest `synthetic-config-a`, no reload marker. No metadata execution or Lua adapter tested. |
-| `external-only-bounded-observation` | pass | Zero attached clients still expose one synthetic known-agent child under verified workload; cap=1 must return unknown; stale attachment root rejected; same logical key deduplicates two attachment inputs -> one child/one dedup row; exact capture 37 bytes/two nonblank synthetic lines. Dedup is a set-of-inputs oracle, not discovery implementation. |
+| `external-only-bounded-observation` | pass | Zero attached clients still expose one synthetic known-agent child under verified workload; cap=1 must return unknown; stale attachment root rejected; same logical key deduplicates two attachment inputs -> one child/one dedup row; required marker and bounded raw capture: 42 bytes/six lines including blanks. Dedup is a set-of-inputs oracle, not discovery implementation. |
+| `capture-oracle-negative-controls` | pass | Empty input, missing marker, seven lines and oversized bytes all fail the same positive capture predicate. |
+| `config-isolation-oracle-negative-controls` (separate probe) | pass | Real missing socket and injected failed system/user queries, missing/changed identity, present sentinel/plugin cannot pass absence. |
 | `wrong-pane-observation-control` | pass | Wrong exact pane must not match root association/output marker -> association rejected and marker absent; no wrong-pane text logged. |
 | `agent-replacement-invalidates`, `agent-child-exit-root-survives` | pass | Native input replaces child -> distinct child PID/start; then child-only exit -> root remains same, known-agent result becomes unknown. No status report is carried across replacement. |
 
@@ -168,7 +198,7 @@ lifetime or absence of all races.
 
 | Required subcase / gate | Status | Reason / next evidence |
 | --- | --- | --- |
-| Stable-Neovim + external-client real PTY scenario | **blocked** | Official stable v0.12.6 executable unavailable. Installed dev build is not an acceptable substitute; no installation authorized. Two ordinary PTYs establish only generic tmux behavior. |
+| Stable-Neovim + external-client real PTY scenario | **untested** | `/usr/bin/nvim` stable v0.12.6 is already installed, but this scenario was not exercised. PATH selects dev, not proof of absence. Two ordinary PTYs establish only generic tmux behavior. No embedding coverage is added by this correction. |
 | Actual phone-app compatibility | **untested** | Intentionally excluded, not inferred from ordinary PTYs or source docs. |
 | Native conditional identity/attach/stop, concurrent presentation cleanup, hooks/respawn epoch ordering, final-group fence | **untested here** | Owned by #33. Sequential cleanup and synthetic hook stamp do not qualify any destructive boundary. |
 | Concurrent initialization, ready-last publication, generation/protocol ownership trust, startup lock failure/crash points | **untested here** | #35/other controlling-lane evidence required. Probe markers are constant synthetic fixture labels, not ownership verification. |
@@ -183,8 +213,8 @@ lifetime or absence of all races.
 | Durability/recovery, editor/API/storage/UI regression/release matrix | **untested here** | No feature code, snapshot, package, tracker/map, or unrelated service/workload changed. |
 
 No runtime primitive tested here demonstrated an unavoidable backend incompatibility.
-However, the missing supported Neovim build and required untested cases remain
-blocking evidence gaps, not warnings. A reviewer must not close #34 as a complete
+However, the untested supported-Neovim scenario and other required untested cases
+remain blocking evidence gaps, not warnings. A reviewer must not close #34 as a complete
 pre-handoff pass solely on these subset results. If another lane cannot establish
 the native safety primitives, a new human design decision is required rather than
 weakening the contract or interpreting this successful generic probe as approval.
@@ -202,15 +232,17 @@ weakening the contract or interpreting this successful generic probe as approval
   makes that synthetic child's SIGINT policy explicit. No application behavior is
   inferred from this fixture adjustment.
 - Intentional crash point: SIGKILL of one attached client after making it latest;
-  five final repetitions. Natural detach/reconnect and fixture child replacement
-  are predicate-gated. No server-crash, hook-interleaving barrier, init race, storage
-  crash, fault-injection, or power-cut run was made. Cleanup `kill-server` is only
-  scratch disposal, never a production stop proposal.
-- `probe.py`: final SHA-256 `f24de9d61b1f78ab2aa147b15348f47fc0ea41453b4dc5e2dd85e8efa5772787`.
-- `system_isolation.py`: SHA-256 `2818aac6f4f038e2711c111bed8e11bae4a8546cee0f1c60f10f16540f6c4140`.
+  three corrected repetitions. Confirmed native detach/reconnect and fixture child
+  replacement are predicate-gated. No server-crash, hook-interleaving barrier, init
+  race, storage crash, backend fault-injection, or power-cut run was made. The
+  false-wait/dropped-input controls above inject harness faults only. Cleanup
+  `kill-server` is only scratch disposal, never a production stop proposal.
+- `probe.py`: corrected SHA-256 `73ca103cc55bcf4bb67bf64ae0c0f8cd73a249957b8efd5727a8dd2f088ed5c3`.
+- `system_isolation.py`: corrected SHA-256 `b5c80577e9e73c800b7705afd3da1ca060dc97fad1dda71e9fc7e64252e03928`.
 - Python AST validation passed for both assets; `git diff --check` passed. No Lua was
   added/changed, so StyLua is not applicable. `sh tests/run.sh` was not run: no plugin
-  implementation changed, and installed Neovim is not the required stable build.
+  implementation changed and the task excludes rerunning the plugin suite. Stable
+  Neovim is available but no editor scenario was exercised.
 - Tooling worked in this native session (`gh`, shell, ordinary bounded reads, PTYs,
   namespaces). No agent-runtime failure or alternative runtime was used. No PR,
   merge, issue comment/closure, generated snapshot or package installation occurred.
