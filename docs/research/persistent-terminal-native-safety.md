@@ -13,8 +13,11 @@ not a Sess implementation or an approved external-attachment recipe.
   The publication report supplies the immutable evidence commit/asset URL (a file
   cannot embed its own Git commit hash). No PR, merge, tracker update, or plugin edit.
 - Reproducer: [probe.py](probes/native-safety/probe.py).
-  Sanitized final run: [observed.json](probes/native-safety/observed.json).
+  Historical full run: [observed.json](probes/native-safety/observed.json).
+  Corrected P-series-only run: [correction-observed.json](probes/native-safety/correction-observed.json);
+  independent regression controls: [correction-controls.json](probes/native-safety/correction-controls.json).
   `pass` below always means **only the stated tested subcase**, not the complete gate.
+  This correction did not rerun A/S/F cases or qualify any full gate.
 
 ## Findings that prevent handoff
 
@@ -64,8 +67,8 @@ changing backends, a required external-client helper, or any implementation.
 | Runtime libraries | `libevent 2.1.13-2`, `ncurses 6.6-2`, `glibc 2.44+r50+g1848099f063e-1` |
 | Harness | `/usr/sbin/python3`, Python `3.14.8-1` package; `/bin/sh` resolves to `/usr/bin/bash`, `bash 5.3.20-1` |
 | Official stable Neovim | `gh api repos/neovim/neovim/releases/latest` resolved `v0.12.6`, published 2026-10-09; annotated tag peeled to `779c36969e31080503be2dfccbcc3f999e289606` |
-| Available Neovim | Only `/home/nnofly/.local/bin/nvim`, `NVIM v0.13.0-dev-d714648-dirty`; SHA-256 `557198ff1a62ba5c1d5dc6682f230ba600c83971a17eb5b150e0a7e1b5bce93f` |
-| Stable Neovim gate | **blocked**: no stable executable used or installed. These are native tmux probes, not a supported Neovim/tmux tuple pass |
+| Available Neovim | `/usr/bin/nvim` is installed stable `NVIM v0.12.6` (confirmed during correction). PATH selects `/home/nnofly/.local/bin/nvim`, `NVIM v0.13.0-dev-d714648-dirty`; previously recorded dev SHA-256 `557198ff1a62ba5c1d5dc6682f230ba600c83971a17eb5b150e0a7e1b5bce93f` |
+| Stable Neovim gate | **untested**, not unavailable: no stable Neovim scenario was exercised. These are native tmux probes, not a supported Neovim/tmux tuple pass |
 | Worktree and disposable storage | `/tmp` is `tmpfs`, `rw,nosuid,nodev,nr_inodes=1048576,inode64,huge=advise,usrquota`; executable filesystem is local btrfs, `rw,relatime,compress=zstd:3,ssd,discard=async,space_cache=v2` |
 
 No durability conclusion follows from tmpfs tests. No file/directory fsync,
@@ -116,8 +119,13 @@ Official stable Neovim source pin:
 Run from the exclusive worktree, with existing Python/tmux; install nothing:
 
 ```sh
-python3 docs/research/probes/native-safety/probe.py > /tmp/native-safety-observed.json
-python3 -m json.tool /tmp/native-safety-observed.json >/dev/null
+# Focused correction only; omit --parser-only solely to reproduce the historical full probe.
+# Use an exclusive private output file; do not overwrite the historical observed.json.
+umask 077
+output=$(mktemp /tmp/native-safety-correction.XXXXXX)
+python3 docs/research/probes/native-safety/probe.py --parser-only > "$output"
+python3 -m json.tool "$output" >/dev/null
+rm -- "$output"
 python3 - <<'PY'
 import ast
 from pathlib import Path
@@ -140,7 +148,10 @@ presentations get separate `presentation` markers. These names are fixtures,
 not a proposed production protocol. System configuration isolation is not
 qualified here (belongs to #34); no claim that `-f` alone proves it is made.
 
-Backend calls are argv-based, five-second bounded. Reads of `/proc` and PTY output
+Backend calls are argv-based, five-second bounded. P03 uses `raw=True` to
+capture bytes without newline normalization; other calls still use text mode and
+do not establish malformed-byte transport safety. P03's synthetic byte emitter
+uses the same private HOME/environment and five-second bound. Reads of `/proc` and PTY output
 are bounded (4096/8192 bytes); PTY bytes are discarded, only byte count recorded.
 Synthetic fixture roots do no real work. Ordinary fixtures accept SIGHUP; the
 negative fixture installs `SIG_IGN` before touching its ready file. Setup waits
@@ -157,7 +168,13 @@ explicit adversarial deletion/replacement controls.
 
 ## Expected versus observed subcases
 
-The final JSON contains **31** executable subcases: **24 pass, 6 fail, 1 blocked**.
+The **historical** JSON contains **31** executable subcases with recorded labels
+**24 pass, 6 fail, 1 blocked**; its P03/P05 labels do not prove the broader coverage
+previously claimed. P03 tested synthetic strings only; P05 tested literal
+backslash text and coupled target/generation, masking empty-target fallback.
+The corrected run contains **7 P-series subcases: 6 pass, 1 fail** (the intentional
+raw-rename negative control). It is not a new 31-case run or a full gate pass.
+The table retains historical A/S/F observations and uses the correction for P rows.
 Failures include intentionally unsafe negative controls; exit 0 from the harness
 means it detected its expected observations, **not** that native safety passed.
 IDs below are local evidence case IDs, cross-referenced to #32 conditional
@@ -190,9 +207,10 @@ native targeting, guarded attachment, and injection acceptance rows.
 | P01 | Untrusted option value includes `#()`, format text, semicolon, quotes, slash; fixed lookup returns data, fixed comparison rejects. No synthetic injection file appears. | **pass**, no recursive expansion |
 | P01b | Raw rename argv containing `#{session_id}` expands to `$0`; argv/shell quoting alone does not preserve data. `#()` execution is not established by this short-lived client. | **fail**, negative control |
 | P01c | Doubling `#` before rename preserves format metacharacters, no injection file. tmux escapes literal backslash in stored label. | **pass**, bounded fixture only |
-| P02–P03 | Unknown command parse fails with status 1. Output oracle rejects eight empty/rejection/ambiguous/non-ID/noisy/CR/NUL/injection lines; accepts only a single exact tagged ID line. | **pass**, output parser is probe-only |
+| P02 | Unknown command parse fails with status 1. | **pass**, parser subset |
+| P03 | Byte oracle rejects eight synthetic malformed records, accepts exact LF. Three synthetic subprocess emissions preserve exact LF/CRLF/embedded-CR bytes; only LF accepts. Three real tmux outputs accept LF and reject underscore-sanitized attempted CR; they do **not** exercise tmux-origin CR. A text-mode emitter read wrongly accepts normalized CRLF. | **pass**, byte-oracle subset; real tmux CR/external-consumer handling untested |
 | P04 | Whole-input unknown-command parse error applies no earlier assignment. A later runtime target error retains an earlier assignment. Both exit 1. No rollback claim. | **pass** |
-| P05 | Constrained-token guard construction rejects eight hostile/empty/control/format/command inputs before parser invocation. | **pass**, probe validation only |
+| P05 | Eight inputs (including actual newline U+000A and ESC U+001B) rejected independently in target and generation: **16 field/input checks**. Empty target is no longer defaulted to anchor; omitted/explicit-valid and alternate-valid controls succeed. | **pass**, probe construction only, before backend invocation |
 
 The hook stamp is deliberately a diagnostic `pane-id + created_respawn` value,
 **not** a collision-free production epoch allocator. It distinguishes first
@@ -218,7 +236,7 @@ Polling sleeps only observe readiness or postconditions, never prove exclusion.
 | Crash after guard/before operation; crash after effect/before output; malformed backend bytes integrated with real external consumer; client crash during presentation acquisition | **untested**. Runtime/parse partial effects are measured, not a durable crash-reconciliation protocol. |
 | Accepted transient grouped shell lifetime/termination and disposable presentation cleanup; no extra retained process | **untested** beyond retained window/pane/root equality. No claim all transient shell side effects or orphaning were measured. |
 | All hostile cwd/labels/IDs/control characters through every creation/management/copied-instruction surface | **untested** beyond fixed lookup, rename, constrained tokens and output-oracle fixtures. No public API/UI adapter exists in this lane. |
-| Latest-stable Neovim plus two ordinary concurrent writable PTYs / release qualification | **blocked** for stable executable, **untested** for full release matrix; native one-PTY guard checks do not substitute for #34/#36. |
+| Latest-stable Neovim plus two ordinary concurrent writable PTYs / release qualification | **untested** despite installed `/usr/bin/nvim` v0.12.6; native one-PTY guard checks do not substitute for #34/#36 or the full release matrix. |
 | File/directory durability, storage errors, owner journal/tombstone/recovery | **untested**, other lane; tmpfs cannot establish power-loss durability. |
 
 The bounded question has a negative/incomplete answer: native non-yielding
@@ -229,8 +247,40 @@ was closed/commented, no map edited, and no unsupported primitive was repaired.
 
 ## Validation and evidence interpretation
 
-- Final harness command exits **0** only when all expected positive/negative
-  observations occur; final JSON explicitly retains failed and blocked safety cases.
+### Audit correction and independent controls
+
+The historical JSON is preserved, not silently rewritten as a rerun. Its P03/P05
+coverage is superseded by the focused correction JSON. That record includes
+fixture-only output hex (not real environment or pane contents), all 16 named
+P05 rejections, and positive controls rather than just a reported total.
+
+Two independent in-memory regressions were also run via `runpy.run_path` and the
+P-series function, each with its own disposable server (no source mutation):
+
+1. Wrap `Server.guard` to pass `target=target or self.anchor` to the corrected
+   method. The independent empty-target check fails with
+   `accepted invalid target:empty` while generation remains valid.
+2. Wrap `check_output` to replace `b"\r\n"` with `b"\n"` before validation.
+   The P03 malformed-byte assertion fails, detecting CRLF normalization.
+
+Both expected assertion failures are retained in `correction-controls.json`.
+Separately, P03 actually reads the synthetic CRLF emitter with `text=True` and
+confirms the resulting false acceptance. These are oracle negative controls,
+not failed plugin tests or new safety gate passes.
+
+The first corrected probe attempt failed because real tmux `display-message`
+converted attempted CR bytes to underscore. A bounded private `show`/`display`
+check confirmed the same conversion. The final oracle records the transformation
+instead of asserting CR arrived from tmux; real tmux-origin CR remains untested.
+Synthetic emitter CR preservation/rejection does not fill that gap or qualify an
+external consumer. Stable Neovim availability was checked with explicit
+`/usr/bin/nvim --version`; only its version was exercised, not a session scenario.
+No A/S/F race counts, source-backed negative findings, or incomplete
+anchor/termination conclusions were promoted by this correction.
+
+- The historical full harness and corrected `--parser-only` command exit **0**
+  when their expected observations occur. The focused JSON retains P01b's failed
+  safety property; it contains no A/S/F rerun or complete qualification.
 - Python AST parse and `python3 -m json.tool` validate assets without dependencies.
 - `git diff --check` checks the research-only diff before publication.
 - No Lua added/changed: StyLua is not applicable. No plugin implementation changed:

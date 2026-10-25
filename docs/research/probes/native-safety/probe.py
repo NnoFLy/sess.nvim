@@ -4,6 +4,7 @@
 Every server command names an exclusive private socket. No normal tmux server,
 user environment, or pane capture is used. Only synthetic fixture PIDs are killed.
 """
+import argparse
 import concurrent.futures
 import json
 import os
@@ -82,13 +83,15 @@ class Server:
         self.call("set", "-t", self.anchor, "@role", "anchor")
         self.track(self.anchor + ":")
 
-    def call(self, *args, text=None, start=False):
+    def call(self, *args, text=None, start=False, raw=False):
         cmd = [TMUX, "-S", self.socket]
         if start:
             cmd += ["-f", str(self.config)]
         else:
             cmd += ["-N"]
-        return subprocess.run(cmd + list(args), input=text, text=True, capture_output=True,
+        if raw and text is not None:
+            text = text.encode("utf-8")
+        return subprocess.run(cmd + list(args), input=text, text=not raw, capture_output=True,
                               env=self.env, cwd=self.root, timeout=5)
 
     def source(self, text):
@@ -117,7 +120,7 @@ class Server:
         return data
 
     def guard(self, target=None, generation="G1", role="anchor", **changes):
-        expected = {"session_id": target or self.anchor, "@generation": generation,
+        expected = {"session_id": self.anchor if target is None else target, "@generation": generation,
                     "@owner": "O1", "@incarnation": "I1", "@context": "C1", "@role": role}
         expected.update(changes)
         for value in expected.values():
@@ -189,7 +192,8 @@ class Server:
 
 
 def check_output(value):
-    return re.fullmatch(r"PRESENT=\$[0-9]+\n", value) is not None
+    # Validate transport bytes before decoding or universal-newline conversion.
+    return re.fullmatch(rb"PRESENT=\$[0-9]+\n", value) is not None
 
 
 def creation_attachment():
@@ -424,9 +428,34 @@ def parser():
         result = s.source("if-shell -F '1' { not-a-command } { display-message -p REJECT }")
         assert result.returncode != 0
         record("P02-parser-failure", "pass", rejected_unknown_command=True, exit_status=result.returncode)
-        malformed = ["", "REJECT\n", "PRESENT=$1\nPRESENT=$2\n", "PRESENT=anchor\n", "PRESENT=$1\nnoise\n", "PRESENT=$1\r\n", "PRESENT=$1\x00\n", "PRESENT=$1;kill-server\n"]
-        assert not any(check_output(x) for x in malformed) and check_output("PRESENT=$123\n")
-        record("P03-output-oracle", "pass", rejected_malformed=len(malformed), positive_controls=1, limitation="probe parser, not future implementation")
+        malformed = [b"", b"REJECT\n", b"PRESENT=$1\nPRESENT=$2\n", b"PRESENT=anchor\n", b"PRESENT=$1\nnoise\n", b"PRESENT=$1\r\n", b"PRESENT=$1\x00\n", b"PRESENT=$1;kill-server\n"]
+        assert not any(check_output(x) for x in malformed) and check_output(b"PRESENT=$123\n")
+        backend_cases = []
+        emitter_cases = []
+        for label, expected in (("exact-LF", b"PRESENT=$123\n"),
+                                ("CRLF", b"PRESENT=$123\r\n"),
+                                ("embedded-CR", b"PRESENT=$12\r3\n")):
+            result = s.call("display-message", "-p", expected[:-1].decode("ascii"), raw=True)
+            # This tmux output path sanitizes CR to underscore. Do not claim
+            # rejection of real tmux-origin CR on the basis of this fixture.
+            assert result.returncode == 0 and result.stdout == expected.replace(b"\r", b"_")
+            accepted = check_output(result.stdout)
+            assert accepted == (label == "exact-LF")
+            backend_cases.append(dict(case=label, stdout_hex=result.stdout.hex(), accepted=accepted))
+            # Real CR bytes via a synthetic emitter, explicitly not tmux output.
+            cmd = [PYTHON, "-c", "import os,sys; os.write(1,bytes.fromhex(sys.argv[1]))", expected.hex()]
+            emitted = subprocess.run(cmd, capture_output=True, env=s.env, cwd=s.root, timeout=5)
+            assert emitted.returncode == 0 and emitted.stdout == expected
+            assert check_output(emitted.stdout) == (label == "exact-LF")
+            emitter_cases.append(dict(case=label, stdout_hex=emitted.stdout.hex(), accepted=check_output(emitted.stdout)))
+            if label == "CRLF":
+                normalized = subprocess.run(cmd, text=True, capture_output=True, env=s.env, cwd=s.root, timeout=5)
+                assert normalized.returncode == 0 and normalized.stdout == "PRESENT=$123\n"
+                assert check_output(normalized.stdout.encode("ascii"))
+        record("P03-output-oracle", "pass", rejected_synthetic_malformed=len(malformed),
+               synthetic_positive_controls=1, backend_cases=backend_cases, synthetic_emitter_cases=emitter_cases,
+               text_mode_wrongly_accepts_CRLF=True,
+               limitation="tmux sanitized attempted CR to underscore; tmux-origin CR and external consumer integration remain untested")
         # Whole-input parse failure precedes execution; runtime command errors
         # do not roll back earlier commands. Neither is successful presentation output.
         result = s.source("set -s @partial committed\nnot-a-command\n")
@@ -437,21 +466,38 @@ def parser():
         assert runtime.returncode != 0 and value == "committed"
         record("P04-parser-vs-runtime-error", "pass", parse_error_exit=result.returncode, parse_error_has_no_earlier_effect=True,
                runtime_error_exit=runtime.returncode, runtime_error_retains_earlier_effect=True)
-        invalid = ["", "$1;kill-server", "$1\\nkill-server", "#{session_id}", "#(touch x)", "'", " ", "\\x1b"]
-        rejected = 0
-        for token in invalid:
-            try:
-                s.guard(target=token, generation=token)
-            except AssertionError:
-                rejected += 1
-        assert rejected == len(invalid)
-        record("P05-constrained-token-oracle", "pass", refused_hostile_tokens=rejected,
-               limitation="probe input validation only; not an implementation adapter")
+        invalid = [("empty", ""), ("command", "$1;kill-server"),
+                   ("newline", "$1\nkill-server"), ("format", "#{session_id}"),
+                   ("job", "#(touch x)"), ("quote", "'"), ("space", " "), ("ESC", "\x1b")]
+        assert invalid[2][1][2] == "\n" and invalid[7][1] == "\x1b"
+        rejected = []
+        # Change one field at a time; the other retains its valid default.
+        for field in ("target", "generation"):
+            for label, token in invalid:
+                try:
+                    s.guard(**{field: token})
+                except AssertionError:
+                    rejected.append(f"{field}:{label}")
+                else:
+                    raise AssertionError(f"accepted invalid {field}:{label}")
+        assert len(rejected) == 2 * len(invalid)
+        default_guard = s.guard()
+        assert default_guard == s.guard(target=s.anchor, generation="G1")
+        assert s.guard(target="$123", generation="G2") != default_guard
+        record("P05-constrained-token-oracle", "pass", rejected_independent_fields=rejected,
+               actual_newline_codepoint=ord(invalid[2][1][2]), actual_ESC_codepoint=ord(invalid[7][1]),
+               valid_default_and_explicit_controls=True, valid_alternate_control=True,
+               limitation="probe construction only, before backend invocation; not an implementation adapter")
 
 
 if __name__ == "__main__":
-    creation_attachment()
-    epochs_and_stop()
-    fencing_and_races()
+    cli = argparse.ArgumentParser(description=__doc__)
+    cli.add_argument("--parser-only", action="store_true", help="run only the bounded P-series subset")
+    args = cli.parse_args()
+    if not args.parser_only:
+        creation_attachment()
+        epochs_and_stop()
+        fencing_and_races()
     parser()
-    print(json.dumps({"schema": 1, "tmux": subprocess.check_output([TMUX, "-V"], text=True).strip(), "cases": RESULTS}, indent=2))
+    print(json.dumps({"schema": 1, "scope": "parser-only" if args.parser_only else "full-probe",
+                      "tmux": subprocess.check_output([TMUX, "-V"], text=True).strip(), "cases": RESULTS}, indent=2))

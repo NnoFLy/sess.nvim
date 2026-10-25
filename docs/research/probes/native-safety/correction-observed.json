@@ -1,0 +1,123 @@
+{
+  "schema": 1,
+  "scope": "parser-only",
+  "tmux": "tmux 3.8",
+  "cases": [
+    {
+      "case": "P01-nonrecursive-data",
+      "outcome": "pass",
+      "observed": {
+        "option_value_literal": true,
+        "fixed_guard_rejects_hostile_data": true,
+        "command_substitution_not_observed": true
+      }
+    },
+    {
+      "case": "P01b-raw-rename-argv",
+      "outcome": "fail",
+      "observed": {
+        "label_format_expanded": true,
+        "limitation": "shell quoting and argv alone do not prevent tmux format expansion; #() execution not established here"
+      }
+    },
+    {
+      "case": "P01c-escaped-rename",
+      "outcome": "pass",
+      "observed": {
+        "format_metacharacters_literal": true,
+        "backend_escapes_backslash": true
+      }
+    },
+    {
+      "case": "P02-parser-failure",
+      "outcome": "pass",
+      "observed": {
+        "rejected_unknown_command": true,
+        "exit_status": 1
+      }
+    },
+    {
+      "case": "P03-output-oracle",
+      "outcome": "pass",
+      "observed": {
+        "rejected_synthetic_malformed": 8,
+        "synthetic_positive_controls": 1,
+        "backend_cases": [
+          {
+            "case": "exact-LF",
+            "stdout_hex": "50524553454e543d243132330a",
+            "accepted": true
+          },
+          {
+            "case": "CRLF",
+            "stdout_hex": "50524553454e543d243132335f0a",
+            "accepted": false
+          },
+          {
+            "case": "embedded-CR",
+            "stdout_hex": "50524553454e543d2431325f330a",
+            "accepted": false
+          }
+        ],
+        "synthetic_emitter_cases": [
+          {
+            "case": "exact-LF",
+            "stdout_hex": "50524553454e543d243132330a",
+            "accepted": true
+          },
+          {
+            "case": "CRLF",
+            "stdout_hex": "50524553454e543d243132330d0a",
+            "accepted": false
+          },
+          {
+            "case": "embedded-CR",
+            "stdout_hex": "50524553454e543d2431320d330a",
+            "accepted": false
+          }
+        ],
+        "text_mode_wrongly_accepts_CRLF": true,
+        "limitation": "tmux sanitized attempted CR to underscore; tmux-origin CR and external consumer integration remain untested"
+      }
+    },
+    {
+      "case": "P04-parser-vs-runtime-error",
+      "outcome": "pass",
+      "observed": {
+        "parse_error_exit": 1,
+        "parse_error_has_no_earlier_effect": true,
+        "runtime_error_exit": 1,
+        "runtime_error_retains_earlier_effect": true
+      }
+    },
+    {
+      "case": "P05-constrained-token-oracle",
+      "outcome": "pass",
+      "observed": {
+        "rejected_independent_fields": [
+          "target:empty",
+          "target:command",
+          "target:newline",
+          "target:format",
+          "target:job",
+          "target:quote",
+          "target:space",
+          "target:ESC",
+          "generation:empty",
+          "generation:command",
+          "generation:newline",
+          "generation:format",
+          "generation:job",
+          "generation:quote",
+          "generation:space",
+          "generation:ESC"
+        ],
+        "actual_newline_codepoint": 10,
+        "actual_ESC_codepoint": 27,
+        "valid_default_and_explicit_controls": true,
+        "valid_alternate_control": true,
+        "limitation": "probe construction only, before backend invocation; not an implementation adapter"
+      }
+    }
+  ]
+}

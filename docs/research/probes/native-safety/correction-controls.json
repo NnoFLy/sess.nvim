@@ -1,0 +1,15 @@
+{
+  "scope": "two intentional oracle regressions; expected assertion failures",
+  "controls": [
+    {
+      "control": "restore-empty-target-fallback",
+      "detected": true,
+      "failure": "accepted invalid target:empty"
+    },
+    {
+      "control": "normalize-CRLF-before-validation",
+      "detected": true,
+      "failure": "P03 synthetic malformed-byte assertion"
+    }
+  ]
+}
