@@ -1,0 +1,264 @@
+{
+  "schema": 1,
+  "tmux": "tmux 3.8",
+  "cases": [
+    {
+      "case": "A01-grouped-creation",
+      "outcome": "pass",
+      "observed": {
+        "shared_exact_ids": true,
+        "retained_windows": 1,
+        "transient_shell": "accepted; not directly measured"
+      }
+    },
+    {
+      "case": "A02-guarded-real-PTY-attach",
+      "outcome": "pass",
+      "observed": {
+        "attached_exact_presentation": true,
+        "discarded_pty_bytes": 680
+      }
+    },
+    {
+      "case": "A03-stale-generation-attach",
+      "outcome": "pass",
+      "observed": {
+        "original_client_only": true
+      }
+    },
+    {
+      "case": "A04-empty-markers",
+      "outcome": "pass",
+      "observed": {
+        "rejected": 5,
+        "rejection_exit_status": 0
+      }
+    },
+    {
+      "case": "A05-fallback-resolution",
+      "outcome": "pass",
+      "observed": {
+        "marker_only_wrongly_accepts": true,
+        "exact_id_rejects": true
+      }
+    },
+    {
+      "case": "A06-rename",
+      "outcome": "pass",
+      "observed": {
+        "exact_anchor_survives_rename": true
+      }
+    },
+    {
+      "case": "A07-wrong-owner",
+      "outcome": "pass",
+      "observed": {
+        "refused": true
+      }
+    },
+    {
+      "case": "A08-unguarded-missing-target",
+      "outcome": "fail",
+      "observed": {
+        "creates_unrelated_group": true,
+        "negative_control": true
+      }
+    },
+    {
+      "case": "A09-guarded-missing-anchor",
+      "outcome": "pass",
+      "observed": {
+        "refuses_after_id_disappearance": true
+      }
+    },
+    {
+      "case": "A10-cross-invocation-replacement",
+      "outcome": "pass",
+      "observed": {
+        "reused_session_id": true,
+        "stale_creation_and_attach_refused": true
+      }
+    },
+    {
+      "case": "A11-presentation-only-guard",
+      "outcome": "fail",
+      "observed": {
+        "surviving_presentation_accepts_without_anchor": true,
+        "negative_control": true,
+        "limitation": "complete dual anchor/presentation membership guard unqualified"
+      }
+    },
+    {
+      "case": "S01-respawn-epoch-ordering",
+      "outcome": "fail",
+      "observed": {
+        "old_epoch_visible_in_respawn_queue": true,
+        "new_epoch_visible_next_invocation": true,
+        "pane_and_window_ids_unchanged": true,
+        "pid_changed": true
+      }
+    },
+    {
+      "case": "S02-creation-epoch-admission",
+      "outcome": "fail",
+      "observed": {
+        "creation_print_precedes_hook": true,
+        "later_stamp_nonempty": true,
+        "limitation": "delayed admission could refuse unstamped panes; no unique epoch allocator qualified"
+      }
+    },
+    {
+      "case": "S03-stale-PID-consent",
+      "outcome": "pass",
+      "observed": {
+        "replacement_preserved": true
+      }
+    },
+    {
+      "case": "S04-normal-root-stop",
+      "outcome": "pass",
+      "observed": {
+        "exact_window_removed": true,
+        "original_process_identity_terminated": true
+      }
+    },
+    {
+      "case": "S05-HUP-ignoring-root-stop",
+      "outcome": "fail",
+      "observed": {
+        "kill_window_exit_status": 0,
+        "pane_removed": true,
+        "exact_root_still_running": true
+      }
+    },
+    {
+      "case": "S06-multipane-preservation",
+      "outcome": "pass",
+      "observed": {
+        "shape_mismatch_refused": true
+      }
+    },
+    {
+      "case": "S07-cross-group-link",
+      "outcome": "pass",
+      "observed": {
+        "extra_group_link_refused": true
+      }
+    },
+    {
+      "case": "S08-native-process-start-identity",
+      "outcome": "blocked",
+      "observed": {
+        "proposed_format_unavailable": true,
+        "limitation": "format table exposes pane_pid but no Linux /proc starttime/pidfd conditional stop primitive"
+      }
+    },
+    {
+      "case": "F01-last-window-fence",
+      "outcome": "pass",
+      "observed": {
+        "anchor_and_presentation_removed": true,
+        "exact_old_presentation_new_window_refused": true
+      }
+    },
+    {
+      "case": "F02-unconsented-arrival",
+      "outcome": "pass",
+      "observed": {
+        "new_window_survives": true,
+        "group_remains": true
+      }
+    },
+    {
+      "case": "F03-native-marker-race",
+      "outcome": "pass",
+      "observed": {
+        "runs": 40,
+        "counts": {
+          "stop_first": 10,
+          "mutation_first": 30
+        },
+        "limitation": "no scheduling guarantee; source-backed subset only"
+      }
+    },
+    {
+      "case": "F04-last-window-native-arrival-race",
+      "outcome": "pass",
+      "observed": {
+        "runs": 20,
+        "counts": {
+          "stop_first": 9,
+          "arrival_first": 11
+        },
+        "limitation": "window removal only; does not prove ignored-HUP process termination"
+      }
+    },
+    {
+      "case": "F05-unrelated-server",
+      "outcome": "pass",
+      "observed": {
+        "distinct_private_socket_sentinel_unchanged": true
+      }
+    },
+    {
+      "case": "P01-nonrecursive-data",
+      "outcome": "pass",
+      "observed": {
+        "option_value_literal": true,
+        "fixed_guard_rejects_hostile_data": true,
+        "command_substitution_not_observed": true
+      }
+    },
+    {
+      "case": "P01b-raw-rename-argv",
+      "outcome": "fail",
+      "observed": {
+        "label_format_expanded": true,
+        "limitation": "shell quoting and argv alone do not prevent tmux format expansion; #() execution not established here"
+      }
+    },
+    {
+      "case": "P01c-escaped-rename",
+      "outcome": "pass",
+      "observed": {
+        "format_metacharacters_literal": true,
+        "backend_escapes_backslash": true
+      }
+    },
+    {
+      "case": "P02-parser-failure",
+      "outcome": "pass",
+      "observed": {
+        "rejected_unknown_command": true,
+        "exit_status": 1
+      }
+    },
+    {
+      "case": "P03-output-oracle",
+      "outcome": "pass",
+      "observed": {
+        "rejected_malformed": 8,
+        "positive_controls": 1,
+        "limitation": "probe parser, not future implementation"
+      }
+    },
+    {
+      "case": "P04-parser-vs-runtime-error",
+      "outcome": "pass",
+      "observed": {
+        "parse_error_exit": 1,
+        "parse_error_has_no_earlier_effect": true,
+        "runtime_error_exit": 1,
+        "runtime_error_retains_earlier_effect": true
+      }
+    },
+    {
+      "case": "P05-constrained-token-oracle",
+      "outcome": "pass",
+      "observed": {
+        "refused_hostile_tokens": 8,
+        "limitation": "probe input validation only; not an implementation adapter"
+      }
+    }
+  ]
+}
