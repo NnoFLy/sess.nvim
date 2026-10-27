@@ -1,0 +1,667 @@
+===== Linux man-pages 6.19, pidfd_open.2; local package 6.19-1 =====
+--- original lines 1-6 ---
+1: .\" Copyright 2019, Michael Kerrisk <mtk.manpages@gmail.com>
+2: .\" Copyright, the authors of the Linux man-pages project
+3: .\"
+4: .\" SPDX-License-Identifier: Linux-man-pages-copyleft
+5: .\"
+6: .TH pidfd_open 2 2026-02-08 "Linux man-pages 6.19"
+--- original lines 25-36 ---
+25: .SH DESCRIPTION
+26: The
+27: .BR pidfd_open ()
+28: system call creates a file descriptor that refers to
+29: the task referenced by
+30: .IR pid .
+31: The file descriptor is returned as the function result;
+32: the close-on-exec flag is set on the file descriptor.
+33: .P
+34: The
+35: .I flags
+36: argument either has the value 0, or contains the following flags:
+--- original lines 100-181 ---
+100: .P
+101: .in +4n
+102: .EX
+103: pid = fork();
+104: if (pid > 0) {     /* If parent */
+105:     pidfd = pidfd_open(pid, 0);
+106:     ...
+107: }
+108: .EE
+109: .in
+110: .P
+111: Even if the child has already terminated by the time of the
+112: .BR pidfd_open ()
+113: call, its PID will not have been recycled and the returned
+114: file descriptor will refer to the resulting zombie process.
+115: Note, however, that this is guaranteed only if the following
+116: conditions hold true:
+117: .IP \[bu] 3
+118: the disposition of
+119: .B SIGCHLD
+120: has not been explicitly set to
+121: .B SIG_IGN
+122: (see
+123: .BR sigaction (2));
+124: .IP \[bu]
+125: the
+126: .B SA_NOCLDWAIT
+127: flag was not specified while establishing a handler for
+128: .B SIGCHLD
+129: or while setting the disposition of that signal to
+130: .B SIG_DFL
+131: (see
+132: .BR sigaction (2));
+133: and
+134: .IP \[bu]
+135: the zombie process was not reaped elsewhere in the program
+136: (e.g., either by an asynchronously executed signal handler or by
+137: .BR wait (2)
+138: or similar in another thread).
+139: .P
+140: If any of these conditions does not hold,
+141: then the child process (along with a PID file descriptor that refers to it)
+142: should instead be created using
+143: .BR clone (2)
+144: with the
+145: .B CLONE_PIDFD
+146: flag.
+147: .\"
+148: .SS Use cases for PID file descriptors
+149: A PID file descriptor returned by
+150: .BR pidfd_open ()
+151: (or by
+152: .BR clone (2)
+153: with the
+154: .B CLONE_PID
+155: flag) can be used for the following purposes:
+156: .IP \[bu] 3
+157: The
+158: .BR pidfd_send_signal (2)
+159: system call can be used to send a signal to the process referred to by
+160: a PID file descriptor.
+161: .IP \[bu]
+162: A PID file descriptor can be monitored using
+163: .BR poll (2),
+164: .BR select (2),
+165: and
+166: .BR epoll (7).
+167: .IP
+168: When the task that it refers to terminates and becomes a zombie,
+169: these interfaces indicate the file descriptor as readable
+170: .RB ( EPOLLIN ).
+171: When the task is reaped, these interfaces produce a hangup event
+172: .\" commit 43f0df54c96f
+173: .RB ( EPOLLHUP ).
+174: .IP
+175: Note, however, that in the current implementation,
+176: nothing can be read from the file descriptor
+177: .RB ( read (2)
+178: on the file descriptor fails with the error
+179: .BR EINVAL ).
+180: The polling behavior depends on whether
+181: .B PIDFD_THREAD
+===== Linux man-pages 6.19, pidfd_send_signal.2; local package 6.19-1 =====
+--- original lines 1-6 ---
+1: .\" Copyright 2019, Michael Kerrisk <mtk.manpages@gmail.com>
+2: .\" Copyright, the authors of the Linux man-pages project
+3: .\"
+4: .\" SPDX-License-Identifier: Linux-man-pages-copyleft
+5: .\"
+6: .TH pidfd_send_signal 2 2026-02-08 "Linux man-pages 6.19"
+--- original lines 126-138 ---
+126: refers to a thread-group leader,
+127: ensure that the signal is sent to the thread-group,
+128: even if
+129: .I pidfd
+130: was created to refer to a specific thread.
+131: .TP
+132: .BR PIDFD_SIGNAL_PROCESS_GROUP " (since Linux 6.9)"
+133: .\" commit e1fb1dc08e73466830612bcf2f9f72180965c9ba
+134: If
+135: .I pidfd
+136: refers to a process-group leader,
+137: ensure that the signal is sent to the process-group,
+138: even if
+--- original lines 161-170 ---
+161: .TP
+162: .B EINVAL
+163: .I flags
+164: is not valid.
+165: .TP
+166: .B EPERM
+167: The calling process does not have permission to send the signal
+168: to the target process.
+169: .TP
+170: .B EPERM
+--- original lines 202-221 ---
+202: or
+203: .BR clone3 (2)
+204: that specifies the
+205: .B CLONE_PIDFD
+206: flag.
+207: .P
+208: The
+209: .BR pidfd_send_signal ()
+210: system call allows the avoidance of race conditions that occur
+211: when using traditional interfaces (such as
+212: .BR kill (2))
+213: to signal a process.
+214: The problem is that the traditional interfaces specify the target process
+215: via a process ID (PID),
+216: with the result that the sender may accidentally send a signal to
+217: the wrong process if the originally intended target process
+218: has terminated and its PID has been recycled for another process.
+219: By contrast,
+220: a PID file descriptor is a stable reference to a specific process;
+221: if that process terminates,
+===== Linux man-pages 6.19, cgroups.7; local package 6.19-1 =====
+--- original lines 1-6 ---
+1: .\" Copyright 2016-2017, Michael Kerrisk <mtk.manpages@gmail.com>
+2: .\" Copyright, the authors of the Linux man-pages project
+3: .\"
+4: .\" SPDX-License-Identifier: Linux-man-pages-copyleft
+5: .\"
+6: .TH cgroups 7 2026-02-08 "Linux man-pages 6.19"
+--- original lines 394-406 ---
+394: Writing the value 0 to a
+395: .I cgroup.procs
+396: file causes the writing process to be moved to the corresponding cgroup.
+397: .P
+398: When writing a PID into the
+399: .IR cgroup.procs ,
+400: all threads in the process are moved into the new cgroup at once.
+401: .P
+402: Within a hierarchy, a process can be a member of exactly one cgroup.
+403: Writing a process's PID to a
+404: .I cgroup.procs
+405: file automatically removes it from the cgroup of
+406: which it was previously a member.
+--- original lines 811-875 ---
+811: .SS Cgroups v2 cgroup.events file
+812: Each nonroot cgroup in the v2 hierarchy contains a read-only file,
+813: .IR cgroup.events ,
+814: whose contents are key-value pairs
+815: (delimited by newline characters, with the key and value separated by spaces)
+816: providing state information about the cgroup:
+817: .P
+818: .in +4n
+819: .EX
+820: .RB $ " cat mygrp/cgroup.events"
+821: populated 1
+822: frozen 0
+823: .EE
+824: .in
+825: .P
+826: The following keys may appear in this file:
+827: .TP
+828: .I populated
+829: The value of this key is either 1,
+830: if this cgroup or any of its descendants has member processes,
+831: or otherwise 0.
+832: .TP
+833: .IR frozen " (since Linux 5.2)"
+834: .\" commit 76f969e8948d82e78e1bc4beb6b9465908e7487
+835: The value of this key is 1 if this cgroup is currently frozen,
+836: or 0 if it is not.
+837: .P
+838: The
+839: .I cgroup.events
+840: file can be monitored, in order to receive notification when the value of
+841: one of its keys changes.
+842: Such monitoring can be done using
+843: .BR inotify (7),
+844: which notifies changes as
+845: .B IN_MODIFY
+846: events, or
+847: .BR poll (2),
+848: which notifies changes by returning the
+849: .B POLLPRI
+850: and
+851: .B POLLERR
+852: bits in the
+853: .I revents
+854: field.
+855: .\"
+856: .SS Cgroup v2 release notification
+857: Cgroups v2 provides a new mechanism for obtaining notification
+858: when a cgroup becomes empty.
+859: The cgroups v1
+860: .I release_agent
+861: and
+862: .I notify_on_release
+863: files are removed, and replaced by the
+864: .I populated
+865: key in the
+866: .I cgroup.events
+867: file.
+868: This key either has the value 0,
+869: meaning that the cgroup (and its descendants)
+870: contain no (nonzombie) member processes,
+871: or 1, meaning that the cgroup (or one of its descendants)
+872: contains member processes.
+873: .P
+874: The cgroups v2 release-notification mechanism
+875: offers the following advantages over the cgroups v1
+--- original lines 952-977 ---
+952: .SH CGROUPS DELEGATION: DELEGATING A HIERARCHY TO A LESS PRIVILEGED USER
+953: In the context of cgroups,
+954: delegation means passing management of some subtree
+955: of the cgroup hierarchy to a nonprivileged user.
+956: Cgroups v1 provides support for delegation based on file permissions
+957: in the cgroup hierarchy but with less strict containment rules than v2
+958: (as noted below).
+959: Cgroups v2 supports delegation with containment by explicit design.
+960: The focus of the discussion in this section is on delegation in cgroups v2,
+961: with some differences for cgroups v1 noted along the way.
+962: .P
+963: Some terminology is required in order to describe delegation.
+964: A
+965: .I delegater
+966: is a privileged user (i.e., root) who owns a parent cgroup.
+967: A
+968: .I delegatee
+969: is a nonprivileged user who will be granted the permissions needed
+970: to manage some subhierarchy under that parent cgroup,
+971: known as the
+972: .IR "delegated subtree" .
+973: .P
+974: To perform delegation,
+975: the delegater makes certain directories and files writable by the delegatee,
+976: typically by changing the ownership of the objects to be the user ID
+977: of the delegatee.
+--- original lines 1155-1202 ---
+1155: .SS Cgroup delegation containment rules
+1156: Some delegation
+1157: .I containment rules
+1158: ensure that the delegatee can move processes between cgroups within the
+1159: delegated subtree,
+1160: but can't move processes from outside the delegated subtree into
+1161: the subtree or vice versa.
+1162: A nonprivileged process (i.e., the delegatee) can write the PID of
+1163: a "target" process into a
+1164: .I cgroup.procs
+1165: file only if all of the following are true:
+1166: .IP \[bu] 3
+1167: The writer has write permission on the
+1168: .I cgroup.procs
+1169: file in the destination cgroup.
+1170: .IP \[bu]
+1171: The writer has write permission on the
+1172: .I cgroup.procs
+1173: file in the nearest common ancestor of the source and destination cgroups.
+1174: Note that in some cases,
+1175: the nearest common ancestor may be the source or destination cgroup itself.
+1176: This requirement is not enforced for cgroups v1 hierarchies,
+1177: with the consequence that containment in v1 is less strict than in v2.
+1178: (For example, in cgroups v1 the user that owns two distinct
+1179: delegated subhierarchies can move a process between the hierarchies.)
+1180: .IP \[bu]
+1181: If the cgroup v2 filesystem was mounted with the
+1182: .I nsdelegate
+1183: option, the writer must be able to see the source and destination cgroups
+1184: from its cgroup namespace.
+1185: .IP \[bu]
+1186: In cgroups v1:
+1187: the effective UID of the writer (i.e., the delegatee) matches the
+1188: real user ID or the saved set-user-ID of the target process.
+1189: Before Linux 4.11,
+1190: .\" commit 576dd464505fc53d501bb94569db76f220104d28
+1191: this requirement also applied in cgroups v2
+1192: (This was a historical requirement inherited from cgroups v1
+1193: that was later deemed unnecessary,
+1194: since the other rules suffice for containment in cgroups v2.)
+1195: .P
+1196: .IR Note :
+1197: one consequence of these delegation containment rules is that the
+1198: unprivileged delegatee can't place the first process into
+1199: the delegated subtree;
+1200: instead, the delegater must place the first process
+1201: (a process owned by the delegatee) into the delegated subtree.
+1202: .\"
+--- original lines 1689-1697 ---
+1689: .SH NOTES
+1690: A child process created via
+1691: .BR fork (2)
+1692: inherits its parent's cgroup memberships.
+1693: A process's cgroup memberships are preserved across
+1694: .BR execve (2).
+1695: .P
+1696: The
+1697: .BR clone3 (2)
+===== Linux man-pages 6.19, clone.2; local package 6.19-1 =====
+--- original lines 1-6 ---
+1: '\" t
+2: .\" Copyright 1992, Drew Eckhardt <drew@cs.colorado.edu>
+3: .\" Copyright 2001-2019, Michael Kerrisk <mtk.manpages@gmail.com>
+4: .\" Copyright, the authors of the Linux man-pages project
+5: .\"
+6: .\" SPDX-License-Identifier: GPL-1.0-or-later
+--- original lines 516-566 ---
+516: .BR CLONE_INTO_CGROUP " (since Linux 5.7)"
+517: .\" commit ef2c41cf38a7559bbf91af42d5b6a4429db8fc68
+518: By default, a child process is placed in the same version 2
+519: cgroup as its parent.
+520: The
+521: .B CLONE_INTO_CGROUP
+522: flag allows the child process to be created in a different version 2 cgroup.
+523: (Note that
+524: .B CLONE_INTO_CGROUP
+525: has effect only for version 2 cgroups.)
+526: .IP
+527: In order to place the child process in a different cgroup,
+528: the caller specifies
+529: .B CLONE_INTO_CGROUP
+530: in
+531: .I cl_args.flags
+532: and passes a file descriptor that refers to a version 2 cgroup in the
+533: .I cl_args.cgroup
+534: field.
+535: (This file descriptor can be obtained by opening a cgroup v2 directory
+536: using either the
+537: .B O_RDONLY
+538: or the
+539: .B O_PATH
+540: flag.)
+541: Note that all of the usual restrictions (described in
+542: .BR cgroups (7))
+543: on placing a process into a version 2 cgroup apply.
+544: .IP
+545: Among the possible use cases for
+546: .B CLONE_INTO_CGROUP
+547: are the following:
+548: .RS
+549: .IP \[bu] 3
+550: Spawning a process into a cgroup different from the parent's cgroup
+551: makes it possible for a service manager to directly spawn new
+552: services into dedicated cgroups.
+553: This eliminates the accounting
+554: jitter that would be caused if the child process was first created in the
+555: same cgroup as the parent and then
+556: moved into the target cgroup.
+557: Furthermore, spawning the child process directly into a target cgroup
+558: is significantly cheaper than moving the child process into
+559: the target cgroup after it has been created.
+560: .IP \[bu]
+561: The
+562: .B CLONE_INTO_CGROUP
+563: flag also allows the creation of
+564: frozen child processes by spawning them into a frozen cgroup.
+565: (See
+566: .BR cgroups (7)
+===== Linux man-pages 6.19, ptrace.2; local package 6.19-1 =====
+--- original lines 1-6 ---
+1: .\" Copyright 1999, ike Coleman <mkc@acm.org>
+2: .\" Copyright 2011, Denys Vlasenko <dvlasenk@redhat.com>
+3: .\" Copyright 2015-2016, Michael Kerrisk <mtk.manpages@gmail.com>
+4: .\" Copyright, the authors of the Linux man-pages project
+5: .\"
+6: .\" SPDX-License-Identifier: GPL-2.0-or-later
+--- original lines 446-463 ---
+446: .BR PTRACE_O_EXITKILL " (since Linux 3.8)"
+447: .\" commit 992fb6e170639b0849bace8e49bf31bd37c4123
+448: Send a
+449: .B SIGKILL
+450: signal to the tracee if the tracer exits.
+451: This option is useful for ptrace jailers that
+452: want to ensure that tracees can never escape the tracer's control.
+453: .TP
+454: .BR PTRACE_O_TRACECLONE " (since Linux 2.5.46)"
+455: Stop the tracee at the next
+456: .BR clone (2)
+457: and automatically start tracing the newly cloned process,
+458: which will start with a
+459: .BR SIGSTOP ,
+460: or
+461: .B PTRACE_EVENT_STOP
+462: if
+463: .B PTRACE_SEIZE
+--- original lines 541-555 ---
+541: .BR PTRACE_O_TRACEFORK " (since Linux 2.5.46)"
+542: Stop the tracee at the next
+543: .BR fork (2)
+544: and automatically start tracing the newly forked process,
+545: which will start with a
+546: .BR SIGSTOP ,
+547: or
+548: .B PTRACE_EVENT_STOP
+549: if
+550: .B PTRACE_SEIZE
+551: was used.
+552: A
+553: .BR waitpid (2)
+554: by the tracer will return a
+555: .I status
+--- original lines 867-925 ---
+867: .BR PTRACE_SEIZE " (since Linux 3.4)"
+868: .\"
+869: .\" Noted by Dmitry Levin:
+870: .\"
+871: .\"     PTRACE_SEIZE was introduced by commit v3.1-rc1~308^2~28, but
+872: .\"     it had to be used along with a temporary flag PTRACE_SEIZE_DEVEL,
+873: .\"     which was removed later by commit v3.4-rc1~109^2~20.
+874: .\"
+875: .\"     That is, [before] v3.4 we had a test mode of PTRACE_SEIZE API,
+876: .\"     which was not compatible with the current PTRACE_SEIZE API introduced
+877: .\"     in Linux 3.4.
+878: .\"
+879: Attach to the process specified in
+880: .IR pid ,
+881: making it a tracee of the calling process.
+882: Unlike
+883: .BR PTRACE_ATTACH ,
+884: .B PTRACE_SEIZE
+885: does not stop the process.
+886: Group-stops are reported as
+887: .B PTRACE_EVENT_STOP
+888: and
+889: .I WSTOPSIG(status)
+890: returns the stop signal.
+891: Automatically attached children stop with
+892: .B PTRACE_EVENT_STOP
+893: and
+894: .I WSTOPSIG(status)
+895: returns
+896: .B SIGTRAP
+897: instead of having
+898: .B SIGSTOP
+899: signal delivered to them.
+900: .BR execve (2)
+901: does not deliver an extra
+902: .BR SIGTRAP .
+903: Only a
+904: .BR PTRACE_SEIZE d
+905: process can accept
+906: .B PTRACE_INTERRUPT
+907: and
+908: .B PTRACE_LISTEN
+909: commands.
+910: The "seized" behavior just described is inherited by
+911: children that are automatically attached using
+912: .BR PTRACE_O_TRACEFORK ,
+913: .BR PTRACE_O_TRACEVFORK ,
+914: and
+915: .BR PTRACE_O_TRACECLONE .
+916: .I addr
+917: must be zero.
+918: .I data
+919: contains a bit mask of ptrace options to activate immediately.
+920: .IP
+921: Permission to perform a
+922: .B PTRACE_SEIZE
+923: is governed by a ptrace access mode
+924: .B PTRACE_MODE_ATTACH_REALCREDS
+925: check;
+--- original lines 2520-2533 ---
+2520: Various parts of the kernel-user-space API (not just
+2521: .BR ptrace ()
+2522: operations), require so-called "ptrace access mode" checks,
+2523: whose outcome determines whether an operation is permitted
+2524: (or, in a few cases, causes a "read" operation to return sanitized data).
+2525: These checks are performed in cases where one process can
+2526: inspect sensitive information about,
+2527: or in some cases modify the state of, another process.
+2528: The checks are based on factors such as the credentials and capabilities
+2529: of the two processes,
+2530: whether or not the "target" process is dumpable,
+2531: and the results of checks performed by any enabled Linux Security Module
+2532: (LSM)\[em]for example, SELinux, Yama, or Smack\[em]and by the commoncap LSM
+2533: (which is always invoked).
+===== Linux man-pages 6.19, kill.2; local package 6.19-1 =====
+--- original lines 1-6 ---
+1: .\" Copyright 1992, Drew Eckhardt <drew@cs.colorado.edu>
+2: .\" Copyright, the authors of the Linux man-pages project
+3: .\"
+4: .\" SPDX-License-Identifier: Linux-man-pages-copyleft
+5: .\"
+6: .TH kill 2 2026-06-05 "Linux man-pages 6.19"
+--- original lines 31-108 ---
+31: system call
+32: can be used to send any signal to any process group or process.
+33: .P
+34: If
+35: .I pid
+36: is positive,
+37: then signal
+38: .I sig
+39: is sent to
+40: the process with the ID specified by
+41: .IR pid .
+42: .P
+43: If
+44: .I pid
+45: equals 0,
+46: then
+47: .I sig
+48: is sent to
+49: every process in
+50: the process group of the calling process.
+51: .P
+52: If
+53: .I pid
+54: equals \-1,
+55: then
+56: .I sig
+57: is sent to
+58: every process for which
+59: the calling process has permission to send signals,
+60: except for process 1
+61: .RI ( init ),
+62: but see below.
+63: .P
+64: If
+65: .I pid
+66: is less than \-1,
+67: then
+68: .I sig
+69: is sent to
+70: every process in
+71: the process group whose ID is
+72: .IR \-pid .
+73: .P
+74: If
+75: .I sig
+76: is 0,
+77: then no signal is sent,
+78: but existence and permission checks are still performed;
+79: this can be used to
+80: check for the existence of
+81: a process ID or process group ID that the caller is permitted to signal.
+82: .P
+83: For a process to have permission to send a signal,
+84: it must either be privileged (under Linux: have the
+85: .B CAP_KILL
+86: capability in the user namespace of the target process),
+87: or the real or effective user ID of the sending process must equal
+88: the real or saved set-user-ID of the target process.
+89: In the case of
+90: .BR SIGCONT ,
+91: it suffices when the sending and receiving
+92: processes belong to the same session.
+93: (Historically,
+94: the rules were different;
+95: see HISTORY.)
+96: .SH RETURN VALUE
+97: On success, zero is returned.
+98: If signals were sent to a process group,
+99: success means that at least one signal was delivered.
+100: On error, \-1 is returned, and
+101: .I errno
+102: is set to indicate the error.
+103: .SH ERRORS
+104: .TP
+105: .B EINVAL
+106: An invalid signal was specified.
+107: .TP
+108: .B EPERM
+===== Linux man-pages 6.19, proc_pid_stat.5; local package 6.19-1 =====
+--- original lines 1-6 ---
+1: .\" Copyright 1994-1995, Daniel Quinlan <Daniel.Quinlan@linux.org>
+2: .\" Copyright 2002-2017, Michael Kerrisk <mtk.manpages@gmail.com>
+3: .\" Copyright, the authors of the Linux man-pages project
+4: .\"
+5: .\" SPDX-License-Identifier: GPL-3.0-or-later
+6: .\"
+--- original lines 227-233 ---
+227: .RI (22)\~ starttime \~%llu
+228: The time the process started after system boot.
+229: Before Linux 2.6, this value was expressed in jiffies.
+230: Since Linux 2.6, the value is expressed in clock ticks (divide by
+231: .IR sysconf(_SC_CLK_TCK) ).
+232: .IP
+233: The format for this field was %lu before Linux 2.6.
+===== tmux 3.8 tmux.1; commit 7f2a35ad3321f9ba57a1062ca73b1f3ff26aca53 =====
+--- original lines 125-135 ---
+125: .It Fl D
+126: Do not start the
+127: .Nm
+128: server as a daemon.
+129: This also turns the
+130: .Ic exit\-empty
+131: option off.
+132: With
+133: .Fl D ,
+134: .Ar command
+135: may not be specified.
+===== tmux 3.8 tmux.c; commit 7f2a35ad3321f9ba57a1062ca73b1f3ff26aca53 =====
+--- original lines 433-435 ---
+433: 		case 'D':
+434: 			flags |= CLIENT_NOFORK;
+435: 			break;
+--- original lines 491-494 ---
+491: 	if (shell_command != NULL && argc != 0)
+492: 		usage(1);
+493: 	if ((flags & CLIENT_NOFORK) && argc != 0)
+494: 		usage(1);
+===== tmux 3.8 client.c; commit 7f2a35ad3321f9ba57a1062ca73b1f3ff26aca53 =====
+--- original lines 248-254 ---
+248: 	if (shell_command != NULL) {
+249: 		msg = MSG_SHELL;
+250: 		flags |= CLIENT_STARTSERVER;
+251: 	} else if (argc == 0) {
+252: 		msg = MSG_COMMAND;
+253: 		flags |= CLIENT_STARTSERVER;
+254: 	} else {
+--- original lines 282-289 ---
+282: 	/* Initialize the client socket and start the server. */
+283: #ifdef HAVE_SYSTEMD
+284: 	if (systemd_activated()) {
+285: 		/* socket-based activation, do not even try to be a client. */
+286: 		fd = server_start(client_proc, flags, base, 0, NULL);
+287: 	} else
+288: #endif
+289: 	fd = client_connect(base, socket_path, client_flags);
+===== tmux 3.8 server.c; commit 7f2a35ad3321f9ba57a1062ca73b1f3ff26aca53 =====
+--- original lines 189-194 ---
+189: 	if (~flags & CLIENT_NOFORK) {
+190: 		if (proc_fork_and_daemon(&fd) != 0) {
+191: 			sigprocmask(SIG_SETMASK, &oldset, NULL);
+192: 			return (fd);
+193: 		}
+194: 	}
+--- original lines 230-233 ---
+230: 	if (~flags & CLIENT_NOFORK)
+231: 		c = server_client_create(fd);
+232: 	else
+233: 		options_set_number(global_options, "exit-empty", 0);

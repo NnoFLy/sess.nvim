@@ -1,0 +1,132 @@
+{
+  "harness": "expected-counterexamples-observed",
+  "runs": 1,
+  "probe_sha256": "9050b2bd0499f36944fcb0889c8d66e2e4bf27b198e584405b59aaef03267282",
+  "evidence_role": "Corrected-version writer run; reviewer recheck pending, not an independent rerun",
+  "results": [
+    {
+      "case": "D1-root-exit-detached-descendant",
+      "status": "fail",
+      "observed": {
+        "root_exit_witnessed": true,
+        "reparented": true,
+        "different_pgrp_and_session": true,
+        "descendant_survives_window_removal": true,
+        "unrelated_sentinel_survives": true
+      }
+    },
+    {
+      "case": "C1-inherited-cgroup-not-workload-boundary",
+      "status": "fail",
+      "observed": {
+        "root_descendant_and_other_workload_share_cgroup": true
+      },
+      "scope": "No cgroup writes, enumeration, freeze or kill attempted"
+    },
+    {
+      "case": "E1-respawn-before-hook",
+      "status": "fail",
+      "observed": {
+        "old_stamp_in_respawn_queue": true,
+        "changed_stamp_next_call": true,
+        "new_root_survives": true
+      }
+    },
+    {
+      "case": "P1-pidfd-individual-lifetime",
+      "status": "pass",
+      "observed": {
+        "old_root_exit_witnessed": true,
+        "replacement_and_unrelated_survive": true
+      },
+      "scope": "No actual PID reuse forced; not complete tmux identity"
+    },
+    {
+      "case": "Q1-helper-wait-allows-native-arrival",
+      "status": "fail",
+      "observed": {
+        "other_client_created_workload_while_helper_waited": true
+      }
+    },
+    {
+      "case": "X1-effect-before-helper-crash",
+      "status": "pass",
+      "observed": {
+        "effect_witnessed_by_test_oracle": true,
+        "helper_died_without_ack": true,
+        "unrelated_and_replacement_survive": true
+      },
+      "scope": "No production pending-effect persistence or retry protocol tested"
+    }
+  ],
+  "cleanup": {
+    "foreground_server_exit_verified": true,
+    "watchdog_exit_status": 0,
+    "tracked_fixture_handles_closed": true,
+    "all_direct_clients_reaped": true,
+    "no_pending_births": true,
+    "private_directory_removed_after_known_exits": true
+  },
+  "cleanup_fault_checks": {
+    "suite": "cleanup-faults-only",
+    "runs": 1,
+    "results": [
+      {
+        "case": "F1-setup-after-session",
+        "status": "pass",
+        "observed": {
+          "setup_error_surfaced": true,
+          "enter_invoked_cleanup": true
+        },
+        "cleanup": {
+          "foreground_server_exit_verified": true,
+          "watchdog_exit_status": 0,
+          "tracked_fixture_handles_closed": true,
+          "all_direct_clients_reaped": true,
+          "no_pending_births": true,
+          "private_directory_removed_after_known_exits": true
+        }
+      },
+      {
+        "case": "F2-first-client-drain-error",
+        "status": "pass",
+        "observed": {
+          "injected_error_surfaced": true,
+          "same_client_wait_still_attempted": true,
+          "second_client_and_server_cleanup_continued": true
+        },
+        "cleanup": {
+          "foreground_server_exit_verified": true,
+          "watchdog_exit_status": 0,
+          "tracked_fixture_handles_closed": true,
+          "all_direct_clients_reaped": true,
+          "no_pending_births": true,
+          "private_directory_removed_after_known_exits": true
+        }
+      }
+    ],
+    "scope": "Two writer-run exceptional paths, not all crash/timeout schedules"
+  },
+  "historical_run_metadata": [
+    {
+      "role": "Pre-correction writer run inspected by independent reviewer; do not add to current counts",
+      "probe_sha256": "638b88d05931b21dc39ba7de60e3fbd4e175c12e33f7d9c30c456c2d7d4cdb36",
+      "original_observed_json_sha256": "b1b513ff8bf2a905a6008005f16cd6f8ae2bbbe449f6db4e77fed4f425ffcadb",
+      "runs": 1,
+      "six_counterexample_results_match_current": true,
+      "narrow_passes": 2,
+      "failed_safety_properties": 4,
+      "original_cleanup_string": "owned pidfds exited; private server stopped",
+      "limit": "Normal-path observation only; no failure-safe cleanup evidence"
+    },
+    {
+      "role": "Intermediate correction before SIGCHLD precondition/watchdog-ready handshake; do not add to current counts",
+      "probe_sha256": "ba8911c2f1735bb317bf7eeb030e698a889b90b4632809aee6a0687c18504e48",
+      "counterexample_runs": 1,
+      "cleanup_control_runs": 1,
+      "both_command_exit_statuses": [0, 0],
+      "six_counterexample_results_match_current": true,
+      "two_cleanup_control_results_match_current": true
+    }
+  ]
+}

@@ -1,0 +1,367 @@
+{
+  "retrieved_utc": "2026-10-27T02:05:08.145919+00:00",
+  "primary_man_release": "https://www.kernel.org/pub/linux/docs/man-pages/man-pages-6.19.tar.xz",
+  "local_man_package": "man-pages 6.19-1; upstream archive not downloaded/byte-compared",
+  "man_sources": [
+    {
+      "file": "pidfd_open.2",
+      "uncompressed_sha256": "312c362b87bf81b78489a7457e167307b5276e8c798ce6f0b00ef827609b8dbd",
+      "excerpt_lines": [
+        [
+          1,
+          6
+        ],
+        [
+          25,
+          36
+        ],
+        [
+          100,
+          181
+        ]
+      ]
+    },
+    {
+      "file": "pidfd_send_signal.2",
+      "uncompressed_sha256": "f8295eb6a61479de743000c1715eacbb37f49e22017a6af3c7c98a45134f13a7",
+      "excerpt_lines": [
+        [
+          1,
+          6
+        ],
+        [
+          126,
+          138
+        ],
+        [
+          161,
+          170
+        ],
+        [
+          202,
+          221
+        ]
+      ]
+    },
+    {
+      "file": "cgroups.7",
+      "uncompressed_sha256": "a60e0737a84f60f79a21124138174b4287e5f29747a583e1428ecdd6f98c8dbc",
+      "excerpt_lines": [
+        [
+          1,
+          6
+        ],
+        [
+          394,
+          406
+        ],
+        [
+          811,
+          875
+        ],
+        [
+          952,
+          977
+        ],
+        [
+          1155,
+          1202
+        ],
+        [
+          1689,
+          1697
+        ]
+      ]
+    },
+    {
+      "file": "clone.2",
+      "uncompressed_sha256": "fb37b02bfb908fc40bdbc8cdbbe814f3976dcc295f937c696f514c4809d0052f",
+      "excerpt_lines": [
+        [
+          1,
+          6
+        ],
+        [
+          516,
+          566
+        ]
+      ]
+    },
+    {
+      "file": "ptrace.2",
+      "uncompressed_sha256": "8ea6eed29d35a0dd1916c1604088eb9faa73b9cf91ae187da3723483495478dd",
+      "excerpt_lines": [
+        [
+          1,
+          6
+        ],
+        [
+          446,
+          463
+        ],
+        [
+          541,
+          555
+        ],
+        [
+          867,
+          925
+        ],
+        [
+          2520,
+          2533
+        ]
+      ]
+    },
+    {
+      "file": "kill.2",
+      "uncompressed_sha256": "947214dacb4a4ef3592b8462470c49177007d39dcb5c4716390b776c7a91df62",
+      "excerpt_lines": [
+        [
+          1,
+          6
+        ],
+        [
+          31,
+          108
+        ]
+      ]
+    },
+    {
+      "file": "proc_pid_stat.5",
+      "uncompressed_sha256": "4683c9946995ac1555cf337a5fbde03dd48fded8c52fd84d4a4d7bfe8d5a2ed0",
+      "excerpt_lines": [
+        [
+          1,
+          6
+        ],
+        [
+          227,
+          233
+        ]
+      ]
+    }
+  ],
+  "tmux_sources": [
+    {
+      "url": "https://github.com/tmux/tmux/blob/7f2a35ad3321f9ba57a1062ca73b1f3ff26aca53/client.c",
+      "sha256": "0cf4add999d8c22f0e88efd9dfb82fc81bb98fc91783800037b915fd2627cded"
+    },
+    {
+      "url": "https://github.com/tmux/tmux/blob/7f2a35ad3321f9ba57a1062ca73b1f3ff26aca53/cmd-if-shell.c",
+      "sha256": "35bc98d4e7ccebe39c016d92d30031c1ba6d1b33abee63086d14eeaf09b7363a"
+    },
+    {
+      "url": "https://github.com/tmux/tmux/blob/7f2a35ad3321f9ba57a1062ca73b1f3ff26aca53/cmd-queue.c",
+      "sha256": "62401b340d456d10f4f19f885517efcbd5634e1f1b8513d4d1d415491156c98e"
+    },
+    {
+      "url": "https://github.com/tmux/tmux/blob/7f2a35ad3321f9ba57a1062ca73b1f3ff26aca53/cmd-run-shell.c",
+      "sha256": "4da482684d4533367484c5cbc210b615a8c89477530d2ebd47e35136f3f551b7"
+    },
+    {
+      "url": "https://github.com/tmux/tmux/blob/7f2a35ad3321f9ba57a1062ca73b1f3ff26aca53/compat/systemd.c",
+      "sha256": "4e440560023016e099e62439a032b3c98179acb8fba22e03120911a247d2eaeb"
+    },
+    {
+      "url": "https://github.com/tmux/tmux/blob/7f2a35ad3321f9ba57a1062ca73b1f3ff26aca53/configure.ac",
+      "sha256": "ebec57570c8852b6af980c918373f282be99cf652bb336ac0e2ab03dd405feff"
+    },
+    {
+      "url": "https://github.com/tmux/tmux/blob/7f2a35ad3321f9ba57a1062ca73b1f3ff26aca53/server-fn.c",
+      "sha256": "369a883c0c7c597b1abf5a1013e3c95d942471d765296dad45a67389d8b3f506"
+    },
+    {
+      "url": "https://github.com/tmux/tmux/blob/7f2a35ad3321f9ba57a1062ca73b1f3ff26aca53/server.c",
+      "sha256": "f7e3ffdd6d1a2ab13d2671e9414c7c5026139a71f7cc5e57432cde25ff7716b6"
+    },
+    {
+      "url": "https://github.com/tmux/tmux/blob/7f2a35ad3321f9ba57a1062ca73b1f3ff26aca53/spawn.c",
+      "sha256": "57e7a4d00c6f9131a907806a076bc500049ea5bd3efbb9e7341cc158238be758"
+    },
+    {
+      "url": "https://github.com/tmux/tmux/blob/7f2a35ad3321f9ba57a1062ca73b1f3ff26aca53/tmux.1",
+      "sha256": "d6611e8b8f3f0a1ad6a15eef62035a083f16c1d6778ee39baf63229e6af2476f"
+    },
+    {
+      "url": "https://github.com/tmux/tmux/blob/7f2a35ad3321f9ba57a1062ca73b1f3ff26aca53/tmux.c",
+      "sha256": "48ceafce6752ec154b8c8ad6e5034dd7799e42d0f1179f97ac7d7ab874fb6aee"
+    },
+    {
+      "url": "https://github.com/tmux/tmux/blob/7f2a35ad3321f9ba57a1062ca73b1f3ff26aca53/window.c",
+      "sha256": "8653d3e1838f5eb2e5e11a4ca2af6695925b7e2a08f0cefab7881e2741317d25"
+    }
+  ],
+  "contracts": [
+    {
+      "issue": 24,
+      "title": "Persistent terminals across Neovim and mobile clients",
+      "snapshot_sha256": "cdcb1edf44ebbc51f6e9275c2cfbe2fb663976c19257abfb92b5014cda1a6dd6",
+      "comments": []
+    },
+    {
+      "issue": 28,
+      "title": "Choose the single persistent terminal backend and support boundary",
+      "snapshot_sha256": "57add52b52a0b0ee8f2de92200260cdcbaf094f8231e888a296d81612b5dcb19",
+      "comments": [
+        {
+          "url": "https://github.com/NnoFLy/sess.nvim/issues/28#issuecomment-6377864668",
+          "createdAt": "2026-10-24T00:59:49Z",
+          "body_sha256": "488e31ef6b918115693b3daaf899d5a09b4033a63a8142d5e8014f578f7a4991"
+        },
+        {
+          "url": "https://github.com/NnoFLy/sess.nvim/issues/28#issuecomment-6387371441",
+          "createdAt": "2026-10-24T17:34:16Z",
+          "body_sha256": "4134d8964a56176dd7be572312122ae71aaf8b67170cc94f12fe44d859032eac"
+        }
+      ]
+    },
+    {
+      "issue": 32,
+      "title": "Define persistent terminal acceptance criteria and validation evidence",
+      "snapshot_sha256": "12fc1b61675a8dd441f69a3cd91e1581672f302fddb944e036e731f79848fdc7",
+      "comments": [
+        {
+          "url": "https://github.com/NnoFLy/sess.nvim/issues/32#issuecomment-6391425573",
+          "createdAt": "2026-10-25T00:29:10Z",
+          "body_sha256": "321cb5c9d4b5994d2c161f845a1f4c0dfeae4ccbf6cc9a6de3d1fd3a0c4e395f"
+        },
+        {
+          "url": "https://github.com/NnoFLy/sess.nvim/issues/32#issuecomment-6428454590",
+          "createdAt": "2026-10-26T22:06:24Z",
+          "body_sha256": "42282ca7201625779076806a316a915fefac4859b7b9d740280883ba10296cf8"
+        }
+      ]
+    },
+    {
+      "issue": 33,
+      "title": "Qualify native tmux identity and attachment safety",
+      "snapshot_sha256": "671ca7002d42b44b74d62c9b4ae56fd0c933c26f4d139c246e1c83a5c1a95816",
+      "comments": [
+        {
+          "url": "https://github.com/NnoFLy/sess.nvim/issues/33#issuecomment-6391731226",
+          "createdAt": "2026-10-25T01:04:19Z",
+          "body_sha256": "be3f7d356f14b2a2a066d5e370ba2b822f7ab76143e7e6b768e77aa2ae440041"
+        },
+        {
+          "url": "https://github.com/NnoFLy/sess.nvim/issues/33#issuecomment-6428420867",
+          "createdAt": "2026-10-26T22:04:26Z",
+          "body_sha256": "e5d2e7a8d3ffe82ff5824e0f43bb6d8c09c5c5150e99488b6095554ae88df407"
+        }
+      ]
+    },
+    {
+      "issue": 37,
+      "title": "Resolve native workload identity and termination blockers",
+      "snapshot_sha256": "d1ddb781cc4bef9b5a3adba90ecb836ecfbcd6fa6270080ddd4918f416b091b1",
+      "comments": [
+        {
+          "url": "https://github.com/NnoFLy/sess.nvim/issues/37#issuecomment-6392147738",
+          "createdAt": "2026-10-25T01:51:26Z",
+          "body_sha256": "0d41f7400ab92f4ba0d9f0b58619c93a62a0dc09fca9afbebe050fd22dfaad09"
+        }
+      ]
+    },
+    {
+      "issue": 38,
+      "title": "Choose a fail-closed persistent workload launch boundary",
+      "snapshot_sha256": "720b7e7ae26aea219b68729438fcbb3452000b5ed3f1c7803c77fc7fff4caae0",
+      "comments": [
+        {
+          "url": "https://github.com/NnoFLy/sess.nvim/issues/38#issuecomment-6392212221",
+          "createdAt": "2026-10-25T01:59:22Z",
+          "body_sha256": "48fef3575e55bba30fe80ec9bc292cedfb90e7fe2ea30f4fcd03da87cbd99eef"
+        },
+        {
+          "url": "https://github.com/NnoFLy/sess.nvim/issues/38#issuecomment-6392238418",
+          "createdAt": "2026-10-25T02:02:26Z",
+          "body_sha256": "b624ec80c1993b25714c16cf04a4e39266f079b7267b380b344fb442378ff28b"
+        },
+        {
+          "url": "https://github.com/NnoFLy/sess.nvim/issues/38#issuecomment-6392526978",
+          "createdAt": "2026-10-25T02:36:22Z",
+          "body_sha256": "c43ed42383d2aa9c46a1f983caf74f3e7078f42f40f1c8235097eb4f8aff5f4a"
+        },
+        {
+          "url": "https://github.com/NnoFLy/sess.nvim/issues/38#issuecomment-6392559549",
+          "createdAt": "2026-10-25T02:40:09Z",
+          "body_sha256": "aca12b133ff4d5b2ebb9583d96053bf53954fb0cb0baf0cb1eb859447a76b7a8"
+        },
+        {
+          "url": "https://github.com/NnoFLy/sess.nvim/issues/38#issuecomment-6392612253",
+          "createdAt": "2026-10-25T02:46:27Z",
+          "body_sha256": "0c0783f7ddd28c3c8e9f67b3e23780cf5fbb97509bd22a8c8372f22447056075"
+        },
+        {
+          "url": "https://github.com/NnoFLy/sess.nvim/issues/38#issuecomment-6392622988",
+          "createdAt": "2026-10-25T02:47:44Z",
+          "body_sha256": "7f7d38214ec742c4d3d9f33323b801deef92443d3c9da908c71a68a55240fdc3"
+        },
+        {
+          "url": "https://github.com/NnoFLy/sess.nvim/issues/38#issuecomment-6428320009",
+          "createdAt": "2026-10-26T21:58:37Z",
+          "body_sha256": "63b1ba3dd393f8a72b1c8ec46fb6dc8bbe7f8f53fa539f33477962fa08900ab1"
+        },
+        {
+          "url": "https://github.com/NnoFLy/sess.nvim/issues/38#issuecomment-6428416860",
+          "createdAt": "2026-10-26T22:04:11Z",
+          "body_sha256": "79848cf2632b2a5a87e31839686bb4731fdc14ddb2aaf8be55a57374f403dc47"
+        }
+      ]
+    },
+    {
+      "issue": 39,
+      "title": "Investigate short-lived helper feasibility for exact workload termination",
+      "snapshot_sha256": "d7260fc98427f3c81bf756e10f0dfb42cfa9bb88ac80ea61404aafef31ec6617",
+      "comments": [
+        {
+          "url": "https://github.com/NnoFLy/sess.nvim/issues/39#issuecomment-6428421513",
+          "createdAt": "2026-10-26T22:04:28Z",
+          "body_sha256": "bd30893cc9306fb9df17e925f7b6be621530c73f4ca0ece244f456c57811b223"
+        },
+        {
+          "url": "https://github.com/NnoFLy/sess.nvim/issues/39#issuecomment-6431838666",
+          "createdAt": "2026-10-27T01:57:50Z",
+          "body_sha256": "3d9aa5dc76488a555c86fc34b928dedcfe94581fb99f8ca7394c465a2a5177d7"
+        }
+      ]
+    }
+  ],
+  "cleanup_correction": {
+    "collected_utc": "2026-10-27T02:32:17.039377+00:00",
+    "review_path": "docs/research/exact-workload-helper-independent-review.md",
+    "review_sha256_unchanged": "77299f0a80384ce7160cbd4a09a49de9f804884845e61204031b3562ceff7a46",
+    "review_status": "Prior revision independently reviewed without runtime rerun; this correction and writer reruns await reviewer recheck",
+    "new_source_inputs": ["client.c", "tmux.c"],
+    "existing_source_inputs_reinspected": ["tmux.1", "server.c", "local man-pages pidfd_open.2 and proc_pid_stat.5"],
+    "tmux_excerpt_lines": {
+      "tmux.1": [[125, 135]],
+      "tmux.c": [[433, 435], [491, 494]],
+      "client.c": [[248, 254], [282, 289]],
+      "server.c": [[189, 194], [230, 233]]
+    },
+    "additional_title_lookup": {
+      "url": "https://github.com/NnoFLy/sess.nvim/issues/34",
+      "title": "Qualify tmux isolation and multi-client behavior",
+      "scope": "Title/URL only, not a new full-body contract review"
+    },
+    "linux_source_lane": "Not retried; cgroup.kill still not source-qualified"
+  },
+  "source_fetch_failures": [
+    {
+      "url": "https://api.github.com/repos/torvalds/linux/contents/Documentation/admin-guide/cgroup-v2.rst?ref=adc218676eef25575469234709c2d87185ca223a",
+      "status": "HTTP 429",
+      "diagnostic": "gitmon refuses to schedule us: too-many-processes; initial request plus one approved diagnostic retry"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/torvalds/linux/adc218676eef25575469234709c2d87185ca223a/Documentation/admin-guide/cgroup-v2.rst",
+      "status": "HTTP 429 Too Many Requests",
+      "diagnostic": "one supervisor-approved fallback; source lane then stopped"
+    },
+    {
+      "url": "https://api.github.com/repos/tmux/tmux/contents/systemd.c?ref=7f2a35ad3321f9ba57a1062ca73b1f3ff26aca53",
+      "status": "HTTP 404 Not Found",
+      "diagnostic": "Lookup stopped/reported; supervisor approved bounded pinned-tree discovery; correct compat/systemd.c and configure.ac subsequently retrieved."
+    }
+  ]
+}

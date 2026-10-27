@@ -1,0 +1,56 @@
+{
+  "collected_utc": "2026-10-27T02:32:17.039377+00:00",
+  "kernel": "Linux 7.2.10-arch1-1 x86_64 GNU/Linux",
+  "packages": [
+    "tmux 3.8-1",
+    "python 3.14.8-1",
+    "glibc 2.44+r50+g1848099f063e-1",
+    "man-pages 6.19-1"
+  ],
+  "tmux_realpath": "/usr/bin/tmux",
+  "tmux_sha256": "f4d25f698c2eae25b742ad8a6d4cb8c7c5309a6ebf586e4e541fc9655de10660",
+  "python_version": "Python 3.14.8",
+  "storage": "private mode-0700 mkdtemp in /tmp; tmpfs; no durability claim",
+  "inherited_heavy_admission": {
+    "HEAVY_HELD": "unset",
+    "HEAVY_SLOT": "unset"
+  },
+  "probe_sha256": "9050b2bd0499f36944fcb0889c8d66e2e4bf27b198e584405b59aaef03267282",
+  "probe_command": "python3 docs/research/probes/exact-workload-helper/probe.py",
+  "runs": 1,
+  "exit_status": 0,
+  "cleanup_fault_command": "python3 docs/research/probes/exact-workload-helper/probe.py --cleanup-faults",
+  "cleanup_fault_runs": 1,
+  "cleanup_fault_exit_status": 0,
+  "current_counts": {
+    "counterexample_subsets": 6,
+    "narrow_passes": 2,
+    "failed_safety_properties": 4,
+    "separate_cleanup_control_cases": 2,
+    "cleanup_control_passes": 2
+  },
+  "server_supervision": "Direct foreground tmux -D without command, acquired unreaped-child pidfd, verified endpoint PID, ready-confirmed inherited-pidfd synthetic watchdog with 45-second server-exit wait; not a product supervisor",
+  "cleanup_limitations": "Only setup-after-session and first-client-drain exceptions injected. Watchdog expiry, harness hard-kill including pre-watchdog installation, signal/server-wait failure, retained-evidence ambiguity branch and other setup/teardown schedules untested. Normal exit is not exceptional-path evidence.",
+  "review_status": "Prior revision independently reviewed without runtime rerun; corrected code and writer reruns await reviewer recheck",
+  "scope": "native tmux/kernel synthetic probes; no Neovim tuple, cgroup kill, ptrace, freeze or full gate qualification",
+  "historical_runs": [
+    {
+      "role": "Pre-correction version reviewed independently; no runtime rerun by reviewer",
+      "collected_utc": "2026-10-27T02:11:19.575598+00:00",
+      "probe_sha256": "638b88d05931b21dc39ba7de60e3fbd4e175c12e33f7d9c30c456c2d7d4cdb36",
+      "original_runtime_json_sha256": "7c36f254c12a69fbbf1d4d36eadb1e70f5548b23230485fa35ce996cac1bd486",
+      "counterexample_runs": 1,
+      "counterexample_exit_status": 0,
+      "limit": "Successful normal-path cleanup did not establish exceptional-path safety"
+    },
+    {
+      "role": "Intermediate correction before explicit SIGCHLD precondition/watchdog-ready handshake",
+      "probe_sha256": "ba8911c2f1735bb317bf7eeb030e698a889b90b4632809aee6a0687c18504e48",
+      "counterexample_runs": 1,
+      "cleanup_control_runs": 1,
+      "both_command_exit_statuses": [0, 0]
+    }
+  ],
+  "earlier_run": "A still earlier pre-I/O-bound version using selected /proc read_bytes then truncation produced identical observations. Current and disclosed historical counts are never combined; root runs/counts describe only the corrected-version run."
+
+}
