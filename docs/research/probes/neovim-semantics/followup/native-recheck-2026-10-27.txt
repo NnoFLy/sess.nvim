@@ -1,0 +1,83 @@
+{"nvim": ["NVIM v0.12.6", "Build type: RelWithDebInfo", "LuaJIT 2.1.1791988261"], "nvim_sha256": "d308f10e416aec90c8794a7a10174777b8262076fc9d5aa3db043fd86e260531", "tmux": "tmux 3.8"}
+{"expected": ["-c", "'<root>/current file.txt' \"<root>/current file.txt\""], "got": ["-c", "'<root>/current file.txt' \"<root>/current file.txt\""], "id": "EX-percent-quotes", "status": "pass"}
+{"expected": ["-c", "<root>/alternate.txt"], "got": ["-c", "<root>/alternate.txt"], "id": "EX-alternate", "status": "pass"}
+{"expected": ["-c", "path path/to/file.lua"], "got": ["-c", "path path/to/file.lua"], "id": "EX-cword-cfile", "status": "pass"}
+{"expected": ["-c", "current file txt <root> file.lua"], "got": ["-c", "current file txt <root> file.lua"], "id": "EX-modifiers", "status": "pass"}
+{"expected": ["-c", "other file.txt"], "got": ["-c", "other file.txt"], "id": "EX-substitution-modifier", "status": "pass"}
+{"expected": ["-c", "'<root>/current file.txt'"], "got": ["-c", "'<root>/current file.txt'"], "id": "EX-shell-escape", "status": "pass"}
+{"expected": ["-c", "% # <cword> \\%"], "got": ["-c", "% # <cword> \\%"], "id": "EX-backslash", "status": "pass"}
+{"expected": ["-c", "echo 'x y' \"z\" \\\\foo | cat"], "got": ["-c", "echo 'x y' \"z\" \\\\foo | cat"], "id": "EX-pipe-quote-backslash", "status": "pass"}
+{"expected": ["-c", "$PROBE_VALUE ~ *.txt"], "got": ["-c", "$PROBE_VALUE ~ *.txt"], "id": "EX-env-tilde-left-to-shell", "status": "pass"}
+{"expected": [false, true, true, true], "got": [false, true, true, true], "id": "EX-missing-percent-no-view", "status": "pass"}
+{"expected": [false, true, true, true], "got": [false, true, true, true], "id": "EX-missing-cword-no-view", "status": "pass"}
+{"expected": [false, true, true], "got": [false, true, true], "id": "EX-invalid-expansion-#999999", "status": "pass"}
+{"expected": [false, true, true], "got": [false, true, true], "id": "EX-invalid-expansion-<cfile>", "status": "pass"}
+{"expected": ["-c", "% # <cword>"], "got": ["-c", "% # <cword>"], "id": "JOB-string-no-Ex", "status": "pass"}
+{"expected": ["-c", ""], "got": ["-c", ""], "id": "JOB-empty-string", "status": "pass"}
+{"expected": [], "got": [], "id": "EX-omitted-shell", "status": "pass"}
+{"expected": [], "got": [], "id": "EX-whitespace-shell", "status": "pass"}
+{"expected": ["shell arg", "-c", "flag arg", "text"], "got": ["shell arg", "-c", "flag arg", "text"], "id": "SHELL-double-quote-tokenization-shellquote-ignored", "status": "pass"}
+{"expected": ["shell arg"], "got": ["shell arg"], "id": "SHELL-omitted-no-command-flags", "status": "pass"}
+{"expected": ["-c", "'two", "words'", "text"], "got": ["-c", "'two", "words'", "text"], "id": "SHELL-single-quotes-not-grouping", "status": "pass"}
+{"expected": ["-c", "\"a & b\""], "got": ["-c", "\"a & b\""], "id": "SHELL-xquote", "status": "pass"}
+{"expected": ["-c", "(a ^& b)"], "got": ["-c", "(a ^& b)"], "id": "SHELL-xescape-parentheses", "status": "pass"}
+{"expected": ["-c", "a & b"], "got": ["-c", "a & b"], "id": "SHELL-xescape-inactive", "status": "pass"}
+{"expected": [false, true], "got": [false, true], "id": "SHELL-invalid-executable-no-child", "status": "pass"}
+{"expected": ["", "%", "#", "$PROBE_VALUE", "~", "a b", "'\"\\", "|", ";", "#{pane_id}", "#(false)", "\n"], "got": ["", "%", "#", "$PROBE_VALUE", "~", "a b", "'\"\\", "|", ";", "#{pane_id}", "#(false)", "\n"], "id": "JOB-direct-argv-literals", "status": "pass"}
+{"expected": ["<root>/current", "file.txt"], "got": ["<root>/current", "file.txt"], "id": "EX-unescaped-filename-negative-control", "status": "pass"}
+{"expected": ["<root>/current file.txt"], "got": ["<root>/current file.txt"], "id": "EX-escaped-filename-real-shell", "status": "pass"}
+{"expected": "synthetic-pipe", "got": "synthetic-pipe", "id": "EX-real-pipeline", "status": "pass"}
+{"expected": ["synthetic-shell-expansion", "<root>/home"], "got": ["synthetic-shell-expansion", "<root>/home"], "id": "EX-real-shell-variable-tilde", "status": "pass"}
+{"expected": "<root>/global", "got": "<root>/global", "id": "CWD-cd", "status": "pass"}
+{"expected": "<root>/tab", "got": "<root>/tab", "id": "CWD-tcd", "status": "pass"}
+{"expected": "<root>/window", "got": "<root>/window", "id": "CWD-lcd", "status": "pass"}
+{"expected": "<root>/explicit", "got": "<root>/explicit", "id": "CWD-explicit", "status": "pass"}
+{"expected": [false, true], "got": [false, true], "id": "CWD-invalid-no-terminal", "status": "pass"}
+{"expected": ["override", "keep", "synthetic-outer", "%999", "xterm-256color", true], "got": ["override", "keep", "synthetic-outer", "%999", "xterm-256color", true], "id": "ENV-invoker-override-routing-not-stripped", "status": "pass"}
+{"expected": [{"PROBE_VALUE": "only", "TERM": "xterm-256color"}, true], "got": [{"PROBE_VALUE": "only", "TERM": "xterm-256color"}, true], "id": "ENV-clear-env", "status": "pass"}
+{"expected": [[true, true, true], "synthetic-input"], "got": [[true, true, true], "synthetic-input"], "id": "PTY-child-tty-and-channel-input", "status": "pass"}
+{"expected": [true, true, true], "got": [true, true, true], "id": "PTY-real-interactive-shell", "status": "pass"}
+{"expected": [0], "got": [0], "id": "PTY-empty-command-exits", "status": "pass"}
+{"expected": [1, 1, "nt"], "got": [1, 1, "nt"], "id": "VIEW-native-current-normal-mode", "status": "pass"}
+{"expected": false, "got": false, "id": "VIEW-vertical-splitright-false", "status": "pass"}
+{"expected": true, "got": true, "id": "VIEW-vertical-splitright-true", "status": "pass"}
+{"expected": false, "got": false, "id": "VIEW-horizontal-splitbelow-false", "status": "pass"}
+{"expected": true, "got": true, "id": "VIEW-horizontal-splitbelow-true", "status": "pass"}
+{"expected": 2, "got": 2, "id": "VIEW-explicit-tab", "status": "pass"}
+{"expected": "t", "got": "t", "id": "PTY-real-editor-terminal-input-mode", "status": "pass"}
+{"expected": [true, true, true], "got": [true, true, true], "id": "PTY-real-editor-keyboard-reaches-shell", "status": "pass"}
+{"expected": 0, "got": 0, "id": "PTY-real-editor-clean-exit", "status": "pass"}
+{"expected": true, "got": true, "id": "TMUX-raw-semicolon-negative-control", "status": "pass"}
+{"expected": ["", "%", "#", "$PROBE_VALUE", "~", "a b", "'\"\\", "|", ";", "ends;", "slash\\;", "#{pane_id}", "#(false)", "\n"], "got": ["", "%", "#", "$PROBE_VALUE", "~", "a b", "'\"\\", "|", ";", "ends;", "slash\\;", "#{pane_id}", "#(false)", "\n"], "id": "TMUX-direct-argv-literals-parser-escaped", "status": "pass"}
+{"expected": [true, true, true], "got": [true, true, true], "id": "TMUX-real-workload-PTY", "status": "pass"}
+{"expected": ["shell arg", "-c", "flag arg", "text"], "got": ["shell arg", "-c", "flag arg", "text"], "id": "TMUX-native-observed-shell-vector", "status": "pass"}
+{"expected": "old-server", "got": "old-server", "id": "TMUX-old-server-environment-negative-control", "status": "pass"}
+{"expected": [true, true], "got": [true, true], "id": "TMUX-inner-routing-replaces-outer", "status": "pass"}
+{"expected": "<root>/explicit", "got": "<root>/explicit", "id": "TMUX-cwd-explicit", "status": "pass"}
+{"expected": "per-workload", "got": "per-workload", "id": "TMUX-per-workload-override", "status": "pass"}
+{"expected": "old-server", "got": "old-server", "id": "TMUX-other-workload-env-unchanged", "status": "pass"}
+{"expected": "<root>/home", "got": "<root>/home", "id": "TMUX-invalid-cwd-falls-back-negative-control", "status": "pass"}
+{"expected": "<root>/home", "got": "<root>/home", "id": "TMUX-cwd-format-expansion-negative-control", "status": "pass"}
+{"expected": "<root>/#{session_name}", "got": "<root>/#{session_name}", "id": "TMUX-cwd-format-escaped-literal", "status": "pass"}
+{"expected": true, "got": true, "id": "CWD-race-preflight-valid", "status": "pass"}
+{"expected": "<root>/home", "got": "<root>/home", "id": "TMUX-cwd-disappears-after-preflight-negative-control", "status": "pass"}
+{"expected": ["1:125", false], "got": ["1:125", false], "id": "TMUX-env-C-fails-closed-at-child-boundary", "status": "pass"}
+{"expected": [0, 0, [true, true, true], "synthetic-tmux-input"], "got": [0, 0, [true, true, true], "synthetic-tmux-input"], "id": "TMUX-PTY-startup-input", "status": "pass"}
+{"expected": 0, "got": 0, "id": "TMUX-env-i-launch", "status": "pass"}
+{"expected": {"PROBE_KEEP": "explicit-only", "PROBE_VALUE": "fresh-invoker"}, "got": {"PROBE_KEEP": "explicit-only", "PROBE_VALUE": "fresh-invoker"}, "id": "TMUX-env-i-fresh-not-server", "status": "pass"}
+{"expected": [], "got": [], "id": "TMUX-env-i-single-executable-argv", "status": "pass"}
+{"expected": true, "got": true, "id": "TMUX-env-i-retains-assignment-negative-control", "status": "pass"}
+{"expected": ["old-server-only", "fresh-override", []], "got": ["old-server-only", "fresh-override", []], "id": "TMUX-e-bare-key-does-not-unset-negative-control", "status": "pass"}
+{"expected": {"expected_command_present": true, "inspection_succeeded": true, "synthetic_value_absent": true}, "got": {"expected_command_present": true, "inspection_succeeded": true, "synthetic_value_absent": true}, "id": "TMUX-e-not-in-workload-command", "status": "pass"}
+{"expected": [null, "fresh-with-unset", []], "got": [null, "fresh-with-unset", []], "id": "TMUX-e-plus-env-u-fresh-values-and-removal", "status": "pass"}
+{"expected": {"expected_command_present": true, "inspection_succeeded": true, "synthetic_value_absent": true}, "got": {"expected_command_present": true, "inspection_succeeded": true, "synthetic_value_absent": true}, "id": "TMUX-e-plus-env-u-no-assignment-in-command", "status": "pass"}
+{"expected": {"expected_command_present": false, "inspection_succeeded": false, "synthetic_value_absent": null}, "got": {"expected_command_present": false, "inspection_succeeded": false, "synthetic_value_absent": null}, "id": "TMUX-command-inspection-rejects-failed-negative-control", "status": "pass"}
+{"expected": {"expected_command_present": false, "inspection_succeeded": true, "synthetic_value_absent": null}, "got": {"expected_command_present": false, "inspection_succeeded": true, "synthetic_value_absent": null}, "id": "TMUX-command-inspection-rejects-empty-negative-control", "status": "pass"}
+{"expected": {"expected_command_present": false, "inspection_succeeded": true, "synthetic_value_absent": null}, "got": {"expected_command_present": false, "inspection_succeeded": true, "synthetic_value_absent": null}, "id": "TMUX-command-inspection-rejects-wrong-command-negative-control", "status": "pass"}
+{"expected": {"expected_command_present": true, "inspection_succeeded": true, "synthetic_value_absent": false}, "got": {"expected_command_present": true, "inspection_succeeded": true, "synthetic_value_absent": false}, "id": "TMUX-command-inspection-rejects-retained-value-negative-control", "status": "pass"}
+{"expected": [0, {"PROBE_VALUE": "second-invoker"}], "got": [0, {"PROBE_VALUE": "second-invoker"}], "id": "TMUX-env-i-second-invocation-fresh", "status": "pass"}
+{"expected": "synthetic-pipe", "got": "synthetic-pipe", "id": "TMUX-real-shell-pipeline", "status": "pass"}
+{"expected": "|0", "got": "|0", "id": "TMUX-empty-command-is-no-process-negative-control", "status": "pass"}
+{"expected": 0, "got": 0, "id": "TMUX-one-argument-accepted-not-direct", "status": "pass"}
+{"expected": ["1", false], "got": ["1", false], "id": "TMUX-one-argument-shell-parse-negative-control", "status": "pass"}
+SUMMARY pass=81 fail=0

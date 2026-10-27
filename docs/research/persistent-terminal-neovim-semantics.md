@@ -1,7 +1,10 @@
 # Stable Neovim terminal command semantics — research evidence
 
 **Question:** [#36](https://github.com/NnoFLy/sess.nvim/issues/36).
-**Collected:** 2026-10-25 UTC. **Branch:** `research/persistent-terminal-neovim-semantics`.
+**Original collection:** 2026-10-25 UTC. **Branch:** `research/persistent-terminal-neovim-semantics`.
+**New collection:** [2026-10-27 C/private-socket follow-up](#cprivate-socket-follow-up-2026-10-27-utc)
+under [Choose a fail-closed persistent workload launch boundary].
+Original evidence below is retained unchanged.
 **Base:** `eee53cca450a1e1a64e47ebe43f507fe85669dd0`.
 **Original evidence commit:** [`c3ea886fdd6422c62b0847ed2082393d7efdc347`](https://github.com/NnoFLy/sess.nvim/tree/c3ea886fdd6422c62b0847ed2082393d7efdc347/docs/research).
 That commit contains the original probes and ledger. The inspection-oracle correction
@@ -330,3 +333,277 @@ real environment values, UI screen contents or full retained start commands.
 | `TMUX-empty-command-is-no-process-negative-control` | **pass** | `"&#124;0"` |
 | `TMUX-one-argument-accepted-not-direct` | **pass** | `0` |
 | `TMUX-one-argument-shell-parse-negative-control` | **pass** | `["1", false]` |
+
+## C/private-socket follow-up (2026-10-27 UTC)
+
+**Disposition: bounded positive/negative D/P evidence only.**
+[Qualify supported Neovim terminal command semantics] and
+[Persistent terminals across Neovim and mobile clients] remain **OPEN**;
+implementation handoff is **BLOCKED** pending the remaining gates. There is no
+Sess command/API, production helper, lifecycle, snapshot, storage or UI change.
+No commit, push, tracker mutation, PR or integration was performed by this worker.
+
+Authority: [Choose a fail-closed persistent workload launch boundary]
+selects C/system-libc, inherited editor/broker descriptors and a private
+pathname Unix stream socket, five-second setup deadline, native editor-side
+executable lookup/libc fallback, explicit environment policies and **accepted for
+launch, intended execution unverified**. It supersedes the historical comparison's
+unselected child-PATH/refuse-ENOEXEC alternatives. The GNU env candidates above
+remain historical controls, **not adopted dependencies**. Apply
+[Define persistent terminal acceptance criteria and validation evidence] with the
+expressly revised startup and final-cwd observation oracles in
+[Choose a fail-closed persistent workload launch boundary].
+
+Worktree owner: research worker exclusively; cwd
+`/home/nnofly/code/personal/sess.nvim/.worktrees/neovim-semantics-followup`, branch
+`research/persistent-terminal-neovim-semantics-followup`, baseline
+`c69d831c39b18db9f96608ff948665a46659d541`. The only proposed publication target is
+an evidence-only fast-forward of `research/persistent-terminal-neovim-semantics`,
+subject to parent authority and fresh independent review, never production integration.
+The final ledger records source-file hashes; the parent owns the immutable commit.
+
+### Fresh provenance and primary sources (D)
+
+Official `gh api repos/neovim/neovim/releases/latest` was re-resolved during this
+collection: **v0.12.6**, published `2026-10-09T15:43:25Z`, target commit
+`779c36969e31080503be2dfccbcc3f999e289606`. The annotated tag again resolves through
+`022946c802832f938398dfae34b3f277ca9509d4` to that commit (API verification valid).
+Only already-installed `/usr/bin/nvim` was used, not either PATH development build.
+
+| Component | Fresh observation |
+| --- | --- |
+| Stable Neovim | `/usr/bin/nvim`, v0.12.6, RelWithDebInfo, LuaJIT 2.1.1791988261; Arch `neovim 0.12.6-1`; SHA-256 `d308f10e416aec90c8794a7a10174777b8262076fc9d5aa3db043fd86e260531`. `pacman -Qkk neovim`: 2311 files, 0 altered. |
+| tmux | `/usr/bin/tmux`, 3.8; Arch `3.8-1`; SHA-256 `f4d25f698c2eae25b742ad8a6d4cb8c7c5309a6ebf586e4e541fc9655de10660`. Tag `72c20dc22c24c34b8e39506f524c9c88da2f48aa` again resolves to `7f2a35ad3321f9ba57a1062ca73b1f3ff26aca53`; package integrity 10 files, 0 altered. |
+| Compiler | `/usr/bin/cc`, GCC `16.2.1 20260810`; Arch `gcc 16.2.1+r23+gd564253eb6c8-1`; SHA-256 `8aac907d6fbf40394b424b5fa4a2ad1aa291dac7d3a0315c5b415c1f5ace1287`. Small explicit C11 source builds only, no installation/automatic product build. |
+| libc/loader | glibc 2.44, Arch `glibc 2.44+r50+g1848099f063e-1`; upstream package-referenced commit resolves to `1848099f063e99d4ffecbd7667766d54862398b9`. `/usr/lib/libc.so.6` SHA-256 `02c8c3d06180beee9c7d0392aa85736c7d19f274a81e7f8f0b3d9e28e0641524`; `/usr/lib/ld-linux-x86-64.so.2` SHA-256 `f5e11cc62f8f2c24dff532982559f4303dba3b17e7450551372a88c8e7ea8757`. Package check: 1637 files, 0 altered; normal backup-file warnings for `/etc/locale.gen`, not a reproducible-build/source-equivalence proof. |
+| Host/storage | Linux `7.2.10-arch1-1`, x86_64. Disposable `/tmp` is tmpfs `rw,nosuid,nodev,size=7839896k,nr_inodes=1048576,inode64,huge=advise,usrquota`. No crash/power-loss durability claim. |
+| Harness | `/usr/bin/python3` orchestration only; the same already-installed Python and `/bin/sh` identified in the original provenance. Neither an interpreter nor GNU env is inserted into the selected helper bootstrap. |
+
+Primary sources fetched/read at pinned revisions:
+
+- Native Neovim [`tv_to_argv`](https://github.com/neovim/neovim/blob/779c36969e31080503be2dfccbcc3f999e289606/src/nvim/eval.c#L4640-L4703)
+  resolves direct argv[0] with `os_can_exe` **before** child creation. The
+  [`fs.c` implementation](https://github.com/neovim/neovim/blob/779c36969e31080503be2dfccbcc3f999e289606/src/nvim/os/fs.c#L232-L286)
+  checks executable regular files/access and returns an absolute path;
+  [`pty_proc_unix.c`](https://github.com/neovim/neovim/blob/779c36969e31080503be2dfccbcc3f999e289606/src/nvim/os/pty_proc_unix.c#L314-L329)
+  changes to child cwd, installs env and calls `execvp` on that selection.
+- Stable [`luvref.txt`](https://github.com/neovim/neovim/blob/779c36969e31080503be2dfccbcc3f999e289606/runtime/doc/luvref.txt#L1405-L1446)
+  documents explicit spawn env and numeric stdio inheritance; `uv.fs_open` accepts
+  integer flags. Runtime, not documentation alone, establishes the tested FD3 map.
+- tmux [`tmux.c`](https://github.com/tmux/tmux/blob/7f2a35ad3321f9ba57a1062ca73b1f3ff26aca53/tmux.c#L418-L453)
+  captures startup environment; `-f` replaces the default config-file list.
+  [`spawn.c`](https://github.com/tmux/tmux/blob/7f2a35ad3321f9ba57a1062ca73b1f3ff26aca53/spawn.c#L407-L578)
+  constructs pane env, closes extra FDs and pushes env **before exec**; multi-arg
+  bootstrap avoids its single-argument shell path.
+  [`environ.c`](https://github.com/tmux/tmux/blob/7f2a35ad3321f9ba57a1062ca73b1f3ff26aca53/environ.c#L210-L290)
+  replaces `environ` with the constructed environment and supplies inner routing/TERM.
+- Qualified libc [`execvp.c`](https://github.com/bminor/glibc/blob/1848099f063e99d4ffecbd7667766d54862398b9/posix/execvp.c)
+  delegates to `__execvpe`; [`execvpe.c`](https://github.com/bminor/glibc/blob/1848099f063e99d4ffecbd7667766d54862398b9/posix/execvpe.c#L38-L99)
+  executes slash-containing selections without PATH search and on ENOEXEC invokes
+  `/bin/sh` with **separate script/argument entries**, not reconstructed command text.
+  This is not a universal Linux/libc assertion.
+- Maintainer Linux manual snapshot `091fbf1fef4808f0ccfe0ff8c333aedf833b8782`:
+  [`open(2)` O_PATH](https://github.com/mkerrisk/man-pages/blob/091fbf1fef4808f0ccfe0ff8c333aedf833b8782/man2/open.2#L610-L715),
+  [`unix(7)` SO_PEERCRED/SCM_RIGHTS/truncation](https://github.com/mkerrisk/man-pages/blob/091fbf1fef4808f0ccfe0ff8c333aedf833b8782/man7/unix.7).
+  These longstanding documented primitives are paired with current runtime probes,
+  not treated as current-kernel source or a complete protocol qualification.
+
+A guessed old Neovim filename (`pty_process_unix.c`) and glibc tag lookup returned
+404; the actual `pty_proc_unix.c` and installed package's full libc commit were
+resolved and fetched instead. One libc fetch had a TLS handshake timeout and was
+successfully repeated. No tool installation, permission weakening or substitute
+runtime was used.
+
+### Probe code, experiment and outcomes (P subset)
+
+All new source/outcomes live in
+[`probes/neovim-semantics/followup/`](probes/neovim-semantics/followup/):
+
+- `run.py`: clean synthetic process environments, private temp namespaces, explicit
+  compiler invocation, finite orchestration and sanitized case ledger. Its small
+  env-policy constructor is a **fixture**, not a Sess API adapter.
+- `fd_fixture.c`, `capture.lua`: system headers yield
+  `O_PATH|O_DIRECTORY|O_CLOEXEC = 2686976`; stable luv's `O_PATH` constant is absent.
+  Runtime numeric `fs_open` and stdio FD3 inheritance work after parent close.
+  Native jobstart, both PTY and pipe, selects an invoking-PATH no-shebang script
+  despite different child PATH/cwd and preserves a literal metacharacter argument.
+- `handoff.lua`, `socket_fixture.c`: stable Neovim captures cwd/selection before
+  placement, passes a **live FD3** to its C child plus a request through an inherited
+  pipe, closes its local FD, then changes placement. The C broker transfers the
+  directory object with SCM_RIGHTS to the independent tmux-side C launcher. The
+  launcher verifies the final named object/access and uses `fchdir` on the pin.
+- `loader_fixture.c`: disposable shared-library **test observer**, not a bootstrap
+  dependency. An LD_PRELOAD constructor marks whether it ran in launcher startup
+  or the intended synthetic workload. It is never injected into Neovim, tmux,
+  unrelated processes or the real environment.
+- `outcomes-2026-10-27.jsonl`: **143 pass, 0 fail** final focused oracles, including
+  deliberate rejection/unknown controls. Includes expected/observed status per ID,
+  tool hashes, header-derived flags and probe-source hashes (not payload digests).
+- `native-recheck-2026-10-27.txt`: fresh **81 pass, 0 fail** rerun of the unchanged
+  original native/UI-PTY/tmux probe, separate from accepted historical evidence.
+- `suite-2026-10-27.txt`: normalized names/statuses for all **100** stable plugin
+  cases: **98 pass, 2 fail**, unchanged `tabline.lua:246` and
+  `tabline_decorate.lua:52` (`runner.lua:55`, expected 110, got 42). Change-scope
+  attribution, not a root-cause diagnosis; no unrelated repair.
+
+| Case family | Status / exact bounded observation |
+| --- | --- |
+| `FD-*`, `NATIVE-HANDOFF-*` | **pass:** invoking-directory pin survives parent FD close and crosses both actual process seams; regular-file, missing, multiple and truncated ancillary FDs reject. Received FD requires CLOEXEC. Intended workload observes no extra FDs in the tested range 3–1023. |
+| `BOOTSTRAP-*` | **pass (controlled server):** an intentionally contaminated pane runs the LD_PRELOAD constructor **before launcher main**; clearing in main would be too late. In the clean path, invoking Lua has synthetic LD_PRELOAD/secret values but explicitly replaced spawn env prevents them reaching broker/tmux-client loaders. Private server starts clean, update-environment is empty, payload arrives only after launcher startup via socket. Positive completed handoff plus marker absence and final `WORKLOAD`-only loader marker distinguish successful sanitization from failure to run the observer/workload. No wrapper, static bootstrap or new runtime dependency is used. |
+| `FRAME-*`, `TRANSPORT-reject-*` | **pass:** explicit modes 0/1/2, empty/newline/non-UTF-8 byte fields, exact 8 MiB complete frame and 65,536 combined transmitted entries (argv-heavy and env-heavy); over-cap count/header, wrong version, NUL, malformed/duplicate/reserved env, unresolved executable, empty argv, truncation/trailing bytes reject. A one-byte feed exercises partial reads. Framing is a disposable length-prefixed format, **not a chosen product protocol**; mode labels do not reimplement shell tokenization. |
+| `SOCKET-*`, `EXEC-*` | **pass:** literal empty/semicolon/tmux-format/newline/quotes/non-UTF-8 argv crosses C socket, bypassing tmux payload parsing; actual PTY input follows a workload-ready barrier. Absolute selection plus qualified glibc preserves ENOEXEC `/bin/sh` fallback. Attributable ENOENT/EACCES/E2BIG errors return even though tmux creation returned zero. Exact-8-MiB socket transfer reaches a known kernel E2BIG rejection; accepting a product frame does not promise kernel exec acceptance. |
+| `ENV-*`, workload env observation | **pass (fixture policy):** omitted inherits, false removes, empty is present-empty; invalid types/names/NUL and TMUX/TMUX_PANE explicit override/unset reject. Actual launcher supplies inner pane routing, defaults TERM to inner `tmux-256color`, leaves captured PWD/NVIM alone; fixture constructor permits TERM/PWD/NVIM empty/override/unset. Full API behavior and arbitrary workload/shell changes remain I/R. |
+| `SECRET-*` and per-launch positive command inspections | **pass (synthetic subset):** the `pane_start_command` predicate checks successful inspection, expected launcher/endpoint markers and request-only sentinel absence; it does **not** check loader-path absence. Global/session environment predicates each check successful inspection, their own expected synthetic marker, sentinel absence and loader-path absence. Loader-path absence is established only for those environment stores. Bootstrap argv has fixed helper/mode plus non-secret routing only. A stale safe-server sentinel is not merged into final workload env. Debug logs were not configured; absence of a log file is **not** a general logging/core/audit proof. |
+| `CWD-final-*` | **pass:** three deterministic pin → broker-bound → mutate → launcher schedules each for rename, directory replacement and search-permission removal (**nine** adversarial schedules). Final checks reject, never enter a replacement or use tmux HOME fallback. Ordinary symlink to the pinned object and execute-only directory succeed. Fixture maps these final-cwd failures to ESTALE; it is not a final diagnostic taxonomy. |
+| `ENDPOINT-*`, `PEER-*` | **pass (subset):** exact owned 0700 immediate parent and 0600 socket checks, overlength refusal, existing file/symlink preservation; wrong broker PID and wrong operation refuse/produce unknown rather than retry. Same-UID peer checking is real SO_PEERCRED, but broker does **not** bind its incoming launcher to independently verified native pane/workload identity. |
+| `STARTUP-*` | **pass (fixture routing only):** complete validated fixture startup followed by channel close yields `ACCEPTED_EXEC_UNVERIFIED`, **not exec proof**. Complete error frames yield errors; EOF before complete startup, wrong operation and stalled handoff yield unknown. Stalled setup is bounded at the five-second default (wall-time oracle 4.5–7 seconds). tmux zero and EOF alone never constitute successful startup. |
+
+All C builds use `-std=c11 -Wall -Wextra -Werror -O2`, plus `-shared -fPIC`
+for the **test-only** loader observer. No third-party C library is linked. Each
+run disables core dumps for its own process tree, creates `/tmp/snf-*` mode 0700,
+private HOME/XDG/socket directories, uses an explicit private tmux socket/config,
+and sends only synthetic requests from memory over pipes/sockets. No payload
+file, command recipe, payload digest, real environment dump, pane capture or
+persistent workload recipe is written. Sanitized result files are not request
+files. tmux cleanup targets only this self-created server; no normal server,
+phone, descendant-termination mechanism or production Sess operation is used.
+
+### Reproduction and validation
+
+At a **new collection**, re-resolve official latest stable first; the runner
+intentionally refuses installed `/usr/bin/nvim` if it no longer matches v0.12.6.
+Do not install or qualify a PATH development build to make these commands pass.
+The verified queue is owned mode 0700 on local btrfs. No HEAVY_HELD/HEAVY_SLOT
+was inherited at admission. Commands actually run (queue busy waits never bypassed):
+
+```sh
+heavy --dir /home/nnofly/.local/state/heavy --pool checks --slots 1 \
+  --no-skip-ci --timeout 30 --on-timeout fail -- \
+  /usr/bin/python3 docs/research/probes/neovim-semantics/followup/run.py \
+  > docs/research/probes/neovim-semantics/followup/outcomes-2026-10-27.jsonl
+
+heavy --dir /home/nnofly/.local/state/heavy --pool checks --slots 1 \
+  --no-skip-ci --timeout 30 --on-timeout fail -- \
+  /usr/bin/python3 docs/research/probes/neovim-semantics/run.py
+
+heavy --dir /home/nnofly/.local/state/heavy --pool checks --slots 1 \
+  --no-skip-ci --timeout 30 --on-timeout fail -- /usr/bin/python3 -c \
+  'import subprocess; r=subprocess.run(["/bin/sh", "tests/run.sh"], env={"PATH":"/usr/bin:/bin", "NVIM_BIN":"/usr/bin/nvim", "LANG":"C.UTF-8", "TERM":"xterm-256color"}); raise SystemExit(r.returncode)'
+
+stylua --check docs/research/probes/neovim-semantics/followup/capture.lua \
+  docs/research/probes/neovim-semantics/followup/handoff.lua \
+  docs/research/probes/neovim-semantics/native.lua
+git diff --check
+```
+
+The two Lua fixtures were formatted with StyLua. Python AST parsing and the
+C warnings-as-errors builds pass. Final focused command exits 0; baseline probe
+exits 0; full stable suite exits **1**, as recorded above. Some suite diagnostics
+lack final newlines; counting only line-start `PASS` undercounts. The retained
+normalized ledger extracts all 100 runner `PASS/FAIL <source-name>.lua` records.
+
+Fresh independent **static review checkpoint:** no material transport defect has
+been confirmed at this checkpoint; this is not a final acceptance or runtime
+validation claim. The parent independently verified that all six probe-source
+hashes match the retained 143-case run ledger. The parent's attempted independent
+queued reproduction timed out at admission after 30 seconds (exit **75**), before
+any payload ran; **no independent runtime reproduction is claimed**. Worker
+results remain 143/143 focused oracles, 81/81 native recheck and 98/100 stable
+suite cases. These report-only corrections change neither probe sources nor
+retained outcomes, so their recorded source hashes remain unchanged.
+
+Development history is not hidden or counted as final repeated qualification:
+an initial Python parenthesis syntax error prevented a run; the first runnable
+version had **119 pass / 1 fail**, because the oracle incorrectly expected a
+**global-only** sentinel in session-local `show-environment`. It was corrected by
+installing/querying a separate non-secret session marker, preserving successful
+inspection/positive-target prerequisites. A subsequent intermediate run passed
+136/136; an expanded predecessor passed 143/143, then the final source (with
+positive parsed readiness barriers) passed **143/143 once**. One queue wait was
+terminated by the command tool's 120-second limit while another project's slot
+was occupied; no payload ran in that admission. A bounded queued invocation then
+acquired admission normally. The short initial FD-only build/probe was a
+lightweight check; all combined probes and suites used the queue.
+
+### Remaining gates and limitations — not successful qualifications
+
+Gate status is **OPEN**; implementation handoff is **BLOCKED**. These describe
+evidence readiness, not native GitHub dependency metadata.
+
+- **OPEN gate, BLOCKED handoff:**
+  [Qualify supported Neovim terminal command semantics] and
+  [Persistent terminals across Neovim and mobile clients] are not qualified by
+  these controlled primitive fixtures. They do not establish the authenticated,
+  identity-bound, durable sequence required by
+  [Choose a fail-closed persistent workload launch boundary].
+  Broker checks UID/operation and launcher checks broker PID, but exact
+  server-generation/owner/context/terminal/pane/workload binding, process-start
+  identity and authorization fencing are **not established**. Non-secret op/path
+  tokens are not credentials. Hostile same-UID/root code is outside the guarantee.
+- **OPEN evidence gate, BLOCKED handoff — startup/durability/retry integration:**
+  no durable intent, one-time authorization, effect publication, reconciliation
+  or enforced no-automatic-retry
+  mechanism is implemented/tested here. The fixture performs one operation and
+  has no retry path; this is **not evidence that future callers cannot retry**.
+  Its acceptance label cannot independently satisfy
+  [Choose a fail-closed persistent workload launch boundary] while those
+  prerequisites are missing. No application readiness/completion/liveness or
+  positive exec oracle is promised; observed synthetic workload markers establish
+  only those test cases.
+- **UNTESTED, broader bootstrap/isolation:** arbitrary raw config, later server
+  mutation/contamination, all loader/startup variables and host loader policy,
+  debug/error/core/host-audit sinks, every possible retained tmux store and secret
+  deletion/zeroization. The passed seam is clean pre-exec environment construction
+  on this controlled tuple, backed by the before-main LD_PRELOAD control; it is
+  not a claim that clearing C main or sanitizing an already-contaminated server is
+  safe. If the future protected server boundary cannot maintain these prerequisites,
+  report FAIL/BLOCKED and reopen a live decision, never substitute GNU env,
+  interpreter, static bootstrap, privilege or another dependency silently.
+- **UNTESTED, additional transport adversaries:** wrong UID (no privilege changes),
+  exact 107-byte positive socket boundary, FD/resource exhaustion, all EINTR/EPIPE
+  schedules, endpoint ancestor/mount replacement, prolonged backpressure, concurrent
+  peers, PID reuse and lost native-effect publication. The cap checks cover the
+  **transmitted** argv/env entries; accounting of injected routing/default entries
+  in a final product quota remains to be specified/qualified, not silently decided.
+- **UNTESTED, additional cwd/lookup semantics:** mutations after final check or
+  transient replacement/restoration may go undetected as
+  [Choose a fail-closed persistent workload launch boundary] explicitly allows;
+  no continuous pathname freeze. Full ancestor/mount/namespace schedules, every
+  missing/empty/relative PATH arrangement, executable-path replacement races and
+  every supported shell/startup-file behavior remain open. Flags came from this
+  build's headers; no hardcoded universal Linux luv constants or FFI ABI is adopted.
+- **UNTESTED, I/R:** actual Sess API/CLI adaptation and lifecycle/error propagation,
+  shared buffers/consent, attached/reconnected embedded-client behavior, two-client
+  sizing and native phone procedures, durable recovery and whole-workload
+  termination. Separate gates remain **OPEN**:
+  [Qualify native tmux identity and attachment safety],
+  [Qualify tmux isolation and multi-client behavior],
+  [Qualify crash-durable terminal recovery primitives] and
+  [Investigate short-lived helper feasibility for exact workload termination].
+  Older/newer Neovim/tmux, other libc/architecture and non-tmpfs crash durability
+  are unqualified.
+
+**Proposed tracker update (parent review/publication only):**
+“[Qualify supported Neovim terminal command semantics] follow-up adds 143 passing
+bounded C/private-socket case oracles plus a fresh 81-case stable native/PTY recheck.
+Official latest stable re-resolved to v0.12.6; before-loader
+clean-bootstrap/LD_PRELOAD controls and native FD/cwd/argv seams work on this
+controlled tuple. Retain all original partial/negative evidence. This is not a
+passed gate: exact native identity binding, durable authorization/publication,
+reconciliation/no-retry, broader isolation and I/R remain OPEN. Stable repository
+suite remains 98/100 on unchanged source/tests. Keep the
+[Qualify supported Neovim terminal command semantics] gate **OPEN** and
+[Persistent terminals across Neovim and mobile clients] handoff **BLOCKED**.
+Independent static review and parent verification of all six retained source
+hashes are recorded; independent queued reproduction timed out at admission
+without running a payload. Complete independent review before evidence-only
+publication; no independent runtime result is claimed.”
+
+[Qualify supported Neovim terminal command semantics]: https://github.com/NnoFLy/sess.nvim/issues/36
+[Persistent terminals across Neovim and mobile clients]: https://github.com/NnoFLy/sess.nvim/issues/24
+[Choose a fail-closed persistent workload launch boundary]: https://github.com/NnoFLy/sess.nvim/issues/38#issuecomment-6428416860
+[Define persistent terminal acceptance criteria and validation evidence]: https://github.com/NnoFLy/sess.nvim/issues/32#issuecomment-6391425573
+[Qualify native tmux identity and attachment safety]: https://github.com/NnoFLy/sess.nvim/issues/33
+[Qualify tmux isolation and multi-client behavior]: https://github.com/NnoFLy/sess.nvim/issues/34
+[Qualify crash-durable terminal recovery primitives]: https://github.com/NnoFLy/sess.nvim/issues/35
+[Investigate short-lived helper feasibility for exact workload termination]: https://github.com/NnoFLy/sess.nvim/issues/39

@@ -1,0 +1,146 @@
+{"collection": "2026-10-27", "nvim": ["NVIM v0.12.6", "Build type: RelWithDebInfo", "LuaJIT 2.1.1791988261"], "hashes": {"/usr/bin/nvim": "d308f10e416aec90c8794a7a10174777b8262076fc9d5aa3db043fd86e260531", "/usr/bin/tmux": "f4d25f698c2eae25b742ad8a6d4cb8c7c5309a6ebf586e4e541fc9655de10660", "/usr/bin/cc": "8aac907d6fbf40394b424b5fa4a2ad1aa291dac7d3a0315c5b415c1f5ace1287", "/usr/lib/libc.so.6": "02c8c3d06180beee9c7d0392aa85736c7d19f274a81e7f8f0b3d9e28e0641524", "/usr/lib/ld-linux-x86-64.so.2": "f5e11cc62f8f2c24dff532982559f4303dba3b17e7450551372a88c8e7ea8757"}}
+{"header_derived_open_flags": 2686976, "probe_source_sha256": {"capture.lua": "0bada289145f4e0abc6bc3b0c301e3b312838165a96bc9e9f44d944e8254a484", "fd_fixture.c": "d50d1e21576697297ffa71c6170a7f359abae470054fef9bfa8afbd1bcd1e282", "handoff.lua": "9a6a20bd4fea9683bfe0d41cbd44f1b64470e1957f7d6abaa9f213f64b19f4c0", "loader_fixture.c": "4b78b180410c16cd504e02293bf2838ed8557830472eaa2829af1af1202382b9", "run.py": "2475315030d3ca6e9185587b828155f47ae63bbaeb6129d5fc9da61fb6a2d907", "socket_fixture.c": "afd0841b5b6739153860ea294c2b2b9c1db828f59e43421257220ccea16f3507"}}
+{"id": "BUILD-C11-system-libc-only", "status": "pass", "expected": true, "got": true}
+{"expected": true, "status": "pass", "id": "FD-O_PATH-open", "got": true}
+{"expected": true, "status": "pass", "id": "FD-invoking-cwd-captured-before-placement", "got": true}
+{"expected": "PINNED\n", "status": "pass", "id": "FD-luv-numeric-stdio-3-reference-survives-parent-close", "got": "PINNED\n"}
+{"expected": 0, "status": "pass", "id": "FD-inherited-child-exit", "got": 0}
+{"expected": true, "status": "pass", "id": "BOOTSTRAP-native-clean-env-positive-child-no-loader", "got": true}
+{"expected": true, "status": "pass", "id": "LOOKUP-native-exepath-before-placement", "got": true}
+{"expected": true, "status": "pass", "id": "LOOKUP-selection-carried-after-placement", "got": true}
+{"expected": true, "status": "pass", "id": "LOOKUP-native-jobstart-created-false", "got": true}
+{"expected": true, "status": "pass", "id": "LOOKUP-native-ENOEXEC-invoking-selection-false", "got": true}
+{"expected": 0, "status": "pass", "id": "LOOKUP-native-ENOEXEC-exit-false", "got": 0}
+{"expected": true, "status": "pass", "id": "LOOKUP-native-jobstart-created-true", "got": true}
+{"expected": true, "status": "pass", "id": "LOOKUP-native-ENOEXEC-invoking-selection-true", "got": true}
+{"expected": 0, "status": "pass", "id": "LOOKUP-native-ENOEXEC-exit-true", "got": 0}
+{"expected": true, "status": "pass", "id": "FD-luv-O_PATH-constant-unavailable", "got": true}
+{"id": "FRAME-one-byte-partial-I-O", "status": "pass", "expected": [0, "VALID\n"], "got": [0, "VALID\n"]}
+{"id": "FRAME-literal-empty-newline-nonUTF8", "status": "pass", "expected": [0, "VALID"], "got": [0, "VALID"]}
+{"id": "FRAME-explicit-mode-0", "status": "pass", "expected": [0, "VALID"], "got": [0, "VALID"]}
+{"id": "FRAME-explicit-mode-1", "status": "pass", "expected": [0, "VALID"], "got": [0, "VALID"]}
+{"id": "FRAME-explicit-mode-2", "status": "pass", "expected": [0, "VALID"], "got": [0, "VALID"]}
+{"id": "FRAME-8MiB-exact", "status": "pass", "expected": [0, "VALID"], "got": [0, "VALID"]}
+{"id": "FRAME-over-8MiB-header", "status": "pass", "expected": [3, "REJECTED"], "got": [3, "REJECTED"]}
+{"id": "FRAME-65536-combined-entries", "status": "pass", "expected": [0, "VALID"], "got": [0, "VALID"]}
+{"id": "FRAME-65537-combined-rejected", "status": "pass", "expected": [3, "REJECTED"], "got": [3, "REJECTED"]}
+{"id": "FRAME-65536-combined-env-heavy", "status": "pass", "expected": [0, "VALID"], "got": [0, "VALID"]}
+{"id": "FRAME-reject-truncated", "status": "pass", "expected": [3, "REJECTED"], "got": [3, "REJECTED"]}
+{"id": "FRAME-reject-trailing", "status": "pass", "expected": [3, "REJECTED"], "got": [3, "REJECTED"]}
+{"id": "FRAME-reject-version", "status": "pass", "expected": [3, "REJECTED"], "got": [3, "REJECTED"]}
+{"id": "FRAME-reject-NUL-argv", "status": "pass", "expected": [3, "REJECTED"], "got": [3, "REJECTED"]}
+{"id": "FRAME-reject-env-empty-name", "status": "pass", "expected": [3, "REJECTED"], "got": [3, "REJECTED"]}
+{"id": "FRAME-reject-env-missing-equals", "status": "pass", "expected": [3, "REJECTED"], "got": [3, "REJECTED"]}
+{"id": "FRAME-reject-env-NUL", "status": "pass", "expected": [3, "REJECTED"], "got": [3, "REJECTED"]}
+{"id": "FRAME-reject-env-duplicate", "status": "pass", "expected": [3, "REJECTED"], "got": [3, "REJECTED"]}
+{"id": "FRAME-reject-env-reserved-TMUX", "status": "pass", "expected": [3, "REJECTED"], "got": [3, "REJECTED"]}
+{"id": "FRAME-reject-env-reserved-pane", "status": "pass", "expected": [3, "REJECTED"], "got": [3, "REJECTED"]}
+{"id": "FRAME-reject-empty-argv", "status": "pass", "expected": [3, "REJECTED"], "got": [3, "REJECTED"]}
+{"id": "FRAME-reject-unresolved-executable", "status": "pass", "expected": [3, "REJECTED"], "got": [3, "REJECTED"]}
+{"id": "ENV-fixture-false-unset-empty-and-inherit", "status": "pass", "expected": true, "got": true}
+{"id": "ENV-reserved-TMUX-false", "status": "pass", "expected": true, "got": true}
+{"id": "ENV-reserved-TMUX-empty", "status": "pass", "expected": true, "got": true}
+{"id": "ENV-reserved-TMUX-string", "status": "pass", "expected": true, "got": true}
+{"id": "ENV-reserved-TMUX_PANE-false", "status": "pass", "expected": true, "got": true}
+{"id": "ENV-reserved-TMUX_PANE-empty", "status": "pass", "expected": true, "got": true}
+{"id": "ENV-reserved-TMUX_PANE-string", "status": "pass", "expected": true, "got": true}
+{"id": "ENV-invalid-name-or-value-44", "status": "pass", "expected": true, "got": true}
+{"id": "ENV-invalid-name-or-value-45", "status": "pass", "expected": true, "got": true}
+{"id": "ENV-invalid-name-or-value-46", "status": "pass", "expected": true, "got": true}
+{"id": "ENV-invalid-name-or-value-47", "status": "pass", "expected": true, "got": true}
+{"id": "ENV-invalid-name-or-value-48", "status": "pass", "expected": true, "got": true}
+{"id": "ENV-invalid-name-or-value-49", "status": "pass", "expected": true, "got": true}
+{"id": "ENV-policy-TERM-unset", "status": "pass", "expected": true, "got": true}
+{"id": "ENV-policy-TERM-empty", "status": "pass", "expected": true, "got": true}
+{"id": "ENV-policy-TERM-override", "status": "pass", "expected": true, "got": true}
+{"id": "ENV-policy-PWD-unset", "status": "pass", "expected": true, "got": true}
+{"id": "ENV-policy-PWD-empty", "status": "pass", "expected": true, "got": true}
+{"id": "ENV-policy-PWD-override", "status": "pass", "expected": true, "got": true}
+{"id": "ENV-policy-NVIM-unset", "status": "pass", "expected": true, "got": true}
+{"id": "ENV-policy-NVIM-empty", "status": "pass", "expected": true, "got": true}
+{"id": "ENV-policy-NVIM-override", "status": "pass", "expected": true, "got": true}
+{"status": "pass", "got": true, "expected": true, "id": "NATIVE-HANDOFF-placement-changed-after-pin"}
+{"status": "pass", "got": true, "expected": true, "id": "NATIVE-HANDOFF-C-broker-SCM_RIGHTS-final-cwd-exchange"}
+{"status": "pass", "got": 0, "expected": 0, "id": "NATIVE-HANDOFF-tmux-zero-not-exec-proof"}
+{"status": "pass", "got": true, "expected": true, "id": "NATIVE-HANDOFF-before-loader-clean-positive-exchange"}
+{"id": "BOOTSTRAP-positive-LD_PRELOAD-before-main", "status": "pass", "expected": true, "got": true}
+{"id": "FD-reject-missing", "status": "pass", "expected": true, "got": true}
+{"id": "FD-reject-regular-file", "status": "pass", "expected": true, "got": true}
+{"id": "FD-reject-two-directories", "status": "pass", "expected": true, "got": true}
+{"id": "FD-reject-control-truncation", "status": "pass", "expected": true, "got": true}
+{"id": "TRANSPORT-reject-truncated-frame", "status": "pass", "expected": true, "got": true}
+{"id": "TRANSPORT-reject-trailing-frame", "status": "pass", "expected": true, "got": true}
+{"id": "TRANSPORT-reject-wrong-frame-operation", "status": "pass", "expected": true, "got": true}
+{"id": "ENDPOINT-refuse-existing-file", "status": "pass", "expected": [3, "REJECTED"], "got": [3, "REJECTED"]}
+{"id": "ENDPOINT-existing-data-not-deleted", "status": "pass", "expected": "owned-sentinel", "got": "owned-sentinel"}
+{"id": "ENDPOINT-refuse-symlink", "status": "pass", "expected": [3, "REJECTED"], "got": [3, "REJECTED"]}
+{"id": "ENDPOINT-ambiguous-link-not-deleted", "status": "pass", "expected": true, "got": true}
+{"id": "ENDPOINT-refuse-nonprivate-parent", "status": "pass", "expected": [3, "REJECTED"], "got": [3, "REJECTED"]}
+{"id": "ENDPOINT-refuse-overlength", "status": "pass", "expected": [3, "REJECTED"], "got": [3, "REJECTED"]}
+{"id": "SOCKET-literal-env-FD-PTY-handoff", "status": "pass", "expected": "ACCEPTED_EXEC_UNVERIFIED", "got": "ACCEPTED_EXEC_UNVERIFIED"}
+{"id": "SOCKET-literal-env-FD-PTY-handoff-tmux-request-transport-only", "status": "pass", "expected": true, "got": true}
+{"id": "SOCKET-literal-env-FD-PTY-handoff-bootstrap-positive-inspection", "status": "pass", "expected": true, "got": true}
+{"id": "SOCKET-workload-positively-ran", "status": "pass", "expected": true, "got": true}
+{"id": "SOCKET-literal-env-PTY-input-CLOEXEC", "status": "pass", "expected": {"literal": true, "environment": true, "pty": true, "no_extra_fds": true, "term_default": true, "input": true}, "got": {"literal": true, "environment": true, "pty": true, "no_extra_fds": true, "term_default": true, "input": true}}
+{"id": "BOOTSTRAP-safe-no-loader-before-main-workload-loader-allowed", "status": "pass", "expected": true, "got": true}
+{"id": "SECRET-tmux-global-positive-inspection", "status": "pass", "expected": true, "got": true}
+{"id": "SECRET-tmux-session-positive-inspection", "status": "pass", "expected": true, "got": true}
+{"id": "SECRET-no-tmux-debug-logs-configured", "status": "pass", "expected": true, "got": true}
+{"id": "EXEC-glibc-ENOEXEC-literal-fallback", "status": "pass", "expected": "ACCEPTED_EXEC_UNVERIFIED", "got": "ACCEPTED_EXEC_UNVERIFIED"}
+{"id": "EXEC-glibc-ENOEXEC-literal-fallback-tmux-request-transport-only", "status": "pass", "expected": true, "got": true}
+{"id": "EXEC-glibc-ENOEXEC-literal-fallback-bootstrap-positive-inspection", "status": "pass", "expected": true, "got": true}
+{"id": "EXEC-glibc-ENOEXEC-workload-positive-marker", "status": "pass", "expected": true, "got": true}
+{"id": "EXEC-missing-attributable-error", "status": "pass", "expected": "ERROR 2", "got": "ERROR 2"}
+{"id": "EXEC-missing-attributable-error-tmux-request-transport-only", "status": "pass", "expected": true, "got": true}
+{"id": "EXEC-missing-attributable-error-bootstrap-positive-inspection", "status": "pass", "expected": true, "got": true}
+{"id": "EXEC-kernel-E2BIG-below-product-cap", "status": "pass", "expected": "ERROR 7", "got": "ERROR 7"}
+{"id": "EXEC-kernel-E2BIG-below-product-cap-tmux-request-transport-only", "status": "pass", "expected": true, "got": true}
+{"id": "EXEC-kernel-E2BIG-below-product-cap-bootstrap-positive-inspection", "status": "pass", "expected": true, "got": true}
+{"id": "SOCKET-8MiB-framed-request-kernel-E2BIG", "status": "pass", "expected": "ERROR 7", "got": "ERROR 7"}
+{"id": "SOCKET-8MiB-framed-request-kernel-E2BIG-tmux-request-transport-only", "status": "pass", "expected": true, "got": true}
+{"id": "SOCKET-8MiB-framed-request-kernel-E2BIG-bootstrap-positive-inspection", "status": "pass", "expected": true, "got": true}
+{"id": "EXEC-EACCES-attributable-error", "status": "pass", "expected": "ERROR 13", "got": "ERROR 13"}
+{"id": "EXEC-EACCES-attributable-error-tmux-request-transport-only", "status": "pass", "expected": true, "got": true}
+{"id": "EXEC-EACCES-attributable-error-bootstrap-positive-inspection", "status": "pass", "expected": true, "got": true}
+{"id": "STARTUP-EOF-without-complete-exchange-unknown", "status": "pass", "expected": "UNKNOWN", "got": "UNKNOWN"}
+{"id": "STARTUP-EOF-without-complete-exchange-unknown-tmux-request-transport-only", "status": "pass", "expected": true, "got": true}
+{"id": "STARTUP-EOF-without-complete-exchange-unknown-bootstrap-positive-inspection", "status": "pass", "expected": true, "got": true}
+{"id": "STARTUP-five-second-stalled-handshake-unknown", "status": "pass", "expected": "UNKNOWN", "got": "UNKNOWN"}
+{"id": "STARTUP-five-second-stalled-handshake-unknown-tmux-request-transport-only", "status": "pass", "expected": true, "got": true}
+{"id": "STARTUP-five-second-stalled-handshake-unknown-bootstrap-positive-inspection", "status": "pass", "expected": true, "got": true}
+{"id": "STARTUP-finite-five-second-deadline", "status": "pass", "expected": true, "got": true}
+{"id": "STARTUP-wrong-operation-ack-unknown", "status": "pass", "expected": "UNKNOWN", "got": "UNKNOWN"}
+{"id": "STARTUP-wrong-operation-ack-unknown-tmux-request-transport-only", "status": "pass", "expected": true, "got": true}
+{"id": "STARTUP-wrong-operation-ack-unknown-bootstrap-positive-inspection", "status": "pass", "expected": true, "got": true}
+{"id": "PEER-wrong-broker-pid-unknown", "status": "pass", "expected": "UNKNOWN", "got": "UNKNOWN"}
+{"id": "PEER-wrong-broker-pid-unknown-tmux-request-transport-only", "status": "pass", "expected": true, "got": true}
+{"id": "PEER-wrong-broker-pid-unknown-bootstrap-positive-inspection", "status": "pass", "expected": true, "got": true}
+{"id": "PEER-wrong-operation-request-unknown", "status": "pass", "expected": "UNKNOWN", "got": "UNKNOWN"}
+{"id": "PEER-wrong-operation-request-unknown-tmux-request-transport-only", "status": "pass", "expected": true, "got": true}
+{"id": "PEER-wrong-operation-request-unknown-bootstrap-positive-inspection", "status": "pass", "expected": true, "got": true}
+{"id": "CWD-final-rename-0", "status": "pass", "expected": "ERROR 116", "got": "ERROR 116"}
+{"id": "CWD-final-rename-0-tmux-request-transport-only", "status": "pass", "expected": true, "got": true}
+{"id": "CWD-final-replacement-0", "status": "pass", "expected": "ERROR 116", "got": "ERROR 116"}
+{"id": "CWD-final-replacement-0-tmux-request-transport-only", "status": "pass", "expected": true, "got": true}
+{"id": "CWD-final-no-access-0", "status": "pass", "expected": "ERROR 116", "got": "ERROR 116"}
+{"id": "CWD-final-no-access-0-tmux-request-transport-only", "status": "pass", "expected": true, "got": true}
+{"id": "CWD-final-rename-1", "status": "pass", "expected": "ERROR 116", "got": "ERROR 116"}
+{"id": "CWD-final-rename-1-tmux-request-transport-only", "status": "pass", "expected": true, "got": true}
+{"id": "CWD-final-replacement-1", "status": "pass", "expected": "ERROR 116", "got": "ERROR 116"}
+{"id": "CWD-final-replacement-1-tmux-request-transport-only", "status": "pass", "expected": true, "got": true}
+{"id": "CWD-final-no-access-1", "status": "pass", "expected": "ERROR 116", "got": "ERROR 116"}
+{"id": "CWD-final-no-access-1-tmux-request-transport-only", "status": "pass", "expected": true, "got": true}
+{"id": "CWD-final-rename-2", "status": "pass", "expected": "ERROR 116", "got": "ERROR 116"}
+{"id": "CWD-final-rename-2-tmux-request-transport-only", "status": "pass", "expected": true, "got": true}
+{"id": "CWD-final-replacement-2", "status": "pass", "expected": "ERROR 116", "got": "ERROR 116"}
+{"id": "CWD-final-replacement-2-tmux-request-transport-only", "status": "pass", "expected": true, "got": true}
+{"id": "CWD-final-no-access-2", "status": "pass", "expected": "ERROR 116", "got": "ERROR 116"}
+{"id": "CWD-final-no-access-2-tmux-request-transport-only", "status": "pass", "expected": true, "got": true}
+{"id": "CWD-ordinary-symlink-to-pinned-object-allowed", "status": "pass", "expected": "ACCEPTED_EXEC_UNVERIFIED", "got": "ACCEPTED_EXEC_UNVERIFIED"}
+{"id": "CWD-ordinary-symlink-to-pinned-object-allowed-tmux-request-transport-only", "status": "pass", "expected": true, "got": true}
+{"id": "CWD-ordinary-symlink-to-pinned-object-allowed-bootstrap-positive-inspection", "status": "pass", "expected": true, "got": true}
+{"id": "CWD-O_PATH-execute-only-directory", "status": "pass", "expected": "ACCEPTED_EXEC_UNVERIFIED", "got": "ACCEPTED_EXEC_UNVERIFIED"}
+{"id": "CWD-O_PATH-execute-only-directory-tmux-request-transport-only", "status": "pass", "expected": true, "got": true}
+{"id": "CWD-O_PATH-execute-only-directory-bootstrap-positive-inspection", "status": "pass", "expected": true, "got": true}
+{"id": "CLEANUP-owned-private-server", "status": "pass", "expected": 0, "got": 0}
+{"summary": {"passed": 143, "failed": 0}, "qualification": "partial-only; all I/R and remaining gates OPEN"}
